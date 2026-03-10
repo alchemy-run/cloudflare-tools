@@ -4,17 +4,97 @@
  * Assembles esbuild options and plugins, runs the build via the Esbuild
  * Effect service, and post-processes the result into a BundleResult.
  */
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import path from "node:path";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
+import * as ServiceMap from "effect/ServiceMap";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
 import { Esbuild } from "./esbuild.js";
-import { getEntryPointFromMetafile } from "./metafile.js";
+import { EsbuildLive, type EsbuildError } from "./esbuild.js";
+import {
+	getEntryPointFromMetafile,
+	type MetafileError,
+} from "./metafile.js";
+import type { CfModule } from "./modules/cf-module.js";
 import { dedupeModulesByName } from "./modules/dedupe.js";
 import { writeAdditionalModules } from "./modules/write.js";
+import type { Rule } from "./modules/rules.js";
 import { cloudflareInternalPlugin } from "./plugins/cloudflare-internal.js";
 import { createModuleCollector } from "./plugins/module-collector.js";
 import { nodejsCompatPlugin } from "./plugins/nodejs-compat.js";
-import type { BundleOptions, BundleResult, CfModule } from "./types.js";
 import type { Plugin } from "esbuild";
+
+export interface BundleOptions {
+	/** Absolute path to the entry point */
+	readonly entryPoint: string;
+	/** Absolute path to the project root */
+	readonly projectRoot: string;
+	/** Absolute path to the output directory */
+	readonly outputDir: string;
+	/** Cloudflare compatibility date */
+	readonly compatibilityDate?: string;
+	/** Cloudflare compatibility flags (e.g., ["nodejs_compat"]) */
+	readonly compatibilityFlags?: readonly string[];
+	/** esbuild define replacements */
+	readonly define?: Record<string, string>;
+	/** Module rules for non-JS imports */
+	readonly rules?: readonly Rule[];
+	/** Whether to scan the filesystem for additional modules */
+	readonly findAdditionalModules?: boolean;
+	/** Preserve original file names instead of content-hashing */
+	readonly preserveFileNames?: boolean;
+	/** Additional imports to mark as external */
+	readonly external?: readonly string[];
+}
+
+export interface BundleResult {
+	/** Absolute path to the main output file */
+	readonly entryPoint: string;
+	/** Additional modules collected during bundling */
+	readonly modules: readonly CfModule[];
+	/** The module format of the entry point */
+	readonly bundleType: "esm" | "commonjs";
+	/** Absolute path to the output directory */
+	readonly outputDir: string;
+}
+
+export class BundleFileSystemError extends Data.TaggedError(
+	"BundleFileSystemError",
+)<{
+	readonly cause: PlatformError;
+}> {}
+
+export class BundleEsbuildError extends Data.TaggedError("BundleEsbuildError")<{
+	readonly cause: EsbuildError;
+}> {}
+
+export class BundleMetafileError extends Data.TaggedError("BundleMetafileError")<{
+	readonly cause: MetafileError;
+}> {}
+
+export type BundleError =
+	| BundleEsbuildError
+	| BundleMetafileError
+	| BundleFileSystemError;
+
+export class Bundle extends ServiceMap.Service<
+	Bundle,
+	{
+		readonly bundle: (
+			options: BundleOptions,
+		) => Effect.Effect<BundleResult, BundleError>;
+	}
+>()("distilled-bundler/Bundle") {}
+
+export const bundle = (options: BundleOptions) =>
+	Effect.gen(function* () {
+		const bundler = yield* Bundle;
+		return yield* bundler.bundle(options);
+	});
 
 /**
  * Common esbuild options matching wrangler's configuration.
@@ -37,100 +117,113 @@ const BUILD_CONDITIONS = ["workerd", "worker", "browser"];
 /**
  * Bundles a Cloudflare Worker entry point using esbuild.
  *
- * Requires the `Esbuild` service to be provided via a Layer.
+ * Effectful bundle service entrypoint.
  */
-export function bundle(
-	options: BundleOptions,
-): Effect.Effect<BundleResult, import("./esbuild.js").EsbuildError, Esbuild> {
-	return Effect.gen(function* () {
-		const esbuild = yield* Esbuild;
+const makeBundle = Effect.gen(function* () {
+	const esbuild = yield* Esbuild;
+	const fileSystem = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
 
-		// Collect plugins in order
-		const plugins: Plugin[] = [];
+	return Bundle.of({
+		bundle: (options) =>
+			Effect.gen(function* () {
+				const plugins = createPlugins(options);
+				const moduleCollector = plugins.moduleCollector;
 
-		// Module collector plugin — intercepts WASM, text, binary imports
-		const moduleCollector = createModuleCollector({
-			rules: options.rules ? [...options.rules] : undefined,
-			preserveFileNames: options.preserveFileNames,
-		});
-		plugins.push(moduleCollector.plugin);
+				const result = yield* esbuild
+					.build({
+						entryPoints: [options.entryPoint],
+						bundle: true,
+						absWorkingDir: options.projectRoot,
+						outdir: options.outputDir,
+						format: "esm",
+						target: COMMON_ESBUILD_OPTIONS.target,
+						sourcemap: true,
+						metafile: true,
+						conditions: BUILD_CONDITIONS,
+						define: buildDefine(options),
+						loader: COMMON_ESBUILD_OPTIONS.loader,
+						logLevel: "silent",
+						external: [...(options.external ?? [])],
+						plugins: plugins.plugins,
+					})
+					.pipe(Effect.mapError((cause) => new BundleEsbuildError({ cause })));
 
-		// Node.js compatibility plugin — applies unenv polyfills when nodejs_compat is enabled
-		const hasNodejsCompat = options.compatibilityFlags?.some(
-			(f) => f === "nodejs_compat" || f === "nodejs_compat_v2",
-		);
-		if (hasNodejsCompat) {
-			plugins.push(
-				nodejsCompatPlugin({
-					compatibilityDate: options.compatibilityDate,
-					compatibilityFlags: options.compatibilityFlags,
-				}),
-			);
-		}
+				const entryPointInfo = yield* getEntryPointFromMetafile(
+					options.entryPoint,
+					result.metafile,
+				).pipe(
+					Effect.mapError((cause) => new BundleMetafileError({ cause })),
+				);
 
-		// Cloudflare internal imports plugin — always applied
-		plugins.push(cloudflareInternalPlugin);
+				const bundleType =
+					entryPointInfo.exports.length > 0 ? "esm" : "commonjs";
+				const resolvedEntryPoint = path.resolve(
+					options.outputDir,
+					entryPointInfo.relativePath,
+				);
+				const modules = dedupeModulesByName([...moduleCollector.modules]);
 
-		// Build the define map
-		const define: Record<string, string> = {
-			// process.env.NODE_ENV replacement (3 variants for different access patterns)
-			"process.env.NODE_ENV": '"production"',
-			"global.process.env.NODE_ENV": '"production"',
-			"globalThis.process.env.NODE_ENV": '"production"',
-			// User-defined replacements
-			...options.define,
-		};
+				if (modules.length > 0) {
+					yield* writeAdditionalModules(
+						fileSystem,
+						path,
+						modules,
+						path.dirname(resolvedEntryPoint),
+					).pipe(
+						Effect.mapError((cause) => new BundleFileSystemError({ cause })),
+					);
+				}
 
-		// Run esbuild
-		const result = yield* esbuild.build({
-			entryPoints: [options.entryPoint],
-			bundle: true,
-			absWorkingDir: options.projectRoot,
-			outdir: options.outputDir,
-			format: "esm",
-			target: COMMON_ESBUILD_OPTIONS.target,
-			sourcemap: true,
-			metafile: true,
-			conditions: BUILD_CONDITIONS,
-			define,
-			loader: COMMON_ESBUILD_OPTIONS.loader,
-			logLevel: "silent",
-			external: [...(options.external ?? [])],
-			plugins,
-		});
-
-		// Extract entry point from metafile
-		const entryPointInfo = getEntryPointFromMetafile(
-			options.entryPoint,
-			result.metafile!,
-		);
-
-		// Determine bundle type from exports
-		const bundleType =
-			entryPointInfo.exports.length > 0 ? "esm" : "commonjs";
-
-		// Resolve the absolute entry point path
-		const resolvedEntryPoint = path.resolve(
-			options.outputDir,
-			entryPointInfo.relativePath,
-		);
-
-		// Deduplicate and write additional modules
-		const modules = dedupeModulesByName([...moduleCollector.modules]);
-		if (modules.length > 0) {
-			yield* Effect.promise(() =>
-				writeAdditionalModules(
+				return {
+					entryPoint: resolvedEntryPoint,
 					modules,
-					path.dirname(resolvedEntryPoint),
-				),
-			);
-		}
-
-		return {
-			entryPoint: resolvedEntryPoint,
-			modules,
-			bundleType,
-			outputDir: options.outputDir,
-		} satisfies BundleResult;
+					bundleType,
+					outputDir: options.outputDir,
+				} satisfies BundleResult;
+			}),
 	});
+});
+
+const BundleBaseLive = Layer.effect(Bundle, makeBundle);
+
+export const BundleLive = BundleBaseLive.pipe(
+	Layer.provide(Layer.mergeAll(EsbuildLive, NodeFileSystem.layer, NodePath.layer)),
+);
+
+function createPlugins(options: BundleOptions): {
+	readonly moduleCollector: ReturnType<typeof createModuleCollector>;
+	readonly plugins: Array<Plugin>;
+} {
+	const plugins: Array<Plugin> = [];
+	const moduleCollector = createModuleCollector({
+		rules: options.rules ? [...options.rules] : undefined,
+		preserveFileNames: options.preserveFileNames,
+	});
+	plugins.push(moduleCollector.plugin);
+
+	const hasNodejsCompat = options.compatibilityFlags?.some(
+		(flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
+	);
+	if (hasNodejsCompat) {
+		plugins.push(
+			nodejsCompatPlugin({
+				compatibilityDate: options.compatibilityDate,
+				compatibilityFlags: options.compatibilityFlags,
+			}),
+		);
+	}
+
+	plugins.push(cloudflareInternalPlugin);
+
+	return { moduleCollector, plugins };
+}
+
+function buildDefine(options: BundleOptions): Record<string, string> {
+	return {
+		"process.env.NODE_ENV": '"production"',
+		"global.process.env.NODE_ENV": '"production"',
+		"globalThis.process.env.NODE_ENV": '"production"',
+		...options.define,
+	};
 }

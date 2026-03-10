@@ -4,7 +4,7 @@
  * Removes duplicate modules from an array by name,
  * preferring modules that appear later (last-wins).
  */
-import type { CfModule } from "../types.js";
+import type { CfModule } from "./cf-module.js";
 
 export function dedupeModulesByName(modules: CfModule[]): CfModule[] {
 	return Object.values(

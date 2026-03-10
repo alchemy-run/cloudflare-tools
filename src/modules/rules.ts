@@ -5,7 +5,38 @@
  * module rules for Cloudflare Workers and handles rule merging with
  * fallthrough semantics.
  */
-import type { Rule } from "../types.js";
+import type { CfModuleType } from "./cf-module.js";
+
+/**
+ * Module rule types matching Cloudflare's config schema.
+ */
+export type ConfigModuleRuleType =
+	| "ESModule"
+	| "CommonJS"
+	| "CompiledWasm"
+	| "Text"
+	| "Data";
+
+/**
+ * A module rule defining how non-JS file types are handled.
+ */
+export interface Rule {
+	readonly type: ConfigModuleRuleType;
+	readonly globs: ReadonlyArray<string>;
+	readonly fallthrough?: boolean;
+}
+
+/**
+ * Maps config rule types to internal module types.
+ */
+export const RuleTypeToModuleType: Record<ConfigModuleRuleType, CfModuleType> =
+	{
+		ESModule: "esm",
+		CommonJS: "commonjs",
+		CompiledWasm: "compiled-wasm",
+		Data: "buffer",
+		Text: "text",
+	};
 
 /**
  * Returns true if the rule type is ESModule or CommonJS (JavaScript).
@@ -21,15 +52,15 @@ export function isJavaScriptModuleRule(rule: Rule): boolean {
  * - `.bin` → Data (binary) modules
  * - `.wasm`, `.wasm?module` → CompiledWasm modules
  */
-export const DEFAULT_MODULE_RULES: Rule[] = [
+export const DEFAULT_MODULE_RULES: Array<Rule> = [
 	{ type: "Text", globs: ["**/*.txt", "**/*.html", "**/*.sql"] },
 	{ type: "Data", globs: ["**/*.bin"] },
 	{ type: "CompiledWasm", globs: ["**/*.wasm", "**/*.wasm?module"] },
 ];
 
 export interface ParsedRules {
-	rules: Rule[];
-	removedRules: Rule[];
+	readonly rules: Array<Rule>;
+	readonly removedRules: Array<Rule>;
 }
 
 /**

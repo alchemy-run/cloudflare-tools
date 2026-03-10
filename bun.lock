@@ -21,7 +21,7 @@
         "wrangler": "^4.72.0",
       },
       "peerDependencies": {
-        "effect": "^4.0.0-beta.29",
+        "effect": "^4.0.0-beta.30",
         "esbuild": "catalog:",
         "typescript": "^5.9.3",
       },

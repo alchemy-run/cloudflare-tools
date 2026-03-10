@@ -14,9 +14,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import globToRegExp from "glob-to-regexp";
 import type { Plugin } from "esbuild";
-import type { CfModule, CfModuleType, ConfigModuleRuleType, Rule } from "../types.js";
-import { RuleTypeToModuleType } from "../types.js";
-import { isJavaScriptModuleRule, parseRules } from "../modules/rules.js";
+import type { CfModule } from "../modules/cf-module.js";
+import { RuleTypeToModuleType, isJavaScriptModuleRule, parseRules } from "../modules/rules.js";
+import type { Rule } from "../modules/rules.js";
 
 /**
  * The result of createModuleCollector — contains both the esbuild plugin

@@ -8,9 +8,7 @@ import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { bundle } from "../../src/bundle.js";
-import { EsbuildLive } from "../../src/esbuild.js";
-import type { BundleOptions } from "../../src/types.js";
+import { BundleLive, bundle, type BundleOptions } from "../../src/bundle.js";
 import { BundleError } from "./bundler-adapter.js";
 import type {
 	BundleConfig,
@@ -51,7 +49,7 @@ export function bundleWithDistilled(
 
 		// Run the bundle
 		const result = yield* bundle(options).pipe(
-			Effect.provide(EsbuildLive),
+			Effect.provide(BundleLive),
 			Effect.mapError(
 				(error) =>
 					new BundleError({

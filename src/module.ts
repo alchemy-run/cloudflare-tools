@@ -1,7 +1,7 @@
 /**
  * A collected module (WASM, text, binary, etc.) that is part of the bundle output.
  */
-export interface CfModule {
+export interface Module {
   /** Module name (relative path, possibly hashed) */
   readonly name: string;
   /** Absolute path to the source file */
@@ -9,10 +9,12 @@ export interface CfModule {
   /** Raw file content */
   readonly content: Buffer;
   /** The Cloudflare module type */
-  readonly type: CfModuleType;
+  readonly type: Module.Type;
 }
 
-/**
- * Module types used in Cloudflare Worker uploads.
- */
-export type CfModuleType = "ESModule" | "CommonJS" | "CompiledWasm" | "Text" | "Data";
+export declare namespace Module {
+  /**
+   * Module types used in Cloudflare Worker uploads.
+   */
+  export type Type = "ESModule" | "CommonJS" | "CompiledWasm" | "Text" | "Data";
+}

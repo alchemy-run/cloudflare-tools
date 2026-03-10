@@ -14,7 +14,7 @@ import * as ServiceMap from "effect/ServiceMap";
 import type { Plugin } from "esbuild";
 import { Esbuild, type EsbuildError } from "./esbuild.js";
 import { getEntryPointFromMetafile, type MetafileError } from "./metafile.js";
-import type { CfModule } from "./modules/cf-module.js";
+import type { Module } from "./module.js";
 import { cloudflareInternalPlugin } from "./plugins/cloudflare-internal.js";
 import { createModuleCollector, type Rule } from "./plugins/module-collector.js";
 import { nodejsCompatPlugin } from "./plugins/nodejs-compat.js";
@@ -46,7 +46,7 @@ export interface BundleResult {
   /** Absolute path to the main output file */
   readonly main: string;
   /** Additional modules collected during bundling */
-  readonly modules: readonly CfModule[];
+  readonly modules: readonly Module[];
   /** The module format of the entry point */
   readonly type: "esm" | "commonjs";
   /** Absolute path to the output directory */
@@ -90,7 +90,7 @@ export const BundleLive = Layer.effect(
      * Writes collected modules (WASM, text, data) as separate files
      * to the output directory, preserving any subdirectory structure.
      */
-    const writeAdditionalModules = (modules: readonly CfModule[], directory: string) =>
+    const writeAdditionalModules = (modules: readonly Module[], directory: string) =>
       Effect.forEach(
         modules,
         (module) => {

@@ -5,25 +5,14 @@
  * a baseline bundle that we can compare distilled-bundler's output against.
  */
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { BundleError, BundlerAdapter } from "./bundler-adapter.js";
+import type { Module } from "../../src/index.js";
+import { BundleError } from "./bundle-error.js";
 import type { BundleConfig, BundleResult } from "./types.js";
 import { moduleTypeFromExtension } from "./types.js";
-import type { CfModule } from "../../src/index.js";
-
-/**
- * Layer providing the WranglerBundler as a BundlerAdapter.
- */
-export const WranglerBundlerLive = Layer.succeed(
-  BundlerAdapter,
-  BundlerAdapter.of({
-    bundle: (config) => bundleWithWrangler(config),
-  }),
-);
 
 /**
  * Convenience function to bundle a fixture with wrangler without going
@@ -93,7 +82,7 @@ function parseOutputDir(outdir: string): BundleResult {
   // Find the entry point (the main .js file that isn't a module)
   // It's the JavaScript file that is NOT a hash-prefixed additional module
   let entryPoint: string | null = null;
-  const modules: CfModule[] = [];
+  const modules: Module[] = [];
 
   for (const filePath of files) {
     const relative = path.relative(outdir, filePath);

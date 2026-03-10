@@ -9,9 +9,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { BundleLive, Bundle, type BundleOptions } from "../../src/bundle.js";
-import { BundleError } from "./bundler-adapter.js";
+import { BundleError } from "./bundle-error.js";
 import type { BundleConfig, BundleResult } from "./types.js";
-import type { CfModule } from "../../src/index.js";
+import type { Module } from "../../src/index.js";
 import { Layer } from "effect";
 import { EsbuildLive } from "../../src/esbuild.js";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
@@ -68,7 +68,7 @@ export function bundleWithDistilled(
     return {
       main: result.main,
       modules: result.modules.map(
-        (m): CfModule => ({
+        (m): Module => ({
           name: m.name,
           path: path.resolve(entryDir, m.name),
           content: m.content,

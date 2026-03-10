@@ -7,7 +7,8 @@
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { BundleConfig, DurableObjectBinding, ModuleRule } from "./types.js";
+import type { Rule } from "../../src/plugins/module-collector.js";
+import type { BundleConfig, DurableObjectBinding } from "./types.js";
 
 /**
  * Returns the absolute path to a fixture directory.
@@ -43,15 +44,7 @@ export function loadFixture(fixtureName: string): Effect.Effect<BundleConfig> {
     const compatibilityFlags = (config.compatibility_flags as string[]) ?? [];
 
     // Extract module rules
-    const rules = config.rules
-      ? (config.rules as Array<{ type: string; globs: string[]; fallthrough?: boolean }>).map(
-          (r): ModuleRule => ({
-            type: r.type as ModuleRule["type"],
-            globs: r.globs,
-            fallthrough: r.fallthrough,
-          }),
-        )
-      : undefined;
+    const rules = config.rules as Array<Rule> | undefined;
 
     // Extract durable object bindings
     const doConfig = config.durable_objects as { bindings?: DurableObjectBinding[] } | undefined;

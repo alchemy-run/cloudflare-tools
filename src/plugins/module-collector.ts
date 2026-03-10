@@ -14,7 +14,7 @@ import globToRegExp from "glob-to-regexp";
 import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { CfModule, CfModuleType } from "../modules/cf-module.js";
+import type { Module } from "../module.js";
 
 export interface ModuleCollectorOptions {
   /** Module rules (user-defined + defaults will be merged) */
@@ -28,7 +28,7 @@ export interface ModuleCollectorOptions {
  * Port of wrangler's deployment-bundle/rules.ts.
  */
 export interface Rule {
-  readonly type: CfModuleType;
+  readonly type: Module.Type;
   readonly globs: ReadonlyArray<string>;
   readonly fallthrough?: boolean;
 }
@@ -44,7 +44,7 @@ export interface Rule {
  * ```
  */
 export function createModuleCollector(options: ModuleCollectorOptions = {}) {
-  let modules: Record<string, CfModule> = {};
+  let modules: Record<string, Module> = {};
   const parsedRules = parseRules(options.rules);
   const preserveFileNames = options.preserveFileNames ?? false;
 

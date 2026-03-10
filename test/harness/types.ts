@@ -5,7 +5,8 @@
  * fixture configs, bundler adapters, and the Miniflare runner.
  */
 
-import type { CfModule, CfModuleType } from "../../src/index.js";
+import type { Module } from "../../src/module.js";
+import type { Rule } from "../../src/plugins/module-collector.js";
 
 /**
  * Configuration for bundling a fixture. Parsed from wrangler.jsonc.
@@ -22,7 +23,7 @@ export interface BundleConfig {
   /** esbuild define replacements */
   readonly define?: Record<string, string>;
   /** Module rules for non-JS imports */
-  readonly rules?: readonly ModuleRule[];
+  readonly rules?: readonly Rule[];
   /** Whether to scan the filesystem for additional modules (dynamic imports) */
   readonly findAdditionalModules?: boolean;
   /** Preserve original file names instead of hashing */
@@ -43,27 +44,13 @@ export interface DurableObjectBinding {
 }
 
 /**
- * A module rule defining how non-JS file types are handled.
- */
-export interface ModuleRule {
-  readonly type: ModuleRuleType;
-  readonly globs: readonly string[];
-  readonly fallthrough?: boolean;
-}
-
-/**
- * Module rule types matching Cloudflare's config schema.
- */
-export type ModuleRuleType = "ESModule" | "CommonJS" | "CompiledWasm" | "Text" | "Data";
-
-/**
  * The output of a bundling operation.
  */
 export interface BundleResult {
   /** Absolute path to the main output file */
   readonly main: string;
   /** Additional modules collected during bundling (WASM, text, data, etc.) */
-  readonly modules: readonly CfModule[];
+  readonly modules: readonly Module[];
   /** The module format of the entry point */
   readonly type: "esm" | "commonjs";
   /** Absolute path to the output directory */
@@ -71,9 +58,9 @@ export interface BundleResult {
 }
 
 /**
- * Maps file extensions to CfModuleType for parsing wrangler output.
+ * Maps file extensions to Module.Type for parsing wrangler output.
  */
-export function moduleTypeFromExtension(ext: string): CfModuleType | null {
+export function moduleTypeFromExtension(ext: string): Module.Type | null {
   switch (ext) {
     case ".wasm":
       return "CompiledWasm";

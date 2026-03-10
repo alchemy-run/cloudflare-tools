@@ -8,6 +8,7 @@
  * disposed when the scope closes.
  */
 import * as Effect from "effect/Effect";
+import * as fs from "node:fs";
 import { Miniflare } from "miniflare";
 import type { BundleConfig, BundleResult } from "./types.js";
 
@@ -54,31 +55,43 @@ export function createRunner(
     try: () => {
       const { bundle, config } = options;
 
-      // Build the modules array for Miniflare
-      const modules: Array<{
-        type: string;
-        path: string;
-      }> = [
-        // Entry point
-        {
-          type: bundle.type === "esm" ? "ESModule" : "CommonJS",
-          path: bundle.main,
-        },
-        // Additional modules (WASM, text, data, etc.)
-        ...bundle.modules.map((mod) => ({
-          type: mod.type,
-          path: mod.path,
-        })),
-      ];
+      const isServiceWorker = bundle.type === "commonjs";
 
       // Build Miniflare options
-      const miniflareOptions: ConstructorParameters<typeof Miniflare>[0] = {
-        modules,
-        modulesRoot: bundle.outputDir,
-        compatibilityDate: config.compatibilityDate,
-        compatibilityFlags: [...config.compatibilityFlags],
-        bindings: options.bindings,
-      };
+      let miniflareOptions: ConstructorParameters<typeof Miniflare>[0];
+
+      if (isServiceWorker) {
+        // Service worker format: use script instead of modules
+        miniflareOptions = {
+          script: fs.readFileSync(bundle.main, "utf-8"),
+          compatibilityDate: config.compatibilityDate,
+          compatibilityFlags: [...config.compatibilityFlags],
+          bindings: options.bindings,
+        };
+      } else {
+        // ES module format: use modules array
+        const modules: Array<{
+          type: string;
+          path: string;
+        }> = [
+          {
+            type: "ESModule",
+            path: bundle.main,
+          },
+          ...bundle.modules.map((mod) => ({
+            type: mod.type,
+            path: mod.path,
+          })),
+        ];
+
+        miniflareOptions = {
+          modules,
+          modulesRoot: bundle.outputDir,
+          compatibilityDate: config.compatibilityDate,
+          compatibilityFlags: [...config.compatibilityFlags],
+          bindings: options.bindings,
+        };
+      }
 
       // Add Durable Object bindings if present
       if (config.durableObjects && config.durableObjects.length > 0) {

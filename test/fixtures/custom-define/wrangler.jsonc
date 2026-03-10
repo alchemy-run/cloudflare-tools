@@ -1,0 +1,9 @@
+{
+  "name": "custom-define",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-01",
+  "define": {
+    "MY_CONSTANT": "\"hello-world\"",
+    "BUILD_VERSION": "42"
+  },
+}

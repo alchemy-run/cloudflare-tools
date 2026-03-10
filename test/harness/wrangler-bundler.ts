@@ -29,6 +29,8 @@ export function bundleWithWrangler(config: BundleConfig): Effect.Effect<BundleRe
       // Run from the fixture's project root so wrangler finds the config
       const configFile = findConfigFile(config.projectRoot);
       const args = ["deploy", "--dry-run", `--outdir=${outdir}`, `--config=${configFile}`];
+      if (config.minify) args.push("--minify");
+      if (config.keepNames === false) args.push("--no-keep-names");
 
       const cmd = `bun wrangler ${args.join(" ")}`;
 
@@ -94,16 +96,25 @@ function parseOutputDir(outdir: string): BundleResult {
 
     // Determine if this is an additional module or the entry point
     const moduleType = moduleTypeFromExtension(ext);
-    if (moduleType === null) continue;
 
     if (isEntryPoint(relative, ext)) {
       entryPoint = filePath;
-    } else {
+    } else if (moduleType !== null) {
       modules.push({
         name: normalizeModuleName(relative),
         path: filePath,
         content: fs.readFileSync(filePath),
         type: moduleType,
+      });
+    } else if (isHashPrefixedModule(relative)) {
+      // Unknown extension but has a content hash prefix — treat as a collected module.
+      // This handles custom module rules (e.g., *.custom, *.graphql) that wrangler
+      // collects but aren't in the default extension map.
+      modules.push({
+        name: normalizeModuleName(relative),
+        path: filePath,
+        content: fs.readFileSync(filePath),
+        type: "Text",
       });
     }
   }
@@ -114,10 +125,14 @@ function parseOutputDir(outdir: string): BundleResult {
     );
   }
 
+  // Detect format: if the output has no export statements, it's service-worker (IIFE)
+  const entryContent = fs.readFileSync(entryPoint, "utf-8");
+  const isESM = /\bexport[\s{]/.test(entryContent);
+
   return {
     main: entryPoint,
     modules,
-    type: "esm",
+    type: isESM ? "esm" : "commonjs",
     outputDir: outdir,
   };
 }
@@ -133,6 +148,14 @@ function isEntryPoint(relative: string, ext: string): boolean {
   const basename = path.basename(relative);
   // Hash-prefixed modules have a 40-char hex prefix followed by a dash
   return !/^[0-9a-f]{40}-/.test(basename);
+}
+
+/**
+ * Checks if a file has a content hash prefix (indicating it's a collected module).
+ */
+function isHashPrefixedModule(relative: string): boolean {
+  const basename = path.basename(relative);
+  return /^[0-9a-f]{40}-/.test(basename);
 }
 
 /**

@@ -49,6 +49,10 @@ export function bundleWithDistilled(
       findAdditionalModules: config.findAdditionalModules,
       preserveFileNames: config.preserveFileNames,
       external: config.external ? [...config.external] : undefined,
+      minify: config.minify,
+      keepNames: config.keepNames,
+      tsconfig: config.tsconfig,
+      format: config.format,
     };
 
     // Run the bundle

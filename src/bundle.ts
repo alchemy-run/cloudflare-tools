@@ -18,6 +18,7 @@ import type { Module } from "./module.js";
 import { cloudflareInternalPlugin } from "./plugins/cloudflare-internal.js";
 import { createModuleCollector, type Rule } from "./plugins/module-collector.js";
 import { nodejsCompatPlugin } from "./plugins/nodejs-compat.js";
+import { nodejsCompatWarningPlugin } from "./plugins/nodejs-compat-warning.js";
 
 export interface BundleOptions {
   /** Absolute path to the entry point */
@@ -40,6 +41,14 @@ export interface BundleOptions {
   readonly preserveFileNames?: boolean;
   /** Additional imports to mark as external */
   readonly external?: readonly string[];
+  /** Whether to minify the output */
+  readonly minify?: boolean;
+  /** Whether to preserve function/class names (default: true, matching wrangler) */
+  readonly keepNames?: boolean;
+  /** Path to tsconfig.json (absolute or relative to projectRoot) */
+  readonly tsconfig?: string;
+  /** Module format: "modules" (ESM) or "service-worker" (IIFE) */
+  readonly format?: "modules" | "service-worker";
 }
 
 export interface BundleResult {
@@ -109,6 +118,8 @@ export const BundleLive = Layer.effect(
           const plugins = createPlugins(options);
           const moduleCollector = plugins.moduleCollector;
 
+          const isServiceWorker = options.format === "service-worker";
+
           const result = yield* esbuild
             .build({
               // Common esbuild options matching wrangler's configuration.
@@ -118,6 +129,9 @@ export const BundleLive = Layer.effect(
                 "process.env.NODE_ENV": '"production"',
                 "global.process.env.NODE_ENV": '"production"',
                 "globalThis.process.env.NODE_ENV": '"production"',
+                ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
+                  ? { "navigator.userAgent": '"Cloudflare-Workers"' }
+                  : {}),
                 ...options.define,
               },
               loader: {
@@ -130,12 +144,17 @@ export const BundleLive = Layer.effect(
               bundle: true,
               absWorkingDir: options.projectRoot,
               outdir: options.outputDir,
-              format: "esm",
+              format: isServiceWorker ? "iife" : "esm",
               sourcemap: true,
               metafile: true,
               logLevel: "silent",
-              external: [...(options.external ?? [])],
+              external: ["__STATIC_CONTENT_MANIFEST", ...(options.external ?? [])],
               plugins: plugins.plugins,
+              minify: options.minify,
+              keepNames: options.keepNames ?? true,
+              tsconfig: options.tsconfig
+                ? path.resolve(options.projectRoot, options.tsconfig)
+                : undefined,
             })
             .pipe(Effect.mapError((cause) => new BundleEsbuildError({ cause })));
 
@@ -183,6 +202,11 @@ function createPlugins(options: BundleOptions): {
         compatibilityFlags: options.compatibilityFlags,
       }),
     );
+  } else {
+    // Without nodejs_compat, mark node:* imports as external but warn.
+    // This matches wrangler's behavior: the build succeeds but the worker
+    // may throw at runtime if it actually uses the node built-in.
+    plugins.push(nodejsCompatWarningPlugin);
   }
 
   plugins.push(cloudflareInternalPlugin);

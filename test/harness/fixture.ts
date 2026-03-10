@@ -61,6 +61,9 @@ export function loadFixture(fixtureName: string): Effect.Effect<BundleConfig> {
       preserveFileNames: config.preserve_file_names as boolean | undefined,
       external: config.external as string[] | undefined,
       durableObjects,
+      minify: config.minify as boolean | undefined,
+      keepNames: config.keep_names as boolean | undefined,
+      tsconfig: config.tsconfig as string | undefined,
     } satisfies BundleConfig;
   });
 }

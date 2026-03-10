@@ -32,6 +32,14 @@ export interface BundleConfig {
   readonly external?: readonly string[];
   /** Durable Object bindings */
   readonly durableObjects?: readonly DurableObjectBinding[];
+  /** Whether to minify the output */
+  readonly minify?: boolean;
+  /** Whether to preserve function/class names (default: true) */
+  readonly keepNames?: boolean;
+  /** Path to tsconfig.json (relative to projectRoot) */
+  readonly tsconfig?: string;
+  /** Module format override */
+  readonly format?: "modules" | "service-worker";
 }
 
 /**

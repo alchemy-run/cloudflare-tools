@@ -65,5 +65,21 @@ describe("node-env", () => {
         expect(await res.text()).toBe("production");
       }),
     );
+
+    it.effect("replaces global.process.env.NODE_ENV with 'production'", () =>
+      withRunner({ bundle, config }, async (runner) => {
+        const res = await runner.fetch("http://localhost/global-node-env");
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe("production");
+      }),
+    );
+
+    it.effect("replaces globalThis.process.env.NODE_ENV with 'production'", () =>
+      withRunner({ bundle, config }, async (runner) => {
+        const res = await runner.fetch("http://localhost/globalthis-node-env");
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe("production");
+      }),
+    );
   });
 });

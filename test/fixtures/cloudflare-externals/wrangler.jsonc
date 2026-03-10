@@ -1,0 +1,14 @@
+{
+  "name": "cloudflare-externals",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MY_DO",
+        "class_name": "MyDO",
+      },
+    ],
+  },
+}

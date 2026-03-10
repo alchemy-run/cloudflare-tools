@@ -1,0 +1,7 @@
+{
+  "name": "additional-modules",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-01",
+  "find_additional_modules": true,
+  "preserve_file_names": true,
+}

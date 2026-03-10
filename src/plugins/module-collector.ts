@@ -14,26 +14,23 @@ import globToRegExp from "glob-to-regexp";
 import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { CfModule } from "../modules/cf-module.js";
-import type { Rule } from "../modules/rules.js";
-import { parseRules } from "../modules/rules.js";
-
-/**
- * The result of createModuleCollector — contains both the esbuild plugin
- * and the mutable modules array that gets populated during the build.
- */
-export interface ModuleCollector {
-  /** Mutable array populated during the build */
-  readonly modules: CfModule[];
-  /** esbuild plugin to include in the build */
-  readonly plugin: Plugin;
-}
+import type { CfModule, CfModuleType } from "../modules/cf-module.js";
 
 export interface ModuleCollectorOptions {
   /** Module rules (user-defined + defaults will be merged) */
   readonly rules?: readonly Rule[];
   /** Whether to preserve original filenames instead of hashing */
   readonly preserveFileNames?: boolean;
+}
+
+/**
+ * A module rule defining how non-JS file types are handled.
+ * Port of wrangler's deployment-bundle/rules.ts.
+ */
+export interface Rule {
+  readonly type: CfModuleType;
+  readonly globs: ReadonlyArray<string>;
+  readonly fallthrough?: boolean;
 }
 
 /**
@@ -46,9 +43,9 @@ export interface ModuleCollectorOptions {
  * // After build, read collector.modules for collected WASM/text/data modules
  * ```
  */
-export function createModuleCollector(options: ModuleCollectorOptions = {}): ModuleCollector {
-  const modules: CfModule[] = [];
-  const { rules: parsedRules } = parseRules(options.rules);
+export function createModuleCollector(options: ModuleCollectorOptions = {}) {
+  let modules: Record<string, CfModule> = {};
+  const parsedRules = parseRules(options.rules);
   const preserveFileNames = options.preserveFileNames ?? false;
 
   const plugin: Plugin = {
@@ -56,7 +53,7 @@ export function createModuleCollector(options: ModuleCollectorOptions = {}): Mod
     setup(build) {
       // Reset modules at the start of each build (for watch mode)
       build.onStart(() => {
-        modules.splice(0);
+        modules = {};
       });
 
       // Register an onResolve handler for each rule + glob combination
@@ -99,12 +96,12 @@ export function createModuleCollector(options: ModuleCollectorOptions = {}): Mod
               : `${fileHash}-${path.basename(args.path)}`;
 
             // Record the module
-            modules.push({
+            modules[fileName] = {
               name: fileName,
               path: filePath,
               content: fileContent,
               type: rule.type,
-            });
+            };
 
             // Mark as external so esbuild leaves the import intact
             return {
@@ -118,5 +115,56 @@ export function createModuleCollector(options: ModuleCollectorOptions = {}): Mod
     },
   };
 
-  return { modules, plugin };
+  return { getModules: () => Object.values(modules), plugin };
+}
+
+/**
+ * Default module rules matching Cloudflare Workers conventions.
+ *
+ * - `.txt`, `.html`, `.sql` → Text modules
+ * - `.bin` → Data (binary) modules
+ * - `.wasm`, `.wasm?module` → CompiledWasm modules
+ */
+const DEFAULT_MODULE_RULES: Array<Rule> = [
+  { type: "Text", globs: ["**/*.txt", "**/*.html", "**/*.sql"] },
+  { type: "Data", globs: ["**/*.bin"] },
+  { type: "CompiledWasm", globs: ["**/*.wasm", "**/*.wasm?module"] },
+];
+
+/**
+ * Parses user-defined module rules, merges them with defaults,
+ * and handles fallthrough semantics.
+ *
+ * Rules without `fallthrough: true` "complete" their type — any
+ * subsequent rules of the same type are marked as removed.
+ *
+ * Port of wrangler's deployment-bundle/rules.ts — defines the default
+ * module rules for Cloudflare Workers and handles rule merging with
+ * fallthrough semantics.
+ */
+function parseRules(userRules: readonly Rule[] = []): ReadonlyArray<Rule> {
+  const rules: Rule[] = [...userRules, ...DEFAULT_MODULE_RULES];
+
+  const completedRuleLocations: Record<string, number> = {};
+  const rulesToRemove: Rule[] = [];
+  let index = 0;
+
+  for (const rule of rules) {
+    if (rule.type in completedRuleLocations) {
+      rulesToRemove.push(rule);
+    }
+    if (!(rule.type in completedRuleLocations) && rule.fallthrough !== true) {
+      completedRuleLocations[rule.type] = index;
+    }
+    index++;
+  }
+
+  for (const rule of rulesToRemove) {
+    const idx = rules.indexOf(rule);
+    if (idx !== -1) {
+      rules.splice(idx, 1);
+    }
+  }
+
+  return rules;
 }

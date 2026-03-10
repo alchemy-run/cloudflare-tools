@@ -8,10 +8,19 @@ import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { BundleLive, bundle, type BundleOptions } from "../../src/bundle.js";
+import { BundleLive, Bundle, type BundleOptions } from "../../src/bundle.js";
 import { BundleError } from "./bundler-adapter.js";
 import type { BundleConfig, BundleResult } from "./types.js";
 import type { CfModule } from "../../src/index.js";
+import { Layer } from "effect";
+import { EsbuildLive } from "../../src/esbuild.js";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+
+const layers = Layer.provide(
+  BundleLive,
+  Layer.mergeAll(EsbuildLive, NodeFileSystem.layer, NodePath.layer),
+);
 
 /**
  * Bundles a fixture using distilled-bundler.
@@ -20,6 +29,7 @@ export function bundleWithDistilled(
   config: BundleConfig,
 ): Effect.Effect<BundleResult, BundleError> {
   return Effect.gen(function* () {
+    const bundle = yield* Bundle;
     // Create a temp directory for output
     const outdir = fs.mkdtempSync(path.join(os.tmpdir(), "distilled-bundler-distilled-"));
 
@@ -42,8 +52,7 @@ export function bundleWithDistilled(
     };
 
     // Run the bundle
-    const result = yield* bundle(options).pipe(
-      Effect.provide(BundleLive),
+    const result = yield* bundle.bundle(options).pipe(
       Effect.mapError(
         (error) =>
           new BundleError({
@@ -69,5 +78,5 @@ export function bundleWithDistilled(
       type: result.type,
       outputDir: result.outputDir,
     } satisfies BundleResult;
-  });
+  }).pipe(Effect.provide(layers));
 }

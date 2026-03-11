@@ -12,7 +12,7 @@
  */
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import { expect, layer } from "@effect/vitest";
+import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -21,7 +21,6 @@ import type { PlatformError } from "effect/PlatformError";
 import * as PubSub from "effect/PubSub";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as fs from "node:fs/promises";
 import { Bundle, BundleLive, type BundleOptions } from "../../src/bundle.js";
 import { fixtureDir } from "../harness/fixture.js";
 
@@ -72,27 +71,31 @@ const makeTempDirectory = Effect.fn(function* (prefix: string) {
   return yield* fs.makeTempDirectoryScoped({ prefix });
 });
 
+const makeWatchBundle = Effect.fn(function* (options: BundleOptions) {
+  const bundle = yield* Bundle;
+  const pubsub = yield* Stream.toPubSub(bundle.watch(options), { capacity: "unbounded" });
+  const subscription = yield* PubSub.subscribe(pubsub);
+  return {
+    next: PubSub.take(subscription),
+  };
+});
+
 layer(layers)("watch", (it) => {
   it.effect("emits initial build result", () =>
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
       const fixture = yield* copyFixture("watch-basic");
       const outdir = yield* makeTempDirectory("watch-out-");
-
-      const bundle = yield* Bundle;
-
-      const options: BundleOptions = {
+      const bundle = yield* makeWatchBundle({
         main: fixture.entryPoint,
         projectRoot: fixture.projectRoot,
         outputDir: outdir,
         compatibilityDate: "2025-07-01",
-      };
-
-      // Open a scope so we can dispose the watcher
-      const pubsub = yield* Stream.toPubSub(bundle.watch(options), { capacity: "unbounded" });
-      const subscription = yield* PubSub.subscribe(pubsub);
+      });
 
       // First pull should yield the initial build
-      const first = yield* PubSub.take(subscription);
+      const first = yield* bundle.next;
       expect(Result.isSuccess(first)).toBe(true);
 
       const result = Result.getOrThrow(first);
@@ -100,54 +103,45 @@ layer(layers)("watch", (it) => {
       expect(result.type).toBe("esm");
 
       // Verify the output file exists and has expected content
-      const code = yield* Effect.promise(() => fs.readFile(result.main, "utf-8"));
+      const code = yield* fs.readFileString(result.main);
       expect(code).toContain("v1");
     }),
   );
 
   it.effect("rebuilds when a source file changes", () =>
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
       const fixture = yield* copyFixture("watch-basic");
       const outdir = yield* makeTempDirectory("watch-out-");
-
-      const bundle = yield* Bundle;
-
-      const options: BundleOptions = {
+      const bundle = yield* makeWatchBundle({
         main: fixture.entryPoint,
         projectRoot: fixture.projectRoot,
         outputDir: outdir,
         compatibilityDate: "2025-07-01",
-      };
-
-      const pubsub = yield* Stream.toPubSub(bundle.watch(options), { capacity: "unbounded" });
-      const subscription = yield* PubSub.subscribe(pubsub);
+      });
 
       // Initial build
-      const first = yield* PubSub.take(subscription);
+      const first = yield* bundle.next;
       expect(Result.isSuccess(first)).toBe(true);
 
       // Modify the source file
-      yield* Effect.promise(() =>
-        fs.writeFile(
-          fixture.entryPoint,
-          `export default {
+      yield* fs.writeFileString(
+        fixture.entryPoint,
+        `export default {
   async fetch(request: Request) {
     return new Response("v2");
   },
 };
 `,
-        ),
       );
 
-      // Small delay to let the filesystem event propagate
-      yield* Effect.sleep("500 millis");
-
       // Pull the rebuild result
-      const second = yield* PubSub.take(subscription);
+      const second = yield* bundle.next;
       expect(Result.isSuccess(second)).toBe(true);
 
       const result = Result.getOrThrow(second);
-      const code = yield* Effect.promise(() => fs.readFile(result.main, "utf-8"));
+      const code = yield* fs.readFileString(result.main);
       expect(code).toContain("v2");
       expect(code).not.toContain("v1");
     }),
@@ -155,65 +149,52 @@ layer(layers)("watch", (it) => {
 
   it.effect("emits Result.fail for syntax errors and recovers", () =>
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
       const fixture = yield* copyFixture("watch-basic");
       const outdir = yield* makeTempDirectory("watch-out-");
-
-      const bundle = yield* Bundle;
-
-      const options: BundleOptions = {
+      const bundle = yield* makeWatchBundle({
         main: fixture.entryPoint,
         projectRoot: fixture.projectRoot,
         outputDir: outdir,
         compatibilityDate: "2025-07-01",
-      };
-
-      const pubsub = yield* Stream.toPubSub(bundle.watch(options), { capacity: "unbounded" });
-      const subscription = yield* PubSub.subscribe(pubsub);
+      });
 
       // Initial build should succeed
-      const first = yield* PubSub.take(subscription);
+      const first = yield* bundle.next;
       expect(Result.isSuccess(first)).toBe(true);
 
       // Introduce a syntax error
-      yield* Effect.promise(() =>
-        fs.writeFile(
-          fixture.entryPoint,
-          `export default {
+      yield* fs.writeFileString(
+        fixture.entryPoint,
+        `export default {
   async fetch(request: Request) {
     return new Response("broken"
   },
 };
 `,
-        ),
       );
 
-      yield* Effect.sleep("500 millis");
-
       // Pull should yield a failure result (stream continues)
-      const errResult = yield* PubSub.take(subscription);
+      const errResult = yield* bundle.next;
       expect(Result.isFailure(errResult)).toBe(true);
 
       // Fix the syntax error
-      yield* Effect.promise(() =>
-        fs.writeFile(
-          fixture.entryPoint,
-          `export default {
+      yield* fs.writeFileString(
+        fixture.entryPoint,
+        `export default {
   async fetch(request: Request) {
     return new Response("v3-fixed");
   },
 };
 `,
-        ),
       );
 
-      yield* Effect.sleep("500 millis");
-
       // Pull should yield a success again — stream recovered
-      const recovered = yield* PubSub.take(subscription);
-      expect(Result.isSuccess(recovered)).toBe(true);
+      const recovered = yield* bundle.next;
+      assert(Result.isSuccess(recovered));
 
-      const result = Result.getOrThrow(recovered);
-      const code = yield* Effect.promise(() => fs.readFile(result.main, "utf-8"));
+      const code = yield* fs.readFileString(recovered.success.main);
       expect(code).toContain("v3-fixed");
     }),
   );

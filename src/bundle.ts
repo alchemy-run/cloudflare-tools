@@ -9,7 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import * as Scope from "effect/Scope";
+import type * as Scope from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as esbuild from "esbuild";

@@ -3,16 +3,7 @@
  *
  * @module
  */
-export {
-  Bundle,
-  BundleEsbuildError,
-  BundleFileSystemError,
-  BundleLive,
-  BundleMetafileError,
-  type BundleError,
-  type BundleOptions,
-  type BundleResult,
-} from "./bundle.js";
-export { Esbuild, EsbuildLive, type EsbuildError } from "./esbuild.js";
+export * from "./bundle.js";
+export * from "./errors.js";
 export type { Module } from "./module.js";
 export type { Rule } from "./plugins/module-collector.js";

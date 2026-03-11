@@ -1,65 +1,56 @@
 /**
  * Extract entry point information from esbuild's metafile output.
  */
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Metafile } from "esbuild";
+import { ValidationError } from "./errors.js";
 
-export class MissingMetafile extends Data.TaggedError("MissingMetafile")<{
-  readonly entryFile: string;
-}> {}
-
-export class EntryPointNotFound extends Data.TaggedError("EntryPointNotFound")<{
-  readonly entryFile: string;
-  readonly entryPoints: ReadonlyArray<string>;
-}> {}
-
-export class MultipleEntryPoints extends Data.TaggedError("MultipleEntryPoints")<{
-  readonly entryFile: string;
-  readonly entryPoints: ReadonlyArray<string>;
-}> {}
-
-export type MetafileError = MissingMetafile | EntryPointNotFound | MultipleEntryPoints;
+export interface Entrypoint {
+  readonly relativePath: string;
+  readonly exports: ReadonlyArray<string>;
+  readonly dependencies: Record<string, { bytesInOutput: number }>;
+}
 
 /**
  * Computes entry-point information (path, exports, dependencies)
  * from esbuild's metafile output.
  */
 export function getEntryPointFromMetafile(
-  entryFile: string,
   metafile: Metafile | undefined,
-): Effect.Effect<
-  {
-    readonly relativePath: string;
-    readonly exports: ReadonlyArray<string>;
-    readonly dependencies: Record<string, { bytesInOutput: number }>;
-  },
-  MetafileError
-> {
+): Effect.Effect<Entrypoint, ValidationError> {
   if (metafile === undefined) {
-    return Effect.fail(new MissingMetafile({ entryFile }));
+    return Effect.fail(
+      new ValidationError({
+        reason: "MissingMetafile",
+        message: "The build output does not include a metafile.",
+      }),
+    );
   }
 
-  const entryPoints = Object.entries(metafile.outputs).filter(
-    ([_path, output]) => output.entryPoint !== undefined,
-  );
-  const entryPointList = entryPoints.flatMap(([_input, output]) =>
-    output.entryPoint === undefined ? [] : [output.entryPoint],
-  );
-
-  if (entryPoints.length === 0) {
-    return Effect.fail(new EntryPointNotFound({ entryFile, entryPoints: entryPointList }));
+  const entrypoints: Array<Entrypoint> = [];
+  for (const [relativePath, output] of Object.entries(metafile.outputs)) {
+    if (output.entryPoint !== undefined) {
+      entrypoints.push({ relativePath, exports: output.exports, dependencies: output.inputs });
+    }
   }
 
-  if (entryPoints.length > 1) {
-    return Effect.fail(new MultipleEntryPoints({ entryFile, entryPoints: entryPointList }));
+  if (!entrypoints[0]) {
+    return Effect.fail(
+      new ValidationError({
+        reason: "MissingEntrypoints",
+        message: "The build output does not include any entrypoints.",
+      }),
+    );
+  } else if (entrypoints.length > 1) {
+    return Effect.fail(
+      new ValidationError({
+        reason: "MultipleEntrypoints",
+        message:
+          "The build output contains more than one entrypoint:\n" +
+          entrypoints.map((entrypoint) => `- ${entrypoint.relativePath}`).join("\n"),
+      }),
+    );
   }
 
-  const [relativePath, entryPoint] = entryPoints[0]!;
-
-  return Effect.succeed({
-    relativePath,
-    exports: entryPoint.exports,
-    dependencies: entryPoint.inputs,
-  });
+  return Effect.succeed(entrypoints[0]);
 }

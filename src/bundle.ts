@@ -4,16 +4,14 @@
  * Assembles esbuild options and plugins, runs the build via the Esbuild
  * Effect service, and post-processes the result into a BundleResult.
  */
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import * as ServiceMap from "effect/ServiceMap";
-import type { Plugin } from "esbuild";
 import * as esbuild from "esbuild";
-import { getEntryPointFromMetafile, type MetafileError } from "./metafile.js";
+import { BuildError, SystemError, type BundleError } from "./errors.js";
+import { getEntryPointFromMetafile } from "./metafile.js";
 import type { Module } from "./module.js";
 import { cloudflareInternalPlugin } from "./plugins/cloudflare-internal.js";
 import { createModuleCollector, type Rule } from "./plugins/module-collector.js";
@@ -62,20 +60,6 @@ export interface BundleResult {
   readonly outputDir: string;
 }
 
-export class BundleFileSystemError extends Data.TaggedError("BundleFileSystemError")<{
-  readonly cause: PlatformError;
-}> {}
-
-export class BundleEsbuildError extends Data.TaggedError("BundleEsbuildError")<{
-  readonly cause: esbuild.BuildFailure;
-}> {}
-
-export class BundleMetafileError extends Data.TaggedError("BundleMetafileError")<{
-  readonly cause: MetafileError;
-}> {}
-
-export type BundleError = BundleEsbuildError | BundleMetafileError | BundleFileSystemError;
-
 export class Bundle extends ServiceMap.Service<
   Bundle,
   {
@@ -105,7 +89,13 @@ export const BundleLive = Layer.effect(
           const target = path.resolve(directory, module.name);
           return fs.makeDirectory(path.dirname(target), { recursive: true }).pipe(
             Effect.andThen(() => fs.writeFile(target, module.content)),
-            Effect.mapError((cause) => new BundleFileSystemError({ cause })),
+            Effect.mapError(
+              (cause) =>
+                new SystemError({
+                  message: `Failed to copy module "${module.name}" to "${directory}"`,
+                  cause,
+                }),
+            ),
           );
         },
         { discard: true },
@@ -113,111 +103,100 @@ export const BundleLive = Layer.effect(
 
     const build = <T extends esbuild.BuildOptions>(
       options: esbuild.SameShape<esbuild.BuildOptions, T>,
-    ): Effect.Effect<esbuild.BuildResult<T>, BundleEsbuildError> =>
+    ): Effect.Effect<esbuild.BuildResult<T>, BuildError> =>
       Effect.tryPromise({
         try: () => esbuild.build(options),
-        catch: (error) =>
-          new BundleEsbuildError({
-            cause: error as esbuild.BuildFailure,
-          }),
+        catch: (cause) => {
+          const e = cause as esbuild.BuildFailure;
+          return new BuildError({
+            message: e.message,
+            errors: e.errors,
+            warnings: e.warnings,
+          });
+        },
       });
 
     return Bundle.of({
-      bundle: (options) =>
-        Effect.gen(function* () {
-          const plugins = createPlugins(options);
-          const moduleCollector = plugins.moduleCollector;
+      bundle: Effect.fn(function* (options) {
+        const plugins: Array<esbuild.Plugin> = [];
+        const moduleCollector = createModuleCollector({
+          rules: options.rules,
+          preserveFileNames: options.preserveFileNames,
+        });
+        plugins.push(moduleCollector.plugin);
 
-          const isServiceWorker = options.format === "service-worker";
+        if (
+          options.compatibilityFlags?.some(
+            (flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
+          )
+        ) {
+          plugins.push(
+            nodejsCompatPlugin({
+              compatibilityDate: options.compatibilityDate,
+              compatibilityFlags: options.compatibilityFlags,
+            }),
+          );
+        } else {
+          // Without nodejs_compat, mark node:* imports as external but warn.
+          // This matches wrangler's behavior: the build succeeds but the worker
+          // may throw at runtime if it actually uses the node built-in.
+          plugins.push(nodejsCompatWarningPlugin);
+        }
 
-          const result = yield* build({
-            // Common esbuild options matching wrangler's configuration.
-            target: "es2024",
-            conditions: ["workerd", "worker", "browser"],
-            define: {
-              "process.env.NODE_ENV": '"production"',
-              "global.process.env.NODE_ENV": '"production"',
-              "globalThis.process.env.NODE_ENV": '"production"',
-              ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
-                ? { "navigator.userAgent": '"Cloudflare-Workers"' }
-                : {}),
-              ...options.define,
-            },
-            loader: {
-              ".js": "jsx",
-              ".mjs": "jsx",
-              ".cjs": "jsx",
-            },
+        plugins.push(cloudflareInternalPlugin);
 
-            entryPoints: [options.main],
-            bundle: true,
-            absWorkingDir: options.projectRoot,
-            outdir: options.outputDir,
-            format: isServiceWorker ? "iife" : "esm",
-            sourcemap: true,
-            metafile: true,
-            logLevel: "silent",
-            external: ["__STATIC_CONTENT_MANIFEST", ...(options.external ?? [])],
-            plugins: plugins.plugins,
-            minify: options.minify,
-            keepNames: options.keepNames ?? true,
-            tsconfig: options.tsconfig
-              ? path.resolve(options.projectRoot, options.tsconfig)
-              : undefined,
-          });
+        const result = yield* build({
+          // Common esbuild options matching wrangler's configuration.
+          target: "es2024",
+          conditions: ["workerd", "worker", "browser"],
+          define: {
+            "process.env.NODE_ENV": '"production"',
+            "global.process.env.NODE_ENV": '"production"',
+            "globalThis.process.env.NODE_ENV": '"production"',
+            ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
+              ? { "navigator.userAgent": '"Cloudflare-Workers"' }
+              : {}),
+            ...options.define,
+          },
+          loader: {
+            ".js": "jsx",
+            ".mjs": "jsx",
+            ".cjs": "jsx",
+          },
 
-          const entryPointInfo = yield* getEntryPointFromMetafile(
-            options.main,
-            result.metafile,
-          ).pipe(Effect.mapError((cause) => new BundleMetafileError({ cause })));
+          entryPoints: [options.main],
+          bundle: true,
+          absWorkingDir: options.projectRoot,
+          outdir: options.outputDir,
+          format: options.format === "service-worker" ? "iife" : "esm",
+          sourcemap: true,
+          metafile: true,
+          logLevel: "silent",
+          external: ["__STATIC_CONTENT_MANIFEST", ...(options.external ?? [])],
+          plugins,
+          minify: options.minify,
+          keepNames: options.keepNames ?? true,
+          tsconfig: options.tsconfig
+            ? path.resolve(options.projectRoot, options.tsconfig)
+            : undefined,
+        });
 
-          const resolvedEntryPoint = path.resolve(options.outputDir, entryPointInfo.relativePath);
-          const modules = moduleCollector.getModules();
+        const entryPointInfo = yield* getEntryPointFromMetafile(result.metafile);
 
-          if (modules.length > 0) {
-            yield* writeAdditionalModules(modules, path.dirname(resolvedEntryPoint));
-          }
+        const resolvedEntryPoint = path.resolve(options.outputDir, entryPointInfo.relativePath);
+        const modules = moduleCollector.getModules();
 
-          return {
-            main: resolvedEntryPoint,
-            modules,
-            type: entryPointInfo.exports.length > 0 ? "esm" : "commonjs",
-            outputDir: options.outputDir,
-          } satisfies BundleResult;
-        }),
+        if (modules.length > 0) {
+          yield* writeAdditionalModules(modules, path.dirname(resolvedEntryPoint));
+        }
+
+        return {
+          main: resolvedEntryPoint,
+          modules,
+          type: entryPointInfo.exports.length > 0 ? "esm" : "commonjs",
+          outputDir: options.outputDir,
+        };
+      }),
     });
   }),
 );
-
-function createPlugins(options: BundleOptions): {
-  readonly moduleCollector: ReturnType<typeof createModuleCollector>;
-  readonly plugins: Array<Plugin>;
-} {
-  const plugins: Array<Plugin> = [];
-  const moduleCollector = createModuleCollector({
-    rules: options.rules ? [...options.rules] : undefined,
-    preserveFileNames: options.preserveFileNames,
-  });
-  plugins.push(moduleCollector.plugin);
-
-  const hasNodejsCompat = options.compatibilityFlags?.some(
-    (flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
-  );
-  if (hasNodejsCompat) {
-    plugins.push(
-      nodejsCompatPlugin({
-        compatibilityDate: options.compatibilityDate,
-        compatibilityFlags: options.compatibilityFlags,
-      }),
-    );
-  } else {
-    // Without nodejs_compat, mark node:* imports as external but warn.
-    // This matches wrangler's behavior: the build succeeds but the worker
-    // may throw at runtime if it actually uses the node built-in.
-    plugins.push(nodejsCompatWarningPlugin);
-  }
-
-  plugins.push(cloudflareInternalPlugin);
-
-  return { moduleCollector, plugins };
-}

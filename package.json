@@ -25,6 +25,7 @@
     "@effect/platform-node": "^4.0.0-beta.30",
     "@effect/vitest": "^4.0.0-beta.30",
     "@types/bun": "latest",
+    "@types/glob-to-regexp": "^0.4.4",
     "miniflare": "^4.20260310.0",
     "oxfmt": "^0.37.0",
     "oxlint": "^1.52.0",

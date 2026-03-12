@@ -19,19 +19,19 @@ export interface BundleConfig {
   /** Cloudflare compatibility date */
   readonly compatibilityDate: string;
   /** Cloudflare compatibility flags (e.g., ["nodejs_compat"]) */
-  readonly compatibilityFlags: readonly string[];
+  readonly compatibilityFlags: ReadonlyArray<string>;
   /** esbuild define replacements */
   readonly define?: Record<string, string>;
   /** Module rules for non-JS imports */
-  readonly rules?: readonly Rule[];
+  readonly rules?: ReadonlyArray<Rule>;
   /** Whether to scan the filesystem for additional modules (dynamic imports) */
   readonly findAdditionalModules?: boolean;
   /** Preserve original file names instead of hashing */
   readonly preserveFileNames?: boolean;
   /** Additional modules to mark as external */
-  readonly external?: readonly string[];
+  readonly external?: ReadonlyArray<string>;
   /** Durable Object bindings */
-  readonly durableObjects?: readonly DurableObjectBinding[];
+  readonly durableObjects?: ReadonlyArray<DurableObjectBinding>;
   /** Whether to minify the output */
   readonly minify?: boolean;
   /** Whether to preserve function/class names (default: true) */
@@ -58,7 +58,7 @@ export interface BundleResult {
   /** Absolute path to the main output file */
   readonly main: string;
   /** Additional modules collected during bundling (WASM, text, data, etc.) */
-  readonly modules: readonly Module[];
+  readonly modules: ReadonlyArray<Module>;
   /** The module format of the entry point */
   readonly type: "esm" | "commonjs";
   /** Absolute path to the output directory */

@@ -84,7 +84,7 @@ function parseOutputDir(outdir: string): BundleResult {
   // Find the entry point (the main .js file that isn't a module)
   // It's the JavaScript file that is NOT a hash-prefixed additional module
   let entryPoint: string | null = null;
-  const modules: Module[] = [];
+  const modules: Array<Module> = [];
 
   for (const filePath of files) {
     const relative = path.relative(outdir, filePath);
@@ -172,8 +172,8 @@ function normalizeModuleName(relative: string): string {
 /**
  * Recursively lists all files in a directory.
  */
-function listFilesRecursive(dir: string): string[] {
-  const results: string[] = [];
+function listFilesRecursive(dir: string): Array<string> {
+  const results: Array<string> = [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);

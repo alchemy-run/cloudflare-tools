@@ -1,6 +1,6 @@
-import * as Cause from "effect/Cause";
+import type * as Cause from "effect/Cause";
 import * as Queue from "effect/Queue";
-import * as esbuild from "esbuild";
+import type * as esbuild from "esbuild";
 import type { BuildError } from "../errors.js";
 
 export function makeWatchPlugin<T extends esbuild.BuildOptions>(

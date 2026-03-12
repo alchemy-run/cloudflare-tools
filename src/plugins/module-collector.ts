@@ -18,7 +18,7 @@ import type { Module } from "../module.js";
 
 export interface ModuleCollectorOptions {
   /** Module rules (user-defined + defaults will be merged) */
-  readonly rules?: readonly Rule[];
+  readonly rules?: ReadonlyArray<Rule>;
   /** Whether to preserve original filenames instead of hashing */
   readonly preserveFileNames?: boolean;
 }
@@ -142,11 +142,11 @@ const DEFAULT_MODULE_RULES: Array<Rule> = [
  * module rules for Cloudflare Workers and handles rule merging with
  * fallthrough semantics.
  */
-function parseRules(userRules: readonly Rule[] = []): ReadonlyArray<Rule> {
-  const rules: Rule[] = [...userRules, ...DEFAULT_MODULE_RULES];
+function parseRules(userRules: ReadonlyArray<Rule> = []): ReadonlyArray<Rule> {
+  const rules: Array<Rule> = [...userRules, ...DEFAULT_MODULE_RULES];
 
   const completedRuleLocations: Record<string, number> = {};
-  const rulesToRemove: Rule[] = [];
+  const rulesToRemove: Array<Rule> = [];
   let index = 0;
 
   for (const rule of rules) {

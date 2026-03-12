@@ -41,13 +41,15 @@ export function loadFixture(fixtureName: string): Effect.Effect<BundleConfig> {
 
     // Extract compatibility settings
     const compatibilityDate = (config.compatibility_date as string) ?? "2025-01-01";
-    const compatibilityFlags = (config.compatibility_flags as string[]) ?? [];
+    const compatibilityFlags = (config.compatibility_flags as Array<string>) ?? [];
 
     // Extract module rules
     const rules = config.rules as Array<Rule> | undefined;
 
     // Extract durable object bindings
-    const doConfig = config.durable_objects as { bindings?: DurableObjectBinding[] } | undefined;
+    const doConfig = config.durable_objects as
+      | { bindings?: Array<DurableObjectBinding> }
+      | undefined;
     const durableObjects = doConfig?.bindings;
 
     return {
@@ -59,7 +61,7 @@ export function loadFixture(fixtureName: string): Effect.Effect<BundleConfig> {
       rules,
       findAdditionalModules: config.find_additional_modules as boolean | undefined,
       preserveFileNames: config.preserve_file_names as boolean | undefined,
-      external: config.external as string[] | undefined,
+      external: config.external as Array<string> | undefined,
       durableObjects,
       minify: config.minify as boolean | undefined,
       keepNames: config.keep_names as boolean | undefined,

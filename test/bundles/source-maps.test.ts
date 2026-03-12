@@ -58,7 +58,7 @@ describe("source-maps", () => {
       const mapPath = bundle.main + ".map";
       const content = await fs.readFile(mapPath, "utf-8");
       const sourceMap = JSON.parse(content);
-      const sources: string[] = sourceMap.sources;
+      const sources: Array<string> = sourceMap.sources;
       // At least one source should reference index.ts
       expect(sources.some((s: string) => s.includes("index.ts"))).toBe(true);
     });

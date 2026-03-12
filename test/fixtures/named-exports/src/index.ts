@@ -12,6 +12,7 @@ export class MyDO extends DurableObject {
 
 // Use a class export instead of a bare constant — workerd only accepts
 // function/class/ExportedHandler values as module map entries.
+// oxlint-disable-next-line typescript/no-extraneous-class
 export class WorkerMetadata {
   static version = "1.0.0";
 }

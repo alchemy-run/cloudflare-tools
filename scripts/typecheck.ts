@@ -12,7 +12,7 @@ async function typecheck(name: string) {
   console.timeEnd(`typecheck ${name}`);
 }
 
-const promises: Promise<void>[] = [];
+const promises: Array<Promise<void>> = [];
 const start = Date.now();
 for await (const name of fs.glob("**/tsconfig.json", {
   cwd: path.join(__dirname, ".."),

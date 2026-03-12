@@ -36,7 +36,7 @@ const VIRTUAL_POLYFILL_RE = new RegExp(
 
 export interface NodejsCompatOptions {
   readonly compatibilityDate?: string;
-  readonly compatibilityFlags?: readonly string[];
+  readonly compatibilityFlags?: ReadonlyArray<string>;
 }
 
 /**
@@ -129,7 +129,7 @@ function handleRequireCallsToNodeJSBuiltins(
 function handleUnenvAliasedPackages(
   build: Parameters<Plugin["setup"]>[0],
   alias: Record<string, string>,
-  external: readonly string[],
+  external: ReadonlyArray<string>,
 ): void {
   // Resolve all aliases to absolute paths
   const aliasAbsolute: Record<string, string> = {};
@@ -200,8 +200,8 @@ function handleUnenvAliasedPackages(
  */
 function handleNodeJSGlobals(
   build: Parameters<Plugin["setup"]>[0],
-  inject: Record<string, string | readonly string[]>,
-  polyfill: readonly string[],
+  inject: Record<string, string | ReadonlyArray<string>>,
+  polyfill: ReadonlyArray<string>,
 ): void {
   // Parse the inject map into grouped data structures
   interface InjectedGlobal {
@@ -210,7 +210,7 @@ function handleNodeJSGlobals(
     importName: string;
   }
 
-  const injectsByModule = new Map<string, InjectedGlobal[]>();
+  const injectsByModule = new Map<string, Array<InjectedGlobal>>();
 
   for (const [injectedName, value] of Object.entries(inject)) {
     if (!value) continue;
@@ -271,7 +271,7 @@ function handleNodeJSGlobals(
     const globals = injectsByModule.get(moduleSpecifier);
     if (!globals) return undefined;
 
-    const lines: string[] = [];
+    const lines: Array<string> = [];
 
     // Build import statement
     const imports = globals.map((g) =>

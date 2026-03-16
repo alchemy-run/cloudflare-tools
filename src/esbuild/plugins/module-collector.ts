@@ -1,33 +1,34 @@
-/**
- * esbuild plugin that collects non-JS modules (WASM, text, binary).
- */
 import type { Plugin } from "esbuild";
-import globToRegExp from "glob-to-regexp";
+import crypto from "node:crypto";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { ModuleCollectorCore, type ModuleCollectorOptions } from "../../module-collector.js";
-import { parseRules } from "../../module-rules.js";
+import type { Module } from "../../module.js";
+import { makeRuleFilters, parseRules, type Rule } from "../../module-rules.js";
 
-export function createModuleCollector(options: ModuleCollectorOptions = {}) {
-  const core = new ModuleCollectorCore(options);
+export function createModuleCollector(options: {
+  readonly rules?: ReadonlyArray<Rule>;
+  readonly preserveFileNames?: boolean;
+}) {
   const rules = parseRules(options.rules);
+  const ruleFilters = makeRuleFilters(rules);
+  const preserveFileNames = options.preserveFileNames ?? false;
+  let modules: Record<string, Module> = {};
 
   const plugin: Plugin = {
     name: "distilled-module-collector",
     setup(build) {
       build.onStart(() => {
-        core.reset();
+        modules = {};
       });
 
       for (const rule of rules) {
-        if (rule.type === "ESModule" || rule.type === "CommonJS") {
-          continue;
-        }
-
+        if (rule.type === "ESModule" || rule.type === "CommonJS") continue;
         for (const glob of rule.globs) {
-          build.onResolve({ filter: globToRegExp(glob) }, async (args) => {
-            if (args.pluginData?.skip) {
-              return undefined;
-            }
+          const filter = new RegExp(
+            glob.replace(/\./g, "\\.").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*"),
+          );
+          build.onResolve({ filter }, async (args) => {
+            if (args.pluginData?.skip) return undefined;
 
             let filePath: string;
             try {
@@ -41,21 +42,26 @@ export function createModuleCollector(options: ModuleCollectorOptions = {}) {
               filePath = path.resolve(args.resolveDir, args.path);
             }
 
-            const module = await core.resolve(filePath, args.path);
-            if (module === null) {
-              return undefined;
-            }
+            const importPath = args.path;
+            const matched = ruleFilters.find(({ filters }) =>
+              filters.some((f) => f.test(importPath)),
+            );
+            if (!matched) return undefined;
 
-            return {
-              path: module.fileName,
-              external: true,
-              watchFiles: [filePath],
-            };
+            const content = await readFile(filePath);
+            const hash = crypto.createHash("sha1").update(content).digest("hex");
+            const fileName = preserveFileNames
+              ? path.basename(importPath)
+              : `${hash}-${path.basename(importPath)}`;
+
+            modules[fileName] = { name: fileName, path: filePath, content, type: matched.rule.type };
+
+            return { path: fileName, external: true, watchFiles: [filePath] };
           });
         }
       }
     },
   };
 
-  return { getModules: () => core.getModules(), plugin };
+  return { getModules: () => Object.values(modules), plugin };
 }

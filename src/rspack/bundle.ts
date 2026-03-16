@@ -16,6 +16,7 @@ import {
   type RspackOptions,
   type Stats,
 } from "@rspack/core";
+import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import * as nodePath from "node:path";
@@ -34,8 +35,7 @@ import {
 } from "../backend-utils.js";
 import { deriveDefines } from "../cloudflare-defaults.js";
 import { BuildError, type BundleError } from "../errors.js";
-import { ModuleCollectorCore } from "../module-collector.js";
-import { parseRules } from "../module-rules.js";
+import { makeRuleFilters, parseRules } from "../module-rules.js";
 import type { Module } from "../module.js";
 import { resolveUnenv } from "../nodejs-compat-env.js";
 
@@ -380,10 +380,8 @@ const scanModuleAssets = Effect.fn(function* ({
   readonly fs: FileSystem.FileSystem;
   readonly path: Path.Path;
 }) {
-  const collector = new ModuleCollectorCore({
-    rules: options.rules,
-    preserveFileNames: options.preserveFileNames,
-  });
+  const ruleFilters = makeRuleFilters(parseRules(options.rules));
+  const preserveFileNames = options.preserveFileNames ?? false;
   const modules: Array<Module> = [];
 
   const visit: (directory: string) => Effect.Effect<void, unknown> = (directory) =>
@@ -398,11 +396,20 @@ const scanModuleAssets = Effect.fn(function* ({
               Effect.flatMap((stat) => {
                 if (stat.type === "Directory") return visit(filePath);
                 const relativePath = `./${path.relative(options.projectRoot, filePath).replaceAll("\\", "/")}`;
-                const moduleType = collector.match(relativePath);
-                if (moduleType === null) return Effect.void;
-                return Effect.promise(() => collector.collect(filePath, relativePath, moduleType)).pipe(
-                  Effect.map((module) => {
-                    modules.push({ ...module, path: filePath });
+                const matched = ruleFilters.find(({ filters }) =>
+                  filters.some((f) => f.test(relativePath)),
+                );
+                if (!matched || matched.rule.type === "ESModule" || matched.rule.type === "CommonJS") {
+                  return Effect.void;
+                }
+                return fs.readFile(filePath).pipe(
+                  Effect.map((content) => {
+                    const buf = Buffer.from(content);
+                    const hash = crypto.createHash("sha1").update(buf).digest("hex");
+                    const fileName = preserveFileNames
+                      ? nodePath.basename(relativePath)
+                      : `${hash}-${nodePath.basename(relativePath)}`;
+                    modules.push({ name: fileName, path: filePath, content: buf, type: matched.rule.type });
                   }),
                 );
               }),

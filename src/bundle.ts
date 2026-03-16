@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Result from "effect/Result";
+import type * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
-import * as Stream from "effect/Stream";
+import type * as Stream from "effect/Stream";
 import { SystemError, type BundleError } from "./errors.js";
 import type { Module } from "./module.js";
 import type { Rule } from "./module-rules.js";

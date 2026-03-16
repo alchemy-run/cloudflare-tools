@@ -20,6 +20,11 @@ import {
   type CloudflareOptions,
   writeAdditionalModules,
 } from "../bundle.js";
+import {
+  collectAdditionalEntries,
+  hasNodejsCompat,
+  readEmittedJavaScriptModules,
+} from "../backend-utils.js";
 import { deriveDefines, deriveFormat } from "../cloudflare-defaults.js";
 import { BuildError, type BundleError } from "../errors.js";
 import type { Module } from "../module.js";
@@ -47,11 +52,7 @@ export const RolldownBundleLive = Layer.effect(
       let alias: Record<string, string> = {};
       let inject: Record<string, string | [string, string]> | undefined;
 
-      if (
-        options.compatibilityFlags?.some(
-          (flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
-        )
-      ) {
+      if (hasNodejsCompat(options.compatibilityFlags)) {
         const compat = yield* Effect.promise(() =>
           createNodejsCompat({
             compatibilityDate: options.compatibilityDate,
@@ -67,14 +68,15 @@ export const RolldownBundleLive = Layer.effect(
 
       plugins.push(cloudflareInternalPlugin());
 
-      const input = yield* scanAdditionalEntries({
+      const entries = yield* collectAdditionalEntries({
         options,
         fs,
         path,
+        mainEntryName: path.basename(options.main, path.extname(options.main)),
       }).pipe(Effect.mapError(mapRolldownError));
 
       const inputOptions = {
-        input,
+        input: options.findAdditionalModules ? entries : options.main,
         cwd: options.projectRoot,
         platform: "browser",
         plugins,
@@ -105,7 +107,7 @@ export const RolldownBundleLive = Layer.effect(
         minify: options.minify ?? false,
         entryFileNames: "[name].js",
         chunkFileNames: "[name]-[hash].js",
-        codeSplitting: options.findAdditionalModules ? true : false,
+        codeSplitting: options.findAdditionalModules,
         keepNames: options.keepNames ?? true,
       } satisfies OutputOptions;
 
@@ -139,7 +141,8 @@ export const RolldownBundleLive = Layer.effect(
       watch: (options) =>
         Stream.callback<Result.Result<BundleResult, BundleError>, never>((queue) =>
           Effect.gen(function* () {
-            const { inputOptions, outputOptions, moduleCollector } = yield* makeBuildOptions(options);
+            const { inputOptions, outputOptions, moduleCollector } =
+              yield* makeBuildOptions(options);
             const watcher = watch({
               ...inputOptions,
               output: outputOptions,
@@ -246,12 +249,13 @@ const mapWatchResult = Effect.fn(function* ({
   const entryFile = `${path.basename(options.main, path.extname(options.main))}.js`;
   const resolvedEntryPoint = path.resolve(options.outputDir, entryFile);
   const stat = yield* fs.stat(resolvedEntryPoint).pipe(
-    Effect.mapError(() =>
-      new BuildError({
-        message: `Build failed to produce an entry chunk at "${resolvedEntryPoint}".`,
-        errors: [],
-        warnings: [],
-      }),
+    Effect.mapError(
+      () =>
+        new BuildError({
+          message: `Build failed to produce an entry chunk at "${resolvedEntryPoint}".`,
+          errors: [],
+          warnings: [],
+        }),
     ),
   );
   if (stat.type !== "File") {
@@ -263,12 +267,13 @@ const mapWatchResult = Effect.fn(function* ({
   }
 
   const code = yield* fs.readFileString(resolvedEntryPoint).pipe(
-    Effect.mapError(() =>
-      new BuildError({
-        message: `Failed to read entry chunk at "${resolvedEntryPoint}".`,
-        errors: [],
-        warnings: [],
-      }),
+    Effect.mapError(
+      () =>
+        new BuildError({
+          message: `Failed to read entry chunk at "${resolvedEntryPoint}".`,
+          errors: [],
+          warnings: [],
+        }),
     ),
   );
 
@@ -280,7 +285,7 @@ const mapWatchResult = Effect.fn(function* ({
     );
   }
 
-  const emittedModules = yield* readEmittedOutputModules({
+  const emittedModules = yield* readEmittedJavaScriptModules({
     fs,
     path,
     outputDir: options.outputDir,
@@ -329,146 +334,9 @@ const getEmittedOutputModules = ({
     ];
   });
 
-const readEmittedOutputModules = Effect.fn(function* ({
-  fs,
-  path,
-  outputDir,
-  main,
-}: {
-  readonly fs: FileSystem.FileSystem;
-  readonly path: Path.Path;
-  readonly outputDir: string;
-  readonly main: string;
-}) {
-  const modules: Array<Module> = [];
-
-  const visit: (directory: string) => Effect.Effect<void, unknown> = (directory) =>
-    fs.readDirectory(directory).pipe(
-      Effect.flatMap((names) =>
-        Effect.forEach(
-          names,
-          (name) => {
-            const filePath = path.join(directory, name);
-            return fs.stat(filePath).pipe(
-              Effect.flatMap((stat) => {
-                if (stat.type === "Directory") {
-                  return visit(filePath);
-                }
-
-                if (!isEmittedCodeFile(filePath, main)) {
-                  return Effect.void;
-                }
-
-                return fs.readFile(filePath).pipe(
-                  Effect.map((content) => {
-                    modules.push({
-                      name: path.relative(outputDir, filePath).replaceAll("\\", "/"),
-                      path: filePath,
-                      content: Buffer.from(content),
-                      type: filePath.endsWith(".cjs") ? "CommonJS" : "ESModule",
-                    });
-                  }),
-                );
-              }),
-            );
-          },
-          { concurrency: "unbounded", discard: true },
-        ),
-      ),
-    );
-
-  yield* visit(outputDir);
-  return modules;
-});
-
-const scanAdditionalEntries = Effect.fn(function* ({
-  options,
-  fs,
-  path,
-}: {
-  readonly options: CloudflareOptions;
-  readonly fs: FileSystem.FileSystem;
-  readonly path: Path.Path;
-}) {
-  if (!options.findAdditionalModules) {
-    return options.main;
-  }
-
-  const entryRoot = path.dirname(options.main);
-  const mainEntryName = path.basename(options.main, path.extname(options.main));
-  const entries: Record<string, string> = {
-    [mainEntryName]: options.main,
-  };
-
-  const visit: (directory: string) => Effect.Effect<void, unknown> = Effect.fn(function* (
-    directory: string,
-  ) {
-    const names = yield* fs.readDirectory(directory);
-    yield* Effect.forEach(
-      names,
-      (name) => {
-        if (name === "node_modules" || name.startsWith(".")) {
-          return Effect.void;
-        }
-
-        const filePath = path.join(directory, name);
-        return fs.stat(filePath).pipe(
-          Effect.flatMap((stat) => {
-            if (stat.type === "Directory") {
-              return visit(filePath);
-            }
-
-            if (!isAdditionalEntryFile(filePath, options.main, path)) {
-              return Effect.void;
-            }
-
-            const relativePath = path.relative(entryRoot, filePath);
-            const withoutExtension = relativePath.slice(
-              0,
-              relativePath.length - path.extname(relativePath).length,
-            );
-            const entryName = withoutExtension.replaceAll("\\", "/");
-            entries[entryName] = filePath;
-            return Effect.void;
-          }),
-        );
-      },
-      { concurrency: "unbounded", discard: true },
-    );
-  });
-
-  yield* visit(entryRoot);
-  return entries;
-});
-
-const isAdditionalEntryFile = (filePath: string, main: string, path: Path.Path): boolean => {
-  if (filePath === main) {
-    return false;
-  }
-
-  if (filePath.endsWith(".d.ts")) {
-    return false;
-  }
-
-  const extension = path.extname(filePath);
-  return (
-    extension === ".js" ||
-    extension === ".mjs" ||
-    extension === ".cjs" ||
-    extension === ".ts" ||
-    extension === ".tsx" ||
-    extension === ".jsx"
-  );
-};
-
 const isEmittedCodeModule = (
   item: OutputChunk | OutputAsset,
   main: string,
   path: Path.Path,
   outputDir: string,
-): item is OutputChunk =>
-  item.type === "chunk" && path.resolve(outputDir, item.fileName) !== main;
-
-const isEmittedCodeFile = (filePath: string, main: string): boolean =>
-  filePath !== main &&
-  (filePath.endsWith(".js") || filePath.endsWith(".mjs") || filePath.endsWith(".cjs"));
+): item is OutputChunk => item.type === "chunk" && path.resolve(outputDir, item.fileName) !== main;

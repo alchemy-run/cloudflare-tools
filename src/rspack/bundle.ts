@@ -27,6 +27,11 @@ import {
   type CloudflareOptions,
   writeAdditionalModules,
 } from "../bundle.js";
+import {
+  collectAdditionalEntries,
+  hasNodejsCompat,
+  readEmittedJavaScriptModules,
+} from "../backend-utils.js";
 import { deriveDefines } from "../cloudflare-defaults.js";
 import { BuildError, type BundleError } from "../errors.js";
 import { ModuleCollectorCore } from "../module-collector.js";
@@ -64,16 +69,14 @@ export const RspackBundleLive = Layer.effect(
         fs,
         path,
       }).pipe(Effect.mapError(mapRspackError));
-      const entry = yield* scanAdditionalEntries({
+      const entry = yield* collectAdditionalEntries({
         options,
         fs,
         path,
+        mainEntryName,
       }).pipe(Effect.mapError(mapRspackError));
 
-      const nodeCompatEnabled =
-        options.compatibilityFlags?.some(
-          (flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
-        ) ?? false;
+      const nodeCompatEnabled = hasNodejsCompat(options.compatibilityFlags);
 
       const unenv = nodeCompatEnabled
         ? yield* Effect.promise(() =>
@@ -100,24 +103,7 @@ export const RspackBundleLive = Layer.effect(
             ]),
           )
         : {};
-      const scriptLoaders = (swcOptions: Record<string, unknown>) =>
-        Array.of(
-          {
-            loader: "builtin:swc-loader",
-            options: swcOptions,
-          },
-          ...(nodeCompatEnabled
-            ? [
-                {
-                  loader: nodeProtocolLoaderPath,
-                  options: {
-                    alias,
-                  },
-                },
-              ]
-            : []),
-        );
-      const nodeCompatRuntimeLoaders = nodeCompatEnabled
+      const nodeProtocolUse = nodeCompatEnabled
         ? [
             {
               loader: nodeProtocolLoaderPath,
@@ -126,7 +112,15 @@ export const RspackBundleLive = Layer.effect(
               },
             },
           ]
-        : undefined;
+        : [];
+      const scriptLoaders = (swcOptions: Record<string, unknown>) =>
+        [
+          {
+            loader: "builtin:swc-loader",
+            options: swcOptions,
+          },
+          ...nodeProtocolUse,
+        ];
 
       const config: RspackOptions = {
         context: options.projectRoot,
@@ -238,12 +232,12 @@ export const RspackBundleLive = Layer.effect(
               }),
               type: "javascript/auto",
             },
-            ...(nodeCompatRuntimeLoaders
+            ...(nodeProtocolUse.length > 0
               ? [
                   {
                     test: /\.[cm]?jsx?$/i,
                     resource: (resource: string) => !isProjectSource(resource, projectRoots),
-                    use: nodeCompatRuntimeLoaders,
+                    use: nodeProtocolUse,
                     type: "javascript/auto",
                   },
                 ]
@@ -262,8 +256,6 @@ export const RspackBundleLive = Layer.effect(
                 new ProvidePlugin(provideOptions),
               ]
             : []),
-          createAdditionalModulesWarningPlugin(options),
-          createCollectedAssetPlugin(modules),
           createNavigatorUserAgentCommentStripPlugin(options),
         ],
       };
@@ -441,7 +433,7 @@ const mapStatsToResult = Effect.fn(function* ({
       Effect.provideService(Path.Path, path),
     );
   }
-  const emittedModules = yield* readEmittedJsModules({
+  const emittedModules = yield* readEmittedJavaScriptModules({
     fs,
     path,
     outputDir: options.outputDir,
@@ -454,120 +446,6 @@ const mapStatsToResult = Effect.fn(function* ({
     type: options.format === "service-worker" ? "commonjs" : "esm",
     outputDir: options.outputDir,
   } satisfies BundleResult;
-});
-
-const readEmittedJsModules = Effect.fn(function* ({
-  fs,
-  path,
-  outputDir,
-  main,
-}: {
-  readonly fs: FileSystem.FileSystem;
-  readonly path: Path.Path;
-  readonly outputDir: string;
-  readonly main: string;
-}) {
-  const modules: Array<Module> = [];
-
-  const visit: (directory: string) => Effect.Effect<void, unknown> = (directory) =>
-    fs.readDirectory(directory).pipe(
-      Effect.flatMap((names) =>
-        Effect.forEach(
-          names,
-          (name) => {
-            const filePath = path.join(directory, name);
-            return fs.stat(filePath).pipe(
-              Effect.flatMap((stat) => {
-                if (stat.type === "Directory") {
-                  return visit(filePath);
-                }
-
-                if (
-                  filePath === main ||
-                  (!filePath.endsWith(".js") &&
-                    !filePath.endsWith(".mjs") &&
-                    !filePath.endsWith(".cjs"))
-                ) {
-                  return Effect.void;
-                }
-
-                return fs.readFile(filePath).pipe(
-                  Effect.map((content) => {
-                    modules.push({
-                      name: path.relative(outputDir, filePath).replaceAll("\\", "/"),
-                      path: filePath,
-                      content: Buffer.from(content),
-                      type: filePath.endsWith(".cjs") ? "CommonJS" : "ESModule",
-                    });
-                  }),
-                );
-              }),
-            );
-          },
-          { concurrency: "unbounded", discard: true },
-        ),
-      ),
-    );
-
-  yield* visit(outputDir);
-  return modules;
-});
-
-const scanAdditionalEntries = Effect.fn(function* ({
-  options,
-  fs,
-  path,
-}: {
-  readonly options: CloudflareOptions;
-  readonly fs: FileSystem.FileSystem;
-  readonly path: Path.Path;
-}) {
-  const entries: Record<string, string> = {
-    [mainEntryName]: options.main,
-  };
-
-  if (!options.findAdditionalModules) {
-    return entries;
-  }
-
-  const entryRoot = path.dirname(options.main);
-  const visit: (directory: string) => Effect.Effect<void, unknown> = (directory) =>
-    fs.readDirectory(directory).pipe(
-      Effect.flatMap((names) =>
-        Effect.forEach(
-          names,
-          (name) => {
-            if (name === "node_modules" || name.startsWith(".")) {
-              return Effect.void;
-            }
-
-            const filePath = path.join(directory, name);
-            return fs.stat(filePath).pipe(
-              Effect.flatMap((stat) => {
-                if (stat.type === "Directory") {
-                  return visit(filePath);
-                }
-
-                if (!isAdditionalEntryFile(filePath, options.main, path)) {
-                  return Effect.void;
-                }
-
-                const relativePath = path.relative(entryRoot, filePath);
-                const entryName = relativePath
-                  .slice(0, relativePath.length - path.extname(relativePath).length)
-                  .replaceAll("\\", "/");
-                entries[entryName] = filePath;
-                return Effect.void;
-              }),
-            );
-          },
-          { concurrency: "unbounded", discard: true },
-        ),
-      ),
-    );
-
-  yield* visit(entryRoot);
-  return entries;
 });
 
 const scanModuleAssets = Effect.fn(function* ({
@@ -661,35 +539,6 @@ const createModuleRules = (options: CloudflareOptions, path: Path.Path) =>
     });
   });
 
-const createCollectedAssetPlugin = (_modules: ReadonlyArray<Module>) => ({
-  apply(_compiler: Compiler) {
-    // Rspack loaders inline non-JS assets for runtime behavior.
-    // We still surface collected modules in BundleResult for parity with the
-    // existing test harness and bundler contract.
-  },
-});
-
-const createAdditionalModulesWarningPlugin = (options: CloudflareOptions) => ({
-  apply(compiler: Compiler) {
-    if (!options.findAdditionalModules) {
-      return;
-    }
-
-    compiler.hooks.thisCompilation.tap("distilled-rspack-context-hints", (compilation) => {
-      compilation.hooks.processAssets.tap(
-        {
-          name: "distilled-rspack-context-hints",
-        },
-        () => {
-          // No-op hook to keep a backend-local extension point for additional
-          // module handling. Rspack's native context-module support already
-          // covers the current fixture set.
-        },
-      );
-    });
-  },
-});
-
 const createNavigatorUserAgentCommentStripPlugin = (options: CloudflareOptions): Plugin => ({
   apply(compiler: Compiler) {
     if (!options.compatibilityDate || options.compatibilityDate < "2022-03-21") {
@@ -722,22 +571,6 @@ const createNavigatorUserAgentCommentStripPlugin = (options: CloudflareOptions):
     });
   },
 });
-
-const isAdditionalEntryFile = (filePath: string, main: string, path: Path.Path): boolean => {
-  if (filePath === main || filePath.endsWith(".d.ts")) {
-    return false;
-  }
-
-  const extension = path.extname(filePath);
-  return (
-    extension === ".js" ||
-    extension === ".mjs" ||
-    extension === ".cjs" ||
-    extension === ".ts" ||
-    extension === ".tsx" ||
-    extension === ".jsx"
-  );
-};
 
 const normalizeResourcePath = (resource: string): string => resource.replaceAll("\\", "/").replace(/\/+$/, "");
 

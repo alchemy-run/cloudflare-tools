@@ -107,7 +107,13 @@ export const RspackBundleLive = Layer.effect(
       const scriptLoaders = (parserOptions: Record<string, unknown>) => [
         {
           loader: "builtin:swc-loader",
-          options: { jsc: { parser: parserOptions, transform: { react: reactTransform } } },
+          options: {
+            jsc: {
+              target: "es2024",
+              parser: parserOptions,
+              transform: { react: reactTransform },
+            },
+          },
         },
         ...nodeProtocolUse,
       ];

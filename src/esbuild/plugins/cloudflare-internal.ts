@@ -1,10 +1,5 @@
 /**
  * esbuild plugin that marks `cloudflare:*` imports as external.
- *
- * Workers that import from `cloudflare:workers`, `cloudflare:sockets`, etc.
- * must have those imports preserved — they're provided by the Workers runtime.
- *
- * Port of wrangler's cloudflare-internal.ts.
  */
 import type { Plugin } from "esbuild";
 
@@ -22,7 +17,7 @@ export const cloudflareInternalPlugin: Plugin = {
     build.onEnd(() => {
       if (build.initialOptions.format === "iife" && paths.size > 0) {
         const pathList = Array.from(paths)
-          .map((p) => `"${p}"`)
+          .map((path) => `"${path}"`)
           .sort()
           .join(", ");
         return {

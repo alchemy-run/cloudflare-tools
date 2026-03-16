@@ -41,6 +41,11 @@
       "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./esbuild": {
+      "bun": "./src/esbuild/index.ts",
+      "types": "./dist/esbuild/index.d.ts",
+      "import": "./dist/esbuild/index.js"
     }
   },
   "publishConfig": {

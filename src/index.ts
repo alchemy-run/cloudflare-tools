@@ -6,4 +6,4 @@
 export * from "./bundle.js";
 export * from "./errors.js";
 export type { Module } from "./module.js";
-export type { Rule } from "./plugins/module-collector.js";
+export type { Rule } from "./module-rules.js";

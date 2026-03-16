@@ -6,7 +6,7 @@
  */
 
 import type { Module } from "../../src/module.js";
-import type { Rule } from "../../src/plugins/module-collector.js";
+import type { Rule } from "../../src/module-rules.js";
 
 /**
  * Configuration for bundling a fixture. Parsed from wrangler.jsonc.

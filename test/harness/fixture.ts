@@ -7,7 +7,7 @@
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Rule } from "../../src/plugins/module-collector.js";
+import type { Rule } from "../../src/module-rules.js";
 import type { BundleConfig, DurableObjectBinding } from "./types.js";
 
 /**

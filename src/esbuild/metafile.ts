@@ -3,7 +3,7 @@
  */
 import * as Effect from "effect/Effect";
 import type { Metafile } from "esbuild";
-import { ValidationError } from "./errors.js";
+import { ValidationError } from "../errors.js";
 
 export interface Entrypoint {
   readonly relativePath: string;

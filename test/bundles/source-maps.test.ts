@@ -7,7 +7,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { bundleWithDistilled } from "../harness/distilled-bundler.js";
+import { bundleWithEsbuild } from "../harness/esbuild-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
 import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
@@ -25,8 +25,8 @@ describe("source-maps", () => {
       bundler: bundleWithWrangler,
     },
     {
-      name: "distilled-bundler",
-      bundler: bundleWithDistilled,
+      name: "esbuild",
+      bundler: bundleWithEsbuild,
     },
   ])("$name", ({ bundler }) => {
     let bundle: BundleResult;

@@ -1,8 +1,9 @@
 /**
- * Distilled-bundler adapter for the test harness.
+ * Esbuild adapter for the test harness.
  *
- * Converts test harness BundleConfig into the bundler's BundleOptions,
- * runs the bundle, and converts the result back to test harness BundleResult.
+ * Converts test harness BundleConfig into the shared Cloudflare options,
+ * runs the bundle through the esbuild backend, and converts the result back
+ * to test harness BundleResult.
  */
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -11,36 +12,30 @@ import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Bundle, BundleLive, type BundleOptions } from "../../src/bundle.js";
+import { Bundle, type CloudflareOptions } from "../../src/bundle.js";
+import { EsbuildBundleLive } from "../../src/esbuild/index.js";
 import type { Module } from "../../src/index.js";
 import { BundleError } from "./bundle-error.js";
 import type { BundleConfig, BundleResult } from "./types.js";
 
-const layers = Layer.provide(BundleLive, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
+const layers = Layer.provide(EsbuildBundleLive, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
 
-/**
- * Bundles a fixture using distilled-bundler.
- */
-export function bundleWithDistilled(
-  config: BundleConfig,
-): Effect.Effect<BundleResult, BundleError> {
+export function bundleWithEsbuild(config: BundleConfig): Effect.Effect<BundleResult, BundleError> {
   return Effect.gen(function* () {
     const bundle = yield* Bundle;
-    // Create a temp directory for output
-    const outdir = fs.mkdtempSync(path.join(os.tmpdir(), "distilled-bundler-distilled-"));
+    const outdir = fs.mkdtempSync(path.join(os.tmpdir(), "distilled-bundler-esbuild-"));
 
-    // Convert test harness config to bundler options
-    const options: BundleOptions = {
+    const options: CloudflareOptions = {
       main: config.entryPoint,
       projectRoot: config.projectRoot,
       outputDir: outdir,
       compatibilityDate: config.compatibilityDate,
       compatibilityFlags: config.compatibilityFlags,
       define: config.define,
-      rules: config.rules?.map((r) => ({
-        type: r.type,
-        globs: [...r.globs],
-        fallthrough: r.fallthrough,
+      rules: config.rules?.map((rule) => ({
+        type: rule.type,
+        globs: [...rule.globs],
+        fallthrough: rule.fallthrough,
       })),
       findAdditionalModules: config.findAdditionalModules,
       preserveFileNames: config.preserveFileNames,
@@ -51,28 +46,25 @@ export function bundleWithDistilled(
       format: config.format,
     };
 
-    // Run the bundle
     const result = yield* bundle.build(options).pipe(
       Effect.mapError(
         (error) =>
           new BundleError({
-            message: `Distilled bundler failed: ${String(error)}`,
+            message: `Esbuild bundler failed: ${String(error)}`,
             cause: error,
           }),
       ),
     );
 
-    // Convert to test harness BundleResult
-    // filePath must point to the written output file (used by Miniflare to load from disk)
     const entryDir = path.dirname(result.main);
     return {
       main: result.main,
       modules: result.modules.map(
-        (m): Module => ({
-          name: m.name,
-          path: path.resolve(entryDir, m.name),
-          content: m.content,
-          type: m.type,
+        (module): Module => ({
+          name: module.name,
+          path: path.resolve(entryDir, module.name),
+          content: module.content,
+          type: module.type,
         }),
       ),
       type: result.type,

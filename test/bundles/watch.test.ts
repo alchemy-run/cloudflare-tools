@@ -21,10 +21,11 @@ import type { PlatformError } from "effect/PlatformError";
 import * as PubSub from "effect/PubSub";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import { Bundle, BundleLive, type BundleOptions } from "../../src/bundle.js";
+import { Bundle, type CloudflareOptions } from "../../src/bundle.js";
+import { EsbuildBundleLive } from "../../src/esbuild/index.js";
 import { fixtureDir } from "../harness/fixture.js";
 
-const layers = Layer.provideMerge(BundleLive, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
+const layers = Layer.provideMerge(EsbuildBundleLive, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
 
 const copyRecursive = Effect.fn(function* (
   source: string,
@@ -71,7 +72,7 @@ const makeTempDirectory = Effect.fn(function* (prefix: string) {
   return yield* fs.makeTempDirectoryScoped({ prefix });
 });
 
-const makeWatchBundle = Effect.fn(function* (options: BundleOptions) {
+const makeWatchBundle = Effect.fn(function* (options: CloudflareOptions) {
   const bundle = yield* Bundle;
   const pubsub = yield* Stream.toPubSub(bundle.watch(options), { capacity: "unbounded" });
   const subscription = yield* PubSub.subscribe(pubsub);

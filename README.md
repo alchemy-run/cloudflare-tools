@@ -15,7 +15,8 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Bundle, BundleLive } from "@distilled.cloud/cloudflare-bundler";
+import { Bundle } from "@distilled.cloud/cloudflare-bundler";
+import { EsbuildBundleLive } from "@distilled.cloud/cloudflare-bundler/esbuild";
 
 const program = Effect.gen(function* () {
   const bundle = yield* Bundle;
@@ -30,7 +31,7 @@ const program = Effect.gen(function* () {
   });
 });
 
-const layer = Layer.provide(BundleLive, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
+const layer = Layer.provide(EsbuildBundleLive, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
 
 const result = await Effect.runPromise(Effect.provide(program, layer));
 console.log(result.main);

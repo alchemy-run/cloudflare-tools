@@ -8,7 +8,6 @@ import * as Stream from "effect/Stream";
 import {
   rolldown,
   type InputOptions,
-  type OutputAsset,
   type OutputChunk,
   type OutputOptions,
   type Plugin,
@@ -23,6 +22,7 @@ import {
 import {
   collectAdditionalEntries,
   hasNodejsCompat,
+  mapBuildError,
   readEmittedJavaScriptModules,
 } from "../backend-utils.js";
 import { deriveDefines, deriveFormat } from "../cloudflare-defaults.js";
@@ -73,7 +73,7 @@ export const RolldownBundleLive = Layer.effect(
         fs,
         path,
         mainEntryName: path.basename(options.main, path.extname(options.main)),
-      }).pipe(Effect.mapError(mapRolldownError));
+      }).pipe(Effect.mapError(mapBuildError));
 
       const inputOptions = {
         input: options.findAdditionalModules ? entries : options.main,
@@ -114,26 +114,61 @@ export const RolldownBundleLive = Layer.effect(
       return { inputOptions, outputOptions, moduleCollector };
     });
 
+    const writeCopiedModules = (copiedModules: ReadonlyArray<Module>, entryDir: string) =>
+      copiedModules.length > 0
+        ? writeAdditionalModules(copiedModules, entryDir).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
+          )
+        : Effect.void;
+
     return Bundle.of({
       build: Effect.fn(function* (options) {
         const { inputOptions, outputOptions, moduleCollector } = yield* makeBuildOptions(options);
         const bundle = yield* Effect.tryPromise({
           try: () => rolldown(inputOptions),
-          catch: mapRolldownError,
+          catch: mapBuildError,
         });
 
         try {
           const output = yield* Effect.tryPromise({
             try: () => bundle.write(outputOptions),
-            catch: mapRolldownError,
+            catch: mapBuildError,
           });
-          return yield* mapBuildResult({
-            options,
-            output,
-            moduleCollector,
-            path,
-            fs,
-          });
+
+          const entryChunk = output.output.find(
+            (item): item is OutputChunk => item.type === "chunk" && item.isEntry,
+          );
+          if (!entryChunk) {
+            return yield* new BuildError({
+              message: "Build failed to produce an entry chunk.",
+              errors: [],
+              warnings: [],
+            });
+          }
+
+          const main = path.resolve(options.outputDir, entryChunk.fileName);
+          const copiedModules = moduleCollector.getModules();
+          yield* writeCopiedModules(copiedModules, path.dirname(main));
+
+          const emittedModules: Array<Module> = output.output
+            .filter(
+              (item): item is OutputChunk =>
+                item.type === "chunk" && path.resolve(options.outputDir, item.fileName) !== main,
+            )
+            .map((chunk) => ({
+              name: chunk.fileName,
+              path: path.resolve(options.outputDir, chunk.fileName),
+              content: Buffer.from(chunk.code),
+              type: chunk.fileName.endsWith(".cjs") ? "CommonJS" : ("ESModule" as Module.Type),
+            }));
+
+          return {
+            main,
+            modules: [...emittedModules, ...copiedModules],
+            type: entryChunk.exports.length > 0 ? "esm" : "commonjs",
+            outputDir: options.outputDir,
+          } satisfies BundleResult;
         } finally {
           yield* Effect.promise(() => bundle.close()).pipe(Effect.ignore);
         }
@@ -147,30 +182,42 @@ export const RolldownBundleLive = Layer.effect(
               ...inputOptions,
               output: outputOptions,
               watch: {},
-              experimental: {
-                incrementalBuild: true,
-              },
+              experimental: { incrementalBuild: true },
             });
 
             watcher.on("event", async (event) => {
               if (event.code === "BUNDLE_END") {
                 try {
                   const result = await Effect.runPromise(
-                    mapWatchResult({
-                      options,
-                      moduleCollector,
-                      path,
-                      fs,
+                    Effect.gen(function* () {
+                      const entryFile = `${path.basename(options.main, path.extname(options.main))}.js`;
+                      const main = path.resolve(options.outputDir, entryFile);
+                      const code = yield* fs.readFileString(main);
+                      const copiedModules = moduleCollector.getModules();
+                      yield* writeCopiedModules(copiedModules, path.dirname(main));
+                      const emittedModules = yield* readEmittedJavaScriptModules({
+                        fs,
+                        path,
+                        outputDir: options.outputDir,
+                        main,
+                      });
+
+                      return {
+                        main,
+                        modules: [...emittedModules, ...copiedModules],
+                        type: /\bexport[\s{]/.test(code) ? "esm" : "commonjs",
+                        outputDir: options.outputDir,
+                      } satisfies BundleResult;
                     }),
                   );
                   Queue.offerUnsafe(queue, Result.succeed(result));
                 } catch (error) {
-                  Queue.offerUnsafe(queue, Result.fail(mapRolldownError(error)));
+                  Queue.offerUnsafe(queue, Result.fail(mapBuildError(error)));
                 } finally {
                   await event.result.close();
                 }
               } else if (event.code === "ERROR") {
-                Queue.offerUnsafe(queue, Result.fail(mapRolldownError(event.error)));
+                Queue.offerUnsafe(queue, Result.fail(mapBuildError(event.error)));
                 await event.result.close();
               }
             });
@@ -185,158 +232,3 @@ export const RolldownBundleLive = Layer.effect(
     });
   }),
 );
-
-const mapBuildResult = Effect.fn(function* ({
-  options,
-  output,
-  moduleCollector,
-  path,
-  fs,
-}: {
-  readonly options: CloudflareOptions;
-  readonly output: Awaited<ReturnType<Awaited<ReturnType<typeof rolldown>>["write"]>>;
-  readonly moduleCollector: ReturnType<typeof createModuleCollector>;
-  readonly path: Path.Path;
-  readonly fs: FileSystem.FileSystem;
-}) {
-  const entryChunk = output.output.find(
-    (item): item is OutputChunk => item.type === "chunk" && item.isEntry,
-  );
-  if (!entryChunk) {
-    return yield* new BuildError({
-      message: "Build failed to produce an entry chunk.",
-      errors: [],
-      warnings: [],
-    });
-  }
-
-  const resolvedEntryPoint = path.resolve(options.outputDir, entryChunk.fileName);
-  const copiedModules = moduleCollector.getModules();
-  const emittedModules = getEmittedOutputModules({
-    output,
-    path,
-    outputDir: options.outputDir,
-    main: resolvedEntryPoint,
-  });
-  const modules = [...emittedModules, ...copiedModules];
-
-  if (copiedModules.length > 0) {
-    yield* writeAdditionalModules(copiedModules, path.dirname(resolvedEntryPoint)).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    );
-  }
-
-  return {
-    main: resolvedEntryPoint,
-    modules,
-    type: entryChunk.exports.length > 0 ? "esm" : "commonjs",
-    outputDir: options.outputDir,
-  } satisfies BundleResult;
-});
-
-const mapWatchResult = Effect.fn(function* ({
-  options,
-  moduleCollector,
-  path,
-  fs,
-}: {
-  readonly options: CloudflareOptions;
-  readonly moduleCollector: ReturnType<typeof createModuleCollector>;
-  readonly path: Path.Path;
-  readonly fs: FileSystem.FileSystem;
-}) {
-  const entryFile = `${path.basename(options.main, path.extname(options.main))}.js`;
-  const resolvedEntryPoint = path.resolve(options.outputDir, entryFile);
-  const stat = yield* fs.stat(resolvedEntryPoint).pipe(
-    Effect.mapError(
-      () =>
-        new BuildError({
-          message: `Build failed to produce an entry chunk at "${resolvedEntryPoint}".`,
-          errors: [],
-          warnings: [],
-        }),
-    ),
-  );
-  if (stat.type !== "File") {
-    return yield* new BuildError({
-      message: `Expected "${resolvedEntryPoint}" to be a file.`,
-      errors: [],
-      warnings: [],
-    });
-  }
-
-  const code = yield* fs.readFileString(resolvedEntryPoint).pipe(
-    Effect.mapError(
-      () =>
-        new BuildError({
-          message: `Failed to read entry chunk at "${resolvedEntryPoint}".`,
-          errors: [],
-          warnings: [],
-        }),
-    ),
-  );
-
-  const copiedModules = moduleCollector.getModules();
-  if (copiedModules.length > 0) {
-    yield* writeAdditionalModules(copiedModules, path.dirname(resolvedEntryPoint)).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    );
-  }
-
-  const emittedModules = yield* readEmittedJavaScriptModules({
-    fs,
-    path,
-    outputDir: options.outputDir,
-    main: resolvedEntryPoint,
-  }).pipe(Effect.mapError(mapRolldownError));
-  const modules = [...emittedModules, ...copiedModules];
-
-  return {
-    main: resolvedEntryPoint,
-    modules,
-    type: /\bexport[\s{]/.test(code) ? "esm" : "commonjs",
-    outputDir: options.outputDir,
-  } satisfies BundleResult;
-});
-
-const mapRolldownError = (cause: unknown): BuildError =>
-  new BuildError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    errors: [],
-    warnings: [],
-  });
-
-const getEmittedOutputModules = ({
-  output,
-  path,
-  outputDir,
-  main,
-}: {
-  readonly output: Awaited<ReturnType<Awaited<ReturnType<typeof rolldown>>["write"]>>;
-  readonly path: Path.Path;
-  readonly outputDir: string;
-  readonly main: string;
-}): Array<Module> =>
-  output.output.flatMap((item) => {
-    if (!isEmittedCodeModule(item, main, path, outputDir)) {
-      return [];
-    }
-
-    return [
-      {
-        name: item.fileName,
-        path: path.resolve(outputDir, item.fileName),
-        content: Buffer.from(item.code),
-        type: item.fileName.endsWith(".cjs") ? "CommonJS" : "ESModule",
-      } satisfies Module,
-    ];
-  });
-
-const isEmittedCodeModule = (
-  item: OutputChunk | OutputAsset,
-  main: string,
-  path: Path.Path,
-  outputDir: string,
-): item is OutputChunk => item.type === "chunk" && path.resolve(outputDir, item.fileName) !== main;

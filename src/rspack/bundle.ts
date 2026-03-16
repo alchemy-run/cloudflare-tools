@@ -12,7 +12,6 @@ import {
   rspack,
   sources,
   type Compiler,
-  type Plugin,
   type ProvidePluginOptions,
   type RspackOptions,
   type Stats,
@@ -30,6 +29,7 @@ import {
 import {
   collectAdditionalEntries,
   hasNodejsCompat,
+  mapBuildError,
   readEmittedJavaScriptModules,
 } from "../backend-utils.js";
 import { deriveDefines } from "../cloudflare-defaults.js";
@@ -51,6 +51,12 @@ const nodeProtocolLoaderPath = fileURLToPath(
 const wasmExternalPrefix = "__CLOUDFLARE_WASM_MODULE__/";
 const mainEntryName = "worker";
 
+const reactTransform = {
+  runtime: "classic" as const,
+  pragma: "h",
+  pragmaFrag: "Fragment",
+};
+
 export const RspackBundleLive = Layer.effect(
   Bundle,
   Effect.gen(function* () {
@@ -62,23 +68,21 @@ export const RspackBundleLive = Layer.effect(
         .realPath(options.projectRoot)
         .pipe(Effect.catch(() => Effect.succeed(options.projectRoot)));
       const projectRoots = Array.from(
-        new Set([normalizeResourcePath(options.projectRoot), normalizeResourcePath(canonicalProjectRoot)]),
+        new Set([normalizePath(options.projectRoot), normalizePath(canonicalProjectRoot)]),
       );
-      const modules = yield* scanModuleAssets({
-        options,
-        fs,
-        path,
-      }).pipe(Effect.mapError(mapRspackError));
+      const modules = yield* scanModuleAssets({ options, fs, path }).pipe(
+        Effect.mapError(mapBuildError),
+      );
       const entry = yield* collectAdditionalEntries({
         options,
         fs,
         path,
         mainEntryName,
-      }).pipe(Effect.mapError(mapRspackError));
+      }).pipe(Effect.mapError(mapBuildError));
 
-      const nodeCompatEnabled = hasNodejsCompat(options.compatibilityFlags);
+      const nodeCompat = hasNodejsCompat(options.compatibilityFlags);
 
-      const unenv = nodeCompatEnabled
+      const unenv = nodeCompat
         ? yield* Effect.promise(() =>
             resolveUnenv({
               compatibilityDate: options.compatibilityDate,
@@ -87,40 +91,28 @@ export const RspackBundleLive = Layer.effect(
           )
         : undefined;
 
-      const provideOptions: ProvidePluginOptions | undefined = unenv
-        ? Object.fromEntries(
-            Object.entries(unenv.inject).map(([name, value]) => [
-              name,
-              typeof value === "string" ? value : [String(value[0]), String(value[1])],
-            ]),
-          )
-        : undefined;
       const alias = unenv
         ? Object.fromEntries(
             Object.entries(unenv.alias).map(([key, value]) => [
               key,
-              resolveRspackAliasPath(value.resolvedPath),
+              resolveAliasPath(value.resolvedPath),
             ]),
           )
         : {};
-      const nodeProtocolUse = nodeCompatEnabled
-        ? [
-            {
-              loader: nodeProtocolLoaderPath,
-              options: {
-                alias,
-              },
-            },
-          ]
+
+      const nodeProtocolUse = nodeCompat
+        ? [{ loader: nodeProtocolLoaderPath, options: { alias } }]
         : [];
-      const scriptLoaders = (swcOptions: Record<string, unknown>) =>
-        [
-          {
-            loader: "builtin:swc-loader",
-            options: swcOptions,
-          },
-          ...nodeProtocolUse,
-        ];
+
+      const scriptLoaders = (parserOptions: Record<string, unknown>) => [
+        {
+          loader: "builtin:swc-loader",
+          options: { jsc: { parser: parserOptions, transform: { react: reactTransform } } },
+        },
+        ...nodeProtocolUse,
+      ];
+
+      const isESM = options.format !== "service-worker";
 
       const config: RspackOptions = {
         context: options.projectRoot,
@@ -132,45 +124,28 @@ export const RspackBundleLive = Layer.effect(
           filename: "[name].js",
           chunkFilename: "[name]-[contenthash].js",
           clean: true,
-          module: options.format !== "service-worker",
-          library: options.format !== "service-worker" ? { type: "module" } : undefined,
-          iife: options.format === "service-worker",
-          chunkFormat: options.format !== "service-worker" ? "module" : "array-push",
-          chunkLoading: options.format !== "service-worker" ? "import" : "import-scripts",
+          module: isESM,
+          library: isESM ? { type: "module" } : undefined,
+          iife: !isESM,
+          chunkFormat: isESM ? "module" : "array-push",
+          chunkLoading: isESM ? "import" : "import-scripts",
         },
         experiments: {
-          outputModule: options.format !== "service-worker",
+          outputModule: isESM,
           incremental: "safe",
         },
         devtool: "source-map",
         stats: "errors-warnings",
-        externalsType: options.format !== "service-worker" ? "module" : "var",
+        externalsType: isESM ? "module" : "var",
         externals: [
           ({ request }, callback) => {
-            if (!request) {
-              return callback();
-            }
-
-            if (request === "__STATIC_CONTENT_MANIFEST") {
-              return callback(undefined, request);
-            }
-
-            if (request.startsWith(wasmExternalPrefix)) {
+            if (!request) return callback();
+            if (request === "__STATIC_CONTENT_MANIFEST") return callback(undefined, request);
+            if (request.startsWith(wasmExternalPrefix))
               return callback(undefined, `./${request.slice(wasmExternalPrefix.length)}`);
-            }
-
-            if (request.startsWith("cloudflare:")) {
-              return callback(undefined, request);
-            }
-
-            if (!nodeCompatEnabled && request.startsWith("node:")) {
-              return callback(undefined, request);
-            }
-
-            if (options.external?.includes(request)) {
-              return callback(undefined, request);
-            }
-
+            if (request.startsWith("cloudflare:")) return callback(undefined, request);
+            if (!nodeCompat && request.startsWith("node:")) return callback(undefined, request);
+            if (options.external?.includes(request)) return callback(undefined, request);
             return callback();
           },
         ],
@@ -185,60 +160,30 @@ export const RspackBundleLive = Layer.effect(
           },
           extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"],
           tsConfig: options.tsconfig
-            ? {
-                configFile: path.resolve(options.projectRoot, options.tsconfig),
-              }
+            ? { configFile: path.resolve(options.projectRoot, options.tsconfig) }
             : undefined,
         },
         module: {
           rules: [
             {
               test: /\.[cm]?tsx?$/i,
-              resource: (resource: string) => isProjectSource(resource, projectRoots),
-              use: scriptLoaders({
-                jsc: {
-                  parser: {
-                    syntax: "typescript",
-                    tsx: true,
-                  },
-                  transform: {
-                    react: {
-                      runtime: "classic",
-                      pragma: "h",
-                      pragmaFrag: "Fragment",
-                    },
-                  },
-                },
-              }),
+              resource: (r: string) => isProjectSource(r, projectRoots),
+              use: scriptLoaders({ syntax: "typescript", tsx: true }),
               type: "javascript/auto",
             },
             {
               test: /\.[cm]?jsx?$/i,
-              resource: (resource: string) => isProjectSource(resource, projectRoots),
-              use: scriptLoaders({
-                jsc: {
-                  parser: {
-                    syntax: "ecmascript",
-                    jsx: true,
-                  },
-                  transform: {
-                    react: {
-                      runtime: "classic",
-                      pragma: "h",
-                      pragmaFrag: "Fragment",
-                    },
-                  },
-                },
-              }),
+              resource: (r: string) => isProjectSource(r, projectRoots),
+              use: scriptLoaders({ syntax: "ecmascript", jsx: true }),
               type: "javascript/auto",
             },
             ...(nodeProtocolUse.length > 0
               ? [
                   {
                     test: /\.[cm]?jsx?$/i,
-                    resource: (resource: string) => !isProjectSource(resource, projectRoots),
+                    resource: (r: string) => !isProjectSource(r, projectRoots),
                     use: nodeProtocolUse,
-                    type: "javascript/auto",
+                    type: "javascript/auto" as const,
                   },
                 ]
               : []),
@@ -251,20 +196,34 @@ export const RspackBundleLive = Layer.effect(
         },
         plugins: [
           new DefinePlugin(deriveDefines(options)),
-          ...(provideOptions
+          ...(unenv
             ? [
-                new ProvidePlugin(provideOptions),
+                new ProvidePlugin(
+                  Object.fromEntries(
+                    Object.entries(unenv.inject).map(([name, value]) => [
+                      name,
+                      typeof value === "string"
+                        ? value
+                        : [String(value[0]), String(value[1])],
+                    ]),
+                  ) as ProvidePluginOptions,
+                ),
               ]
             : []),
-          createNavigatorUserAgentCommentStripPlugin(options),
+          navigatorUserAgentPlugin(options),
         ],
       };
 
-      return {
-        config,
-        modules,
-      };
+      return { config, modules };
     });
+
+    const writeCopiedModules = (copiedModules: ReadonlyArray<Module>, entryDir: string) =>
+      copiedModules.length > 0
+        ? writeAdditionalModules(copiedModules, entryDir).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
+          )
+        : Effect.void;
 
     return Bundle.of({
       build: Effect.fn(function* (options) {
@@ -272,15 +231,9 @@ export const RspackBundleLive = Layer.effect(
         const compiler = rspack(config) as Compiler;
         try {
           const stats = yield* runCompiler(compiler);
-          return yield* mapStatsToResult({
-            options,
-            stats,
-            path,
-            fs,
-            modules,
-          });
+          return yield* mapStatsToResult({ options, stats, modules });
         } finally {
-          yield* closeCompiler(compiler);
+          yield* promisifyClose(compiler);
         }
       }),
       watch: (options) =>
@@ -291,10 +244,9 @@ export const RspackBundleLive = Layer.effect(
 
             const watching = compiler.watch({ aggregateTimeout: 50 }, async (error, stats) => {
               if (error) {
-                Queue.offerUnsafe(queue, Result.fail(mapRspackError(error)));
+                Queue.offerUnsafe(queue, Result.fail(mapBuildError(error)));
                 return;
               }
-
               if (!stats) {
                 Queue.offerUnsafe(
                   queue,
@@ -308,37 +260,89 @@ export const RspackBundleLive = Layer.effect(
                 );
                 return;
               }
-
               try {
                 const result = await Effect.runPromise(
-                  mapStatsToResult({
-                    options,
-                    stats,
-                    path,
-                    fs,
-                    modules,
-                  }),
+                  mapStatsToResult({ options, stats, modules }),
                 );
                 Queue.offerUnsafe(queue, Result.succeed(result));
               } catch (cause) {
-                Queue.offerUnsafe(
-                  queue,
-                  Result.fail(cause instanceof BuildError ? cause : mapRspackError(cause)),
-                );
+                Queue.offerUnsafe(queue, Result.fail(mapBuildError(cause)));
               }
             });
 
-            return yield* Effect.addFinalizer(() => closeWatching(watching).pipe(Effect.ignore));
+            return yield* Effect.addFinalizer(() => promisifyClose(watching).pipe(Effect.ignore));
           }).pipe(
             Effect.catch((error) =>
-              Queue.offer(
-                queue,
-                Result.fail(error instanceof BuildError ? error : mapRspackError(error)),
-              ).pipe(Effect.asVoid),
+              Queue.offer(queue, Result.fail(mapBuildError(error))).pipe(Effect.asVoid),
             ),
           ),
         ),
     });
+
+    function mapStatsToResult({
+      options,
+      stats,
+      modules,
+    }: {
+      readonly options: CloudflareOptions;
+      readonly stats: Stats;
+      readonly modules: ReadonlyArray<Module>;
+    }) {
+      return Effect.gen(function* () {
+        const json = stats.toJson({
+          entrypoints: true,
+          assets: true,
+          errors: true,
+          warnings: true,
+        });
+
+        if (stats.hasErrors()) {
+          return yield* new BuildError({
+            message: `Build failed with ${(json.errors ?? []).length} error(s) and ${(json.warnings ?? []).length} warning(s)`,
+            errors: (json.errors ?? []).map((m, i) => ({
+              id: m.code ? String(m.code) : `RSPACK_${i}`,
+              pluginName: m.moduleName ? String(m.moduleName) : "",
+              text: m.message ? String(m.message) : String(m),
+              location: null,
+              notes: [],
+              detail: m,
+            })),
+            warnings: [],
+          });
+        }
+
+        const mainAsset = json.entrypoints?.[mainEntryName]?.assets?.find(
+          (a) => a.name.endsWith(".js") || a.name.endsWith(".mjs") || a.name.endsWith(".cjs"),
+        );
+        if (!mainAsset) {
+          return yield* new BuildError({
+            message: `Build failed to produce an entry asset for "${mainEntryName}".`,
+            errors: [],
+            warnings: [],
+          });
+        }
+
+        const main = path.resolve(options.outputDir, mainAsset.name);
+        const outputModules = modules.map((m) => ({
+          ...m,
+          path: path.resolve(path.dirname(main), m.name),
+        }));
+        yield* writeCopiedModules(outputModules, path.dirname(main));
+        const emittedModules = yield* readEmittedJavaScriptModules({
+          fs,
+          path,
+          outputDir: options.outputDir,
+          main,
+        }).pipe(Effect.mapError(mapBuildError));
+
+        return {
+          main,
+          modules: [...emittedModules, ...outputModules],
+          type: options.format === "service-worker" ? "commonjs" : "esm",
+          outputDir: options.outputDir,
+        } satisfies BundleResult;
+      });
+    }
   }),
 );
 
@@ -347,106 +351,19 @@ const runCompiler = (compiler: Compiler) =>
     try: () =>
       new Promise<Stats>((resolve, reject) => {
         compiler.run((error, stats) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          if (!stats) {
-            reject(
-              new BuildError({
-                message: "Rspack compilation returned no stats.",
-                errors: [],
-                warnings: [],
-              }),
+          if (error) return reject(error);
+          if (!stats)
+            return reject(
+              new BuildError({ message: "Rspack compilation returned no stats.", errors: [], warnings: [] }),
             );
-            return;
-          }
           resolve(stats);
         });
       }),
-    catch: mapRspackError,
+    catch: mapBuildError,
   });
 
-const closeCompiler = (compiler: Compiler) =>
-  Effect.promise(
-    () =>
-      new Promise<void>((resolve) => {
-        compiler.close(() => resolve());
-      }),
-  );
-
-const closeWatching = (watching: { close(callback: (...args: Array<any>) => void): void }) =>
-  Effect.promise(
-    () =>
-      new Promise<void>((resolve) => {
-        watching.close(() => resolve());
-      }),
-  );
-
-const mapStatsToResult = Effect.fn(function* ({
-  options,
-  stats,
-  path,
-  fs,
-  modules,
-}: {
-  readonly options: CloudflareOptions;
-  readonly stats: Stats;
-  readonly path: Path.Path;
-  readonly fs: FileSystem.FileSystem;
-  readonly modules: ReadonlyArray<Module>;
-}) {
-  const json = stats.toJson({
-    entrypoints: true,
-    assets: true,
-    errors: true,
-    warnings: true,
-  });
-
-  if (stats.hasErrors()) {
-    return yield* new BuildError({
-      message: `Build failed with ${(json.errors ?? []).length} error(s) and ${(json.warnings ?? []).length} warning(s)`,
-      errors: mapStatsMessages(json.errors),
-      warnings: mapStatsMessages(json.warnings),
-    });
-  }
-
-  const mainAsset = json.entrypoints?.[mainEntryName]?.assets?.find((asset) =>
-    asset.name.endsWith(".js") || asset.name.endsWith(".mjs") || asset.name.endsWith(".cjs"),
-  );
-  if (!mainAsset) {
-    return yield* new BuildError({
-      message: `Build failed to produce an entry asset for "${mainEntryName}".`,
-      errors: [],
-      warnings: mapStatsMessages(json.warnings),
-    });
-  }
-
-  const main = path.resolve(options.outputDir, mainAsset.name);
-  const outputModules = modules.map((module) => ({
-    ...module,
-    path: path.resolve(path.dirname(main), module.name),
-  }));
-  if (outputModules.length > 0) {
-    yield* writeAdditionalModules(outputModules, path.dirname(main)).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-    );
-  }
-  const emittedModules = yield* readEmittedJavaScriptModules({
-    fs,
-    path,
-    outputDir: options.outputDir,
-    main,
-  }).pipe(Effect.mapError(mapRspackError));
-
-  return {
-    main,
-    modules: [...emittedModules, ...outputModules],
-    type: options.format === "service-worker" ? "commonjs" : "esm",
-    outputDir: options.outputDir,
-  } satisfies BundleResult;
-});
+const promisifyClose = (closeable: { close(cb: (...args: Array<any>) => void): void }) =>
+  Effect.promise(() => new Promise<void>((resolve) => closeable.close(() => resolve())));
 
 const scanModuleAssets = Effect.fn(function* ({
   options,
@@ -469,31 +386,17 @@ const scanModuleAssets = Effect.fn(function* ({
         Effect.forEach(
           names,
           (name) => {
-            if (name === "node_modules" || name.startsWith(".")) {
-              return Effect.void;
-            }
-
+            if (name === "node_modules" || name.startsWith(".")) return Effect.void;
             const filePath = path.join(directory, name);
             return fs.stat(filePath).pipe(
               Effect.flatMap((stat) => {
-                if (stat.type === "Directory") {
-                  return visit(filePath);
-                }
-
-                const relativePath = `./${path
-                  .relative(options.projectRoot, filePath)
-                  .replaceAll("\\", "/")}`;
+                if (stat.type === "Directory") return visit(filePath);
+                const relativePath = `./${path.relative(options.projectRoot, filePath).replaceAll("\\", "/")}`;
                 const moduleType = collector.match(relativePath);
-                if (moduleType === null) {
-                  return Effect.void;
-                }
-
+                if (moduleType === null) return Effect.void;
                 return Effect.promise(() => collector.collect(filePath, relativePath, moduleType)).pipe(
                   Effect.map((module) => {
-                    modules.push({
-                      ...module,
-                      path: filePath,
-                    });
+                    modules.push({ ...module, path: filePath });
                   }),
                 );
               }),
@@ -510,18 +413,10 @@ const scanModuleAssets = Effect.fn(function* ({
 
 const createModuleRules = (options: CloudflareOptions, path: Path.Path) =>
   parseRules(options.rules).flatMap((rule) => {
-    if (rule.type === "ESModule" || rule.type === "CommonJS") {
-      return [];
-    }
-
+    if (rule.type === "ESModule" || rule.type === "CommonJS") return [];
     const loader =
       rule.type === "CompiledWasm"
-        ? {
-            loader: wasmLoaderPath,
-            options: {
-              preserveFileNames: options.preserveFileNames ?? false,
-            },
-          }
+        ? { loader: wasmLoaderPath, options: { preserveFileNames: options.preserveFileNames ?? false } }
         : rule.type === "Text"
           ? { loader: textLoaderPath }
           : { loader: dataLoaderPath };
@@ -539,86 +434,44 @@ const createModuleRules = (options: CloudflareOptions, path: Path.Path) =>
     });
   });
 
-const createNavigatorUserAgentCommentStripPlugin = (options: CloudflareOptions): Plugin => ({
+const normalizePath = (p: string): string => p.replaceAll("\\", "/").replace(/\/+$/, "");
+
+const isProjectSource = (resource: string, projectRoots: ReadonlyArray<string>): boolean => {
+  const normalized = normalizePath(resource);
+  return projectRoots.some((root) => normalized === root || normalized.startsWith(`${root}/`));
+};
+
+const navigatorUserAgentPlugin = (options: CloudflareOptions) => ({
   apply(compiler: Compiler) {
-    if (!options.compatibilityDate || options.compatibilityDate < "2022-03-21") {
-      return;
-    }
-
-    compiler.hooks.thisCompilation.tap("distilled-strip-navigator-user-agent-comments", (compilation: any) => {
-      compilation.hooks.processAssets.tap(
-        {
-          name: "distilled-strip-navigator-user-agent-comments",
-        },
-        (assets: Record<string, any>) => {
-          for (const [filename, source] of Object.entries(assets)) {
-            if (!filename.endsWith(".js") && !filename.endsWith(".mjs") && !filename.endsWith(".cjs")) {
-              continue;
-            }
-
-            const code = source.source().toString();
-            if (!code.includes("navigator.userAgent")) {
-              continue;
-            }
-
+    if (!options.compatibilityDate || options.compatibilityDate < "2022-03-21") return;
+    compiler.hooks.thisCompilation.tap("distilled-navigator-ua", (compilation: any) => {
+      compilation.hooks.processAssets.tap({ name: "distilled-navigator-ua" }, (assets: Record<string, any>) => {
+        for (const [name, source] of Object.entries(assets)) {
+          if (!/\.[cm]?js$/.test(name)) continue;
+          const code = source.source().toString();
+          if (code.includes("navigator.userAgent")) {
             compilation.updateAsset(
-              filename,
+              name,
               new sources.RawSource(code.replaceAll("navigator.userAgent", '"Cloudflare-Workers"')),
             );
           }
-        },
-      );
+        }
+      });
     });
   },
 });
 
-const normalizeResourcePath = (resource: string): string => resource.replaceAll("\\", "/").replace(/\/+$/, "");
-
-const isProjectSource = (resource: string, projectRoots: ReadonlyArray<string>): boolean => {
-  const normalizedResource = normalizeResourcePath(resource);
-  return projectRoots.some(
-    (projectRoot) =>
-      normalizedResource === projectRoot || normalizedResource.startsWith(`${projectRoot}/`),
-  );
-};
-
-const resolveRspackAliasPath = (resolvedPath: string): string => {
-  if (resolvedPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(resolvedPath)) {
-    return resolvedPath;
-  }
-
+const resolveAliasPath = (resolvedPath: string): string => {
+  if (resolvedPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(resolvedPath)) return resolvedPath;
   const candidate = resolvedPath.startsWith("node:") ? resolvedPath.slice(5) : resolvedPath;
-  for (const packageName of [
-    "unenv",
-    "@cloudflare/unenv-preset",
-  ]) {
+  for (const pkg of ["unenv", "@cloudflare/unenv-preset"]) {
     try {
-      const packageRoot = nodePath.dirname(require.resolve(`${packageName}/package.json`));
-      const runtimeFile = nodePath.join(packageRoot, "dist", "runtime", "node", `${candidate}.mjs`);
-      if (existsSync(runtimeFile)) {
-        return runtimeFile;
-      }
+      const root = nodePath.dirname(require.resolve(`${pkg}/package.json`));
+      const file = nodePath.join(root, "dist", "runtime", "node", `${candidate}.mjs`);
+      if (existsSync(file)) return file;
     } catch {
       continue;
     }
   }
-
   return resolvedPath;
 };
-
-const mapStatsMessages = (messages: ReadonlyArray<any> | undefined) =>
-  (messages ?? []).map((message, index) => ({
-    id: message.code ? String(message.code) : `RSPACK_${index}`,
-    pluginName: message.moduleName ? String(message.moduleName) : "",
-    text: message.message ? String(message.message) : String(message),
-    location: null,
-    notes: [],
-    detail: message,
-  }));
-
-const mapRspackError = (cause: unknown): BuildError =>
-  new BuildError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    errors: [],
-    warnings: [],
-  });

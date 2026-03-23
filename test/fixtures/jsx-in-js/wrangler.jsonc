@@ -1,6 +1,0 @@
-{
-  "name": "jsx-in-js",
-  "main": "src/index.js",
-  "compatibility_date": "2025-07-01",
-  "tsconfig": "tsconfig.json",
-}

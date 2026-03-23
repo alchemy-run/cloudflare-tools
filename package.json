@@ -41,21 +41,6 @@
       "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./esbuild": {
-      "bun": "./src/esbuild/index.ts",
-      "types": "./dist/esbuild/index.d.ts",
-      "import": "./dist/esbuild/index.js"
-    },
-    "./rolldown": {
-      "bun": "./src/rolldown/index.ts",
-      "types": "./dist/rolldown/index.d.ts",
-      "import": "./dist/rolldown/index.js"
-    },
-    "./rspack": {
-      "bun": "./src/rspack/index.ts",
-      "types": "./dist/rspack/index.d.ts",
-      "import": "./dist/rspack/index.js"
     }
   },
   "publishConfig": {
@@ -67,13 +52,15 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "bun run scripts/typecheck.ts",
-    "prepublishOnly": "bun run build"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build",
+    "submodules": "git submodule update --init --recursive"
   },
   "dependencies": {
     "@cloudflare/unenv-preset": "^2.15.0",
     "glob-to-regexp": "^0.4.1",
-    "unenv": "^2.0.0-rc.24"
+    "unenv": "^2.0.0-rc.24",
+    "unplugin": "^3.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260310.1",

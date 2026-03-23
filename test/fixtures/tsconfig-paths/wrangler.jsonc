@@ -1,6 +1,0 @@
-{
-  "name": "tsconfig-paths",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-07-01",
-  "tsconfig": "tsconfig.json",
-}

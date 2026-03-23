@@ -1,5 +1,0 @@
-{
-  "name": "build-options",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-07-01",
-}

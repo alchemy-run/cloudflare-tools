@@ -6,7 +6,7 @@
   "categories": {
     "correctness": "error",
     "suspicious": "error",
-    "perf": "error",
+    "perf": "error"
   },
   "rules": {
     // Effect custom rules
@@ -27,8 +27,8 @@
     "typescript/consistent-type-imports": [
       "error",
       {
-        "fixStyle": "separate-type-imports",
-      },
+        "fixStyle": "separate-type-imports"
+      }
     ],
     "typescript/no-import-type-side-effects": "error",
     "import/no-duplicates": "error",
@@ -77,24 +77,24 @@
       "error",
       {
         "default": "generic",
-        "readonly": "generic",
-      },
+        "readonly": "generic"
+      }
     ],
     "typescript/no-unused-vars": [
       "error",
       {
         "argsIgnorePattern": "^_",
-        "varsIgnorePattern": "^_",
-      },
-    ],
+        "varsIgnorePattern": "^_"
+      }
+    ]
   },
   "ignorePatterns": ["workers-sdk"],
   "overrides": [
     {
       "files": ["scripts/**/*.ts"],
       "rules": {
-        "eslint/no-console": "off",
-      },
-    },
-  ],
+        "eslint/no-console": "off"
+      }
+    }
+  ]
 }

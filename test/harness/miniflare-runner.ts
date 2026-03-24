@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as path from "node:path";
 import { Miniflare } from "miniflare";
+import * as path from "node:path";
 import type { BundleConfig, BundleResult } from "./types.js";
 
 export interface MiniflareRunnerOptions {
@@ -33,11 +33,11 @@ export function createRunner(
         })
         .map((module) => ({
           type: module.type,
-          path: path.resolve(bundle.directory, module.name),
+          path: path.resolve(bundle.outDir, module.name),
         }));
       const miniflareOptions: ConstructorParameters<typeof Miniflare>[0] = {
         modules,
-        modulesRoot: bundle.directory,
+        modulesRoot: bundle.outDir,
         compatibilityDate: config.compatibilityDate,
         compatibilityFlags: [...config.compatibilityFlags],
         bindings: options.bindings,

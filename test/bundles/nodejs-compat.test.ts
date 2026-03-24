@@ -10,9 +10,9 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
+import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
 
 describe("nodejs-compat", () => {
@@ -30,7 +30,6 @@ describe("nodejs-compat", () => {
 
   it("builds successfully", () => {
     expect(bundle.main).toBeTruthy();
-    expect(bundle.format).toBe("esm");
   });
 
   it.effect("crypto.getRandomValues works", () =>

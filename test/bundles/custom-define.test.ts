@@ -8,10 +8,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { outputPath } from "../harness/output.js";
-import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
+import { outputPath } from "../harness/output.js";
+import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
 
 describe("custom-define", () => {
@@ -29,7 +29,6 @@ describe("custom-define", () => {
 
   it("builds successfully", () => {
     expect(bundle.main).toBeTruthy();
-    expect(bundle.format).toBe("esm");
   });
 
   it("inlines MY_CONSTANT in output", async () => {

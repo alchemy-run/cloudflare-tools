@@ -8,9 +8,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
+import { loadFixture } from "../harness/fixture.js";
 import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
-import { loadFixture } from "../harness/fixture.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
 
 describe("nodejs-compat-warnings", () => {
@@ -28,7 +28,6 @@ describe("nodejs-compat-warnings", () => {
 
   it("builds successfully despite missing nodejs_compat flag", () => {
     expect(bundle.main).toBeTruthy();
-    expect(bundle.format).toBe("esm");
   });
 
   it("preserves node:path as external import", async () => {

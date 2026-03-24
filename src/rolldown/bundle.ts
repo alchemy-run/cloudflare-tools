@@ -9,7 +9,13 @@ import { Module } from "../core/Module.js";
 import { Output } from "../core/Output.js";
 import { createPluginChain } from "../plugins/index.js";
 import { isSourceMapAsset } from "../plugins/additional-modules.js";
-import type { InputOptions, OutputAsset, OutputChunk, OutputOptions, RolldownOutput } from "rolldown";
+import type {
+  InputOptions,
+  OutputAsset,
+  OutputChunk,
+  OutputOptions,
+  RolldownOutput,
+} from "rolldown";
 import { rolldown } from "rolldown";
 
 const hasNodejsCompat = (flags?: ReadonlyArray<string>) =>
@@ -44,7 +50,8 @@ const toLocation = (value: unknown): DiagnosticLocation | undefined => {
 };
 
 const toDiagnostic = (value: unknown, severity: "error" | "warning"): DiagnosticEntry => {
-  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+  const record =
+    value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
   return {
     message:
       typeof record?.message === "string"
@@ -186,7 +193,9 @@ const collectChunkAndSourceMapModules = async (output: RolldownOutput, directory
     output.output.flatMap((item) => {
       if (item.type === "chunk") {
         return [
-          readFile(`${directory}/${item.fileName}`).then((content) => createChunkModule(item, content)),
+          readFile(`${directory}/${item.fileName}`).then((content) =>
+            createChunkModule(item, content),
+          ),
         ];
       }
       if (isSourceMapAsset(item)) {

@@ -77,21 +77,23 @@ The `getEntry()` function resolves the Worker entry point with a fallback chain:
 5. None of the above → throws a `UserError` with detailed instructions
 
 After resolution, it:
+
 - Runs any custom build command (`config.build`) via `runCustomBuild()`
 - Detects the format (modules vs service-worker) via `guessWorkerFormat()`
 - Validates that service workers don't use local Durable Object bindings
 - Determines `moduleRoot` (where `--no-bundle` modules live, defaults to `path.dirname(entryFile)`)
 
 **Output:** An `Entry` object:
+
 ```ts
 type Entry = {
-  file: string;           // Absolute path to entrypoint
-  projectRoot: string;    // Usually config file directory
+  file: string; // Absolute path to entrypoint
+  projectRoot: string; // Usually config file directory
   configPath: string | undefined;
   format: "modules" | "service-worker";
-  moduleRoot: string;     // Root for additional module discovery
-  name?: string;          // Worker name
-  exports: string[];      // Detected exports from the entrypoint
+  moduleRoot: string; // Root for additional module discovery
+  name?: string; // Worker name
+  exports: string[]; // Detected exports from the entrypoint
 };
 ```
 
@@ -116,6 +118,7 @@ const result = await esbuild.build({
 ```
 
 Decision logic:
+
 - **Has `default` export** → `"modules"` format
 - **Has other exports but no `default`** → warns, falls back to `"service-worker"`
 - **No exports** → `"service-worker"`
@@ -139,24 +142,25 @@ type Middleware = (
   middlewareCtx: {
     dispatch: Dispatcher;
     next(request: IncomingRequest, env: any): Awaitable<Response>;
-  }
+  },
 ) => Awaitable<Response>;
 ```
 
 ### Built-in Middleware
 
-| Name | Path | Condition | Purpose |
-|------|------|-----------|---------|
-| `ensure-req-body-drained` | `templates/middleware/middleware-ensure-req-body-drained.ts` | `targetConsumer === "dev"` and env var not set | Drains unconsumed request bodies in dev to prevent connection issues |
-| `scheduled` | `templates/middleware/middleware-scheduled.ts` | `targetConsumer === "dev"` and `testScheduled` | Intercepts `/__scheduled` path to trigger scheduled handlers via HTTP |
-| `miniflare3-json-error` | `templates/middleware/middleware-miniflare3-json-error.ts` | `targetConsumer === "dev"` and `local` | Wraps errors as JSON with `MF-Experimental-Error-Stack` header for pretty error pages |
-| `patch-console-prefix` | `templates/middleware/middleware-patch-console-prefix.ts` | `MULTIWORKER` flag | Prefixes console.log/debug/info with worker name for multi-worker disambiguation |
+| Name                      | Path                                                         | Condition                                      | Purpose                                                                               |
+| ------------------------- | ------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `ensure-req-body-drained` | `templates/middleware/middleware-ensure-req-body-drained.ts` | `targetConsumer === "dev"` and env var not set | Drains unconsumed request bodies in dev to prevent connection issues                  |
+| `scheduled`               | `templates/middleware/middleware-scheduled.ts`               | `targetConsumer === "dev"` and `testScheduled` | Intercepts `/__scheduled` path to trigger scheduled handlers via HTTP                 |
+| `miniflare3-json-error`   | `templates/middleware/middleware-miniflare3-json-error.ts`   | `targetConsumer === "dev"` and `local`         | Wraps errors as JSON with `MF-Experimental-Error-Stack` header for pretty error pages |
+| `patch-console-prefix`    | `templates/middleware/middleware-patch-console-prefix.ts`    | `MULTIWORKER` flag                             | Prefixes console.log/debug/info with worker name for multi-worker disambiguation      |
 
 ### Application Mechanism
 
 The middleware system works differently for each format:
 
 **Modules format:**
+
 1. Generates a **facade file** (`middleware-insertion-facade.js`) that:
    - Imports the original worker as `worker`
    - Re-exports all named exports from the original
@@ -169,6 +173,7 @@ The middleware system works differently for each format:
    - The loader becomes the new entrypoint for esbuild
 
 **Service-worker format:**
+
 1. Generates a facade file that calls `__facade_registerInternal__()` with middleware functions
 2. This facade is added to esbuild's `inject` array (prepended to the bundle)
 3. The original entry point is unchanged
@@ -188,6 +193,7 @@ Middleware can expose configuration via `config:middleware/{name}` virtual modul
 **Condition:** `checkFetch` is true (controlled by `shouldCheckFetch()`)
 
 Patches `globalThis.fetch` with a Proxy that warns when making HTTPS requests to custom ports (which are ignored in production). This is gated by compatibility date/flags:
+
 - `ignore_custom_ports` flag → enable check
 - `allow_custom_ports` flag → disable check
 - `compatibilityDate < "2024-09-02"` → enable check (default)
@@ -225,25 +231,25 @@ All `.js`, `.mjs`, and `.cjs` files are loaded with the `jsx` loader, enabling J
 
 ### Full Build Options
 
-| Option | Value | Notes |
-|--------|-------|-------|
-| `entryPoints` | `[entry.file]` | After middleware transformation |
-| `bundle` | from config | `false` for `--no-bundle` |
-| `absWorkingDir` | `entry.projectRoot` | |
-| `keepNames` | from config | Preserves function/class `.name` |
-| `outdir` / `outfile` | `destination` | `outfile` if `isOutfile`, else `outdir` |
-| `entryNames` | `entryName` or parsed from entry filename | |
-| `inject` | accumulated array | checked-fetch, modules-watch, middleware |
-| `external` | `["__STATIC_CONTENT_MANIFEST", ...userExternals]` | Only when bundling |
-| `format` | `"esm"` for modules, `"iife"` for service-worker | |
-| `target` | `"es2024"` | |
-| `sourcemap` | user config, defaults to `true` | |
-| `sourceRoot` | `destination` | Needed for error source path resolution |
-| `minify` | from config | |
-| `metafile` | `true` | Always; optionally written to disk |
-| `conditions` | `["workerd", "worker", "browser"]` | Overridable via `WRANGLER_BUILD_CONDITIONS` env var |
-| `platform` | `"browser"` (default) | Overridable via `WRANGLER_BUILD_PLATFORM` env var |
-| `logLevel` | `"silent"` | Errors are rewritten and logged manually |
+| Option               | Value                                             | Notes                                               |
+| -------------------- | ------------------------------------------------- | --------------------------------------------------- |
+| `entryPoints`        | `[entry.file]`                                    | After middleware transformation                     |
+| `bundle`             | from config                                       | `false` for `--no-bundle`                           |
+| `absWorkingDir`      | `entry.projectRoot`                               |                                                     |
+| `keepNames`          | from config                                       | Preserves function/class `.name`                    |
+| `outdir` / `outfile` | `destination`                                     | `outfile` if `isOutfile`, else `outdir`             |
+| `entryNames`         | `entryName` or parsed from entry filename         |                                                     |
+| `inject`             | accumulated array                                 | checked-fetch, modules-watch, middleware            |
+| `external`           | `["__STATIC_CONTENT_MANIFEST", ...userExternals]` | Only when bundling                                  |
+| `format`             | `"esm"` for modules, `"iife"` for service-worker  |                                                     |
+| `target`             | `"es2024"`                                        |                                                     |
+| `sourcemap`          | user config, defaults to `true`                   |                                                     |
+| `sourceRoot`         | `destination`                                     | Needed for error source path resolution             |
+| `minify`             | from config                                       |                                                     |
+| `metafile`           | `true`                                            | Always; optionally written to disk                  |
+| `conditions`         | `["workerd", "worker", "browser"]`                | Overridable via `WRANGLER_BUILD_CONDITIONS` env var |
+| `platform`           | `"browser"` (default)                             | Overridable via `WRANGLER_BUILD_PLATFORM` env var   |
+| `logLevel`           | `"silent"`                                        | Errors are rewritten and logged manually            |
 
 ### Defines
 
@@ -293,19 +299,23 @@ Reimplements esbuild's `alias` option as a plugin to ensure **user-defined alias
 The most complex plugin. Responsible for intercepting non-JS imports (WASM, text, data, etc.) and collecting them as separate modules for the Workers upload.
 
 #### `onStart()`:
+
 - Resets the modules array
 - If `findAdditionalModules` is enabled, scans the filesystem under `moduleRoot` for matching files and populates the modules array
 
 #### `wrangler:modules-watch` virtual module:
+
 - Registers file watchers for found modules (used in watch mode)
 - Registers directory watchers for new file detection
 
 #### Legacy 1.x module support:
+
 - Detects bare module specifiers (e.g., `import wasm from "my-module.wasm"` without `./`)
 - Warns about deprecation, resolves them anyway
 - Hashes file content with SHA1, renames to `${hash}-${basename}` (unless `preserveFileNames`)
 
 #### Rule-based module resolution:
+
 For each rule (parsed from config + defaults), registers an `onResolve` handler:
 
 1. If the file was found by `findAdditionalModules`, marks as external (already in the modules array)
@@ -314,10 +324,13 @@ For each rule (parsed from config + defaults), registers an `onResolve` handler:
 4. Resolution: tries `build.resolve()` first (respects package.json exports), then `resolveSync()` from the `resolve` package (Node resolution)
 
 #### Service-worker format special handling:
+
 For service-worker format, an `onLoad` handler replaces module content with:
+
 ```js
-export default my_module_wasm;  // identifier for form upload
+export default my_module_wasm; // identifier for form upload
 ```
+
 The identifier is derived by replacing non-alphanumeric chars with `_`.
 
 ### 7.3 Node.js Compat Plugins
@@ -326,12 +339,12 @@ The identifier is derived by replacing non-alphanumeric chars with `_`.
 
 Four compatibility modes, returning different plugin combinations:
 
-| Mode | Plugins | Trigger |
-|------|---------|---------|
-| `null` | `nodejsCompatPlugin(null)` | No compat flags set |
-| `"als"` | `asyncLocalStoragePlugin` + `nodejsCompatPlugin("als")` | `nodejs_compat` flag without full v2 |
-| `"v1"` | `nodejsCompatPlugin("v1")` | Legacy `nodejs_compat` |
-| `"v2"` | `nodejsHybridPlugin()` | Modern `nodejs_compat_v2` or `nodejs_compat` with recent compat date |
+| Mode    | Plugins                                                 | Trigger                                                              |
+| ------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
+| `null`  | `nodejsCompatPlugin(null)`                              | No compat flags set                                                  |
+| `"als"` | `asyncLocalStoragePlugin` + `nodejsCompatPlugin("als")` | `nodejs_compat` flag without full v2                                 |
+| `"v1"`  | `nodejsCompatPlugin("v1")`                              | Legacy `nodejs_compat`                                               |
+| `"v2"`  | `nodejsHybridPlugin()`                                  | Modern `nodejs_compat_v2` or `nodejs_compat` with recent compat date |
 
 #### `nodejsCompatPlugin` (modes: null, als, v1)
 
@@ -356,17 +369,17 @@ Provides four capabilities:
 1. **`errorOnServiceWorkerFormat()`**: Collects all `node:*` imports; if format is IIFE, errors.
 2. **`handleRequireCallsToNodeJSBuiltins()`**: Converts `require("node:X")` calls to virtual ESM wrappers:
    ```js
-   import libDefault from 'node:X';
+   import libDefault from "node:X";
    module.exports = libDefault;
    ```
 3. **`handleUnenvAliasedPackages()`**: Resolves unenv aliases to absolute paths. For `require()` calls to `unenv/npm/*` or `unenv/mock/*`, wraps in virtual ESM:
    ```js
-   import * as esm from 'X';
+   import * as esm from "X";
    module.exports = Object.entries(esm)
-     .filter(([k,]) => k !== 'default')
-     .reduce((cjs, [k, value]) =>
-       Object.defineProperty(cjs, k, { value, enumerable: true }),
-       "default" in esm ? esm.default : {}
+     .filter(([k]) => k !== "default")
+     .reduce(
+       (cjs, [k, value]) => Object.defineProperty(cjs, k, { value, enumerable: true }),
+       "default" in esm ? esm.default : {},
      );
    ```
 4. **`handleNodeJSGlobals()`**: Creates virtual modules for each `inject` entry from `unenv` and adds them to `build.initialOptions.inject`. Each virtual module does:
@@ -404,6 +417,7 @@ Any plugins passed via `BundleOptions.plugins` are inserted here — after the c
 **File:** `config-provider.ts`
 
 Provides virtual `config:middleware/*` modules. When middleware declares a `config` record:
+
 ```ts
 middlewareToLoad.push({
   name: "patch-console-prefix",
@@ -411,6 +425,7 @@ middlewareToLoad.push({
   ...
 });
 ```
+
 The plugin resolves `import { prefix } from "config:middleware/patch-console-prefix"` to a JSON module containing that config.
 
 ---
@@ -483,6 +498,7 @@ By default, modules are renamed to `${sha1Hash}-${originalBasename}` to prevent 
 **File:** `entry-point-from-metafile.ts`
 
 After esbuild completes, scans `metafile.outputs` for the single entry with `entryPoint !== undefined`. Extracts:
+
 - `relativePath` — output path relative to outdir
 - `exports` — the exported names
 - `dependencies` — input files that contributed to this output
@@ -512,6 +528,7 @@ Two strategies for loading source maps:
 ### 10.1 Wrangler-Bundled Maps
 
 When Wrangler bundled the worker (has `sourceMapPath` and `sourceMapMetadata`):
+
 1. Reads the map file from `${entryDirectory}/${sourceMapPath}`
 2. Sets `map.file` to the module name (for multipart upload)
 3. Normalizes `sourceRoot` — removes the temporary directory prefix
@@ -520,6 +537,7 @@ When Wrangler bundled the worker (has `sourceMapPath` and `sourceMapMetadata`):
 ### 10.2 Scanned Maps (user-provided modules)
 
 For modules not bundled by Wrangler:
+
 1. Scans module content for `//# sourceMappingURL=` comments
 2. Resolves the URL relative to the module's file path
 3. Reads and normalizes the map
@@ -537,11 +555,11 @@ For modules not bundled by Wrangler:
 
 When esbuild fails to resolve a Node.js built-in module, the error is rewritten with actionable advice:
 
-| Compat Mode | Suggestion |
-|-------------|------------|
-| `null` or `"als"` | Add the `nodejs_compat` compatibility flag |
+| Compat Mode                     | Suggestion                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `null` or `"als"`               | Add the `nodejs_compat` compatibility flag                                          |
 | `"v1"` (without `node:` prefix) | Prefix the module name with `node:` or update `compatibility_date` to `2024-09-23+` |
-| `"v2"` | (no rewrite needed — unenv handles resolution) |
+| `"v2"`                          | (no rewrite needed — unenv handles resolution)                                      |
 
 The regex matches all of Node's `builtinModules` with and without `node:` prefix.
 
@@ -565,6 +583,7 @@ When `watch: true`:
 **File:** `no-bundle-worker.ts`
 
 When `--no-bundle` is specified:
+
 - Skips esbuild entirely
 - Uses `findAdditionalModules()` to discover modules under `moduleRoot`
 - Writes discovered modules to `outDir`
@@ -592,10 +611,10 @@ type BundleResult = {
 
 ```ts
 type CfModule = {
-  name: string;          // Module identifier (potentially hashed)
+  name: string; // Module identifier (potentially hashed)
   content: Buffer | string;
-  type: CfModuleType;    // "esm" | "commonjs" | "compiled-wasm" | "text" | "buffer" | "python" | "python-requirement"
-  filePath?: string;     // Original filesystem path
+  type: CfModuleType; // "esm" | "commonjs" | "compiled-wasm" | "text" | "buffer" | "python" | "python-requirement"
+  filePath?: string; // Original filesystem path
   sourceMap?: { name: string; content: string };
 };
 ```
@@ -616,7 +635,7 @@ type BundleOptions = {
   tsconfig: string | undefined;
   minify: boolean | undefined;
   keepNames: boolean;
-  nodejsCompatMode: NodeJSCompatMode | undefined;  // null | "als" | "v1" | "v2"
+  nodejsCompatMode: NodeJSCompatMode | undefined; // null | "als" | "v1" | "v2"
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   define: Config["define"];
@@ -651,7 +670,7 @@ interface MiddlewareLoader {
 
 ```ts
 type ModuleCollector = {
-  modules: CfModule[];    // Mutable array populated during build
+  modules: CfModule[]; // Mutable array populated during build
   plugin: esbuild.Plugin; // The esbuild plugin that populates it
 };
 ```
@@ -684,6 +703,7 @@ type ModuleCollector = {
 ### Dev-only vs Production concerns
 
 The middleware system is **almost entirely dev-only**:
+
 - `ensure-req-body-drained` — dev only
 - `scheduled` — dev only
 - `miniflare3-json-error` — dev only, local only

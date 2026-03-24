@@ -61,7 +61,10 @@ const nodejsCompat = createUnplugin<ResolvedNodejsCompatOptions>((options) => ({
 
     if (id === WORKER_ENTRY_ID) {
       const lines = [
-        ...Array.from(options.injectModules.keys(), (moduleId) => `import ${JSON.stringify(moduleId)};`),
+        ...Array.from(
+          options.injectModules.keys(),
+          (moduleId) => `import ${JSON.stringify(moduleId)};`,
+        ),
         ...options.polyfill.map((moduleId) => `import ${JSON.stringify(moduleId)};`),
         `import * as userWorker from ${JSON.stringify(USER_ENTRY_ID)};`,
         `export * from ${JSON.stringify(USER_ENTRY_ID)};`,
@@ -127,9 +130,7 @@ export interface NodejsCompatPluginOptions {
   readonly compatibilityFlags?: ReadonlyArray<string>;
 }
 
-export async function createNodejsCompatPlugin(
-  options: NodejsCompatPluginOptions,
-): Promise<{
+export async function createNodejsCompatPlugin(options: NodejsCompatPluginOptions): Promise<{
   readonly plugin: Plugin;
   readonly entryId: string;
 }> {

@@ -7,8 +7,8 @@
     "bindings": [
       {
         "name": "MY_DO",
-        "class_name": "MyDO",
-      },
-    ],
-  },
+        "class_name": "MyDO"
+      }
+    ]
+  }
 }

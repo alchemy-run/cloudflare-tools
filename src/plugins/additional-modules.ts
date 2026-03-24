@@ -111,7 +111,10 @@ export function createAdditionalModulesPlugin(options: AdditionalModulesOptions 
             continue;
           }
 
-          const relativePath = path.posix.relative(path.posix.dirname(item.fileName), tracked.fileName);
+          const relativePath = path.posix.relative(
+            path.posix.dirname(item.fileName),
+            tracked.fileName,
+          );
           const specifier = relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
           nextCode = nextCode.split(tracked.encodedId).join(specifier);
         }

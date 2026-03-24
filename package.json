@@ -50,7 +50,6 @@
     "build": "rm -rf dist && tsc",
     "format": "oxfmt",
     "lint": "oxlint",
-    "prepare": "effect-language-service patch",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "bun run scripts/typecheck.ts",

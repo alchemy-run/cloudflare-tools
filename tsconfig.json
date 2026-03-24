@@ -5,15 +5,6 @@
   "exclude": ["workers-sdk", "dist"],
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
-    "declaration": true,
-    "declarationMap": true,
-    "incremental": true,
-    "sourceMap": true,
-    "plugins": [
-      {
-        "name": "@effect/language-service"
-      }
-    ]
+    "rootDir": "src"
   }
 }

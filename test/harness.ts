@@ -2,6 +2,7 @@ import { Miniflare } from "miniflare";
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
+import type { AdditionalModule, BuildResult, ModuleType } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -11,26 +12,6 @@ export interface Assertion {
   path: string;
   mode: "text" | "json";
   expected: unknown;
-}
-
-export type ModuleType = "ESModule" | "CommonJS" | "Text" | "Data" | "CompiledWasm";
-
-export interface AdditionalModule {
-  /** Name used in import specifiers (e.g. the SHA1-prefixed filename) */
-  name: string;
-  type: ModuleType;
-  content: string | Uint8Array;
-}
-
-export interface BuildResult {
-  /** Filename of the entry module (e.g. "index.js") */
-  entryPoint: string;
-  /** Bundled entry source code */
-  code: string | Uint8Array;
-  /** Additional non-JS modules */
-  additionalModules: Array<AdditionalModule>;
-  /** Source map, if available */
-  sourceMap?: string;
 }
 
 export interface WranglerConfig {

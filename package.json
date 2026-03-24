@@ -48,7 +48,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:clean": "rm -rf dist && rm tsconfig.tsbuildinfo && tsc",
+    "build:clean": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "format": "oxfmt",
     "lint": "oxlint",
     "test": "vitest run",

@@ -1,15 +1,13 @@
 # `@distilled.cloud/cloudflare-bundler`
 
-Effect-native bundler for Cloudflare Workers with explicit backend adapters.
+Effect-native Cloudflare Workers bundler built around a common core API and a rolldown implementation.
+
+Support for other bundlers is coming soon.
 
 ## Install
 
 ```bash
-bun add @distilled.cloud/cloudflare-bundler effect@beta esbuild
-# or:
 bun add @distilled.cloud/cloudflare-bundler effect@beta rolldown
-# or:
-bun add @distilled.cloud/cloudflare-bundler effect@beta @rspack/core
 ```
 
 ## Usage
@@ -19,45 +17,83 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Bundle } from "@distilled.cloud/cloudflare-bundler";
-import { EsbuildBundleLive } from "@distilled.cloud/cloudflare-bundler/esbuild";
-// or: import { RolldownBundleLive } from "@distilled.cloud/cloudflare-bundler/rolldown";
-// or: import { RspackBundleLive } from "@distilled.cloud/cloudflare-bundler/rspack";
+import { Bundler } from "@distilled.cloud/cloudflare-bundler";
+import { RolldownBundler } from "@distilled.cloud/cloudflare-bundler/rolldown";
 
 const program = Effect.gen(function* () {
-  const bundle = yield* Bundle;
+  const bundler = yield* Bundler;
 
-  return yield* bundle.build({
-    main: "/absolute/path/to/src/index.ts",
-    projectRoot: "/absolute/path/to/project",
-    outputDir: "/absolute/path/to/dist",
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: ["nodejs_compat"],
+  return yield* bundler.build({
+    main: "./src/index.ts",
+    rootDir: "/absolute/path/to/project",
+    outDir: "/absolute/path/to/project/dist",
     minify: true,
+    cloudflare: {
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: ["nodejs_compat"],
+      additionalModules: {
+        rules: [{ type: "CompiledWasm", globs: ["**/*.wasm"] }],
+      },
+    },
   });
 });
 
-const layer = Layer.provide(
-  EsbuildBundleLive,
-  Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
-);
+const layer = Layer.provide(RolldownBundler, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
 
 const result = await Effect.runPromise(Effect.provide(program, layer));
-console.log(result.main);
+console.log(result.directory, result.main, result.modules);
 ```
 
-`build()` returns the bundled entry file path, detected module type, output directory, and any collected extra modules.
+`build()` returns an `Output` with:
 
-## Bundle options
+- `directory`: absolute output directory
+- `main`: relative path to the entry chunk within that directory
+- `modules`: all emitted modules, including the main ESM chunk and supported asset modules
+- `format`: always `"esm"` in v1
+- `warnings`: normalized build warnings
 
-- Required: `main`, `projectRoot`, `outputDir`
-- Common options: `compatibilityDate`, `compatibilityFlags`, `define`, `external`, `minify`, `keepNames`, `tsconfig`, `format`
-- Cloudflare module support: `rules`, `findAdditionalModules`, `preserveFileNames`
+## API
+
+The public API is centered on:
+
+- `Bundler` in `src/core/Bundler.ts`
+- `Output` in `src/core/Output.ts`
+- `Module` in `src/core/Module.ts`
+
+The current backend is:
+
+- `RolldownBundler` from `@distilled.cloud/cloudflare-bundler/rolldown`
+
+## Build Options
+
+- Required: `main`
+- Common options: `rootDir`, `outDir`, `define`, `external`, `minify`, `keepNames`, `tsconfig`, `sourcemap`
+- Cloudflare options: `cloudflare.compatibilityDate`, `cloudflare.compatibilityFlags`
+- Additional module support: `cloudflare.additionalModules.rules`, `cloudflare.additionalModules.preserveFileNames`
+
+## Current v1 Scope
+
+- Build-only
+- ESM-only
+- Rolldown-only
+- `cloudflare:*` externals
+- Node.js compatibility via `unenv` and Cloudflare presets
+- Additional modules for statically imported text, data, and wasm assets
+
+## Out Of Scope In v1
+
+- Watch mode
+- Service-worker / IIFE output
+- Rspack and esbuild adapters
+- Wrangler-specific `__STATIC_CONTENT_MANIFEST`
+- Filesystem scanning for dynamic import targets
 
 ## Development
 
 ```bash
 bun install
+bun run format
+bun run lint
 bun run build
 bun run test
 ```

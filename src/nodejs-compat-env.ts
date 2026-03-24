@@ -28,10 +28,10 @@ export async function resolveUnenv(options: ResolveUnenvOptions = {}): Promise<U
   const { alias, inject, external, polyfill } = defineEnv({
     presets: [
       getCloudflarePreset({
-        compatibilityDate: options.compatibilityDate,
-        compatibilityFlags: options.compatibilityFlags
-          ? [...options.compatibilityFlags]
-          : undefined,
+        ...(options.compatibilityDate ? { compatibilityDate: options.compatibilityDate } : {}),
+        ...(options.compatibilityFlags
+          ? { compatibilityFlags: [...options.compatibilityFlags] }
+          : {}),
       }),
       {
         alias: {

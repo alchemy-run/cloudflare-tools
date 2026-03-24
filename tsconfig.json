@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/Effect-TS/language-service/refs/heads/main/schema.json",
   "extends": "./tsconfig.base.json",
-  "include": ["src/**/*", "test/bundles/test.ts"],
+  "include": ["src/**/*"],
   "exclude": ["workers-sdk", "dist"],
   "compilerOptions": {
     "outDir": "dist",

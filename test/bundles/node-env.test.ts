@@ -8,13 +8,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { bundleWithEsbuild } from "../harness/esbuild-bundler.js";
+import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
-import { bundleWithRspack } from "../harness/rspack-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
-import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
 
 describe("node-env", () => {
   let config: BundleConfig;
@@ -23,73 +21,52 @@ describe("node-env", () => {
     config = await Effect.runPromise(loadFixture("node-env"));
   });
 
-  describe.each([
-    {
-      name: "wrangler",
-      bundler: bundleWithWrangler,
-    },
-    {
-      name: "esbuild",
-      bundler: bundleWithEsbuild,
-    },
-    {
-      name: "rolldown",
-      bundler: bundleWithRolldown,
-    },
-    {
-      name: "rspack",
-      bundler: bundleWithRspack,
-    },
-  ])("$name", ({ bundler }) => {
-    let bundle: BundleResult;
+  let bundle: BundleResult;
 
-    it.beforeAll(async () => {
-      bundle = await Effect.runPromise(bundler(config));
-    });
-
-    it("builds successfully", () => {
-      expect(bundle.main).toBeTruthy();
-      expect(bundle.type).toBe("esm");
-    });
-
-    it("inlines process.env.NODE_ENV as 'production' in output", async () => {
-      const code = await fs.readFile(bundle.main, "utf-8");
-      // The define replacement should have inlined the value —
-      // process.env.NODE_ENV should NOT appear literally in the output
-      expect(code).not.toContain("process.env.NODE_ENV");
-      expect(code).toContain('"production"');
-    });
-
-    it.effect("responds to fetch /", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("ok");
-      }),
-    );
-
-    it.effect("replaces process.env.NODE_ENV with 'production'", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/node-env");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("production");
-      }),
-    );
-
-    it.effect("replaces global.process.env.NODE_ENV with 'production'", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/global-node-env");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("production");
-      }),
-    );
-
-    it.effect("replaces globalThis.process.env.NODE_ENV with 'production'", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/globalthis-node-env");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("production");
-      }),
-    );
+  it.beforeAll(async () => {
+    bundle = await Effect.runPromise(bundleWithRolldown(config));
   });
+
+  it("builds successfully", () => {
+    expect(bundle.main).toBeTruthy();
+    expect(bundle.format).toBe("esm");
+  });
+
+  it("inlines process.env.NODE_ENV as 'production' in output", async () => {
+    const code = await fs.readFile(outputPath(bundle), "utf-8");
+    expect(code).not.toContain("process.env.NODE_ENV");
+    expect(code).toContain('"production"');
+  });
+
+  it.effect("responds to fetch /", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    }),
+  );
+
+  it.effect("replaces process.env.NODE_ENV with 'production'", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/node-env");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("production");
+    }),
+  );
+
+  it.effect("replaces global.process.env.NODE_ENV with 'production'", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/global-node-env");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("production");
+    }),
+  );
+
+  it.effect("replaces globalThis.process.env.NODE_ENV with 'production'", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/globalthis-node-env");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("production");
+    }),
+  );
 });

@@ -7,13 +7,10 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { bundleWithEsbuild } from "../harness/esbuild-bundler.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
-import { bundleWithRspack } from "../harness/rspack-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
-import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
 
 describe("jsx-in-js", () => {
   let config: BundleConfig;
@@ -22,50 +19,31 @@ describe("jsx-in-js", () => {
     config = await Effect.runPromise(loadFixture("jsx-in-js"));
   });
 
-  describe.each([
-    {
-      name: "wrangler",
-      bundler: bundleWithWrangler,
-    },
-    {
-      name: "esbuild",
-      bundler: bundleWithEsbuild,
-    },
-    {
-      name: "rolldown",
-      bundler: bundleWithRolldown,
-    },
-    {
-      name: "rspack",
-      bundler: bundleWithRspack,
-    },
-  ])("$name", ({ bundler }) => {
-    let bundle: BundleResult;
+  let bundle: BundleResult;
 
-    it.beforeAll(async () => {
-      bundle = await Effect.runPromise(bundler(config));
-    });
-
-    it("builds successfully with JSX in .js file", () => {
-      expect(bundle.main).toBeTruthy();
-      expect(bundle.type).toBe("esm");
-    });
-
-    it.effect("responds to fetch /", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("ok");
-      }),
-    );
-
-    it.effect("jsx is transformed and works at runtime", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/jsx");
-        expect(res.status).toBe(200);
-        const body = await res.json();
-        expect(body).toHaveProperty("tag", "div");
-      }),
-    );
+  it.beforeAll(async () => {
+    bundle = await Effect.runPromise(bundleWithRolldown(config));
   });
+
+  it("builds successfully with JSX in .js file", () => {
+    expect(bundle.main).toBeTruthy();
+    expect(bundle.format).toBe("esm");
+  });
+
+  it.effect("responds to fetch /", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    }),
+  );
+
+  it.effect("jsx is transformed and works at runtime", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/jsx");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveProperty("tag", "div");
+    }),
+  );
 });

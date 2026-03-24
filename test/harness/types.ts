@@ -5,8 +5,8 @@
  * fixture configs, bundler adapters, and the Miniflare runner.
  */
 
-import type { Module } from "../../src/module.js";
-import type { Rule } from "../../src/module-rules.js";
+import type { Rule } from "../../src/core/AdditionalModules.js";
+import type { Output } from "../../src/core/Output.js";
 
 /**
  * Configuration for bundling a fixture. Parsed from wrangler.jsonc.
@@ -24,8 +24,6 @@ export interface BundleConfig {
   readonly define?: Record<string, string>;
   /** Module rules for non-JS imports */
   readonly rules?: ReadonlyArray<Rule>;
-  /** Whether to scan the filesystem for additional modules (dynamic imports) */
-  readonly findAdditionalModules?: boolean;
   /** Preserve original file names instead of hashing */
   readonly preserveFileNames?: boolean;
   /** Additional modules to mark as external */
@@ -38,8 +36,6 @@ export interface BundleConfig {
   readonly keepNames?: boolean;
   /** Path to tsconfig.json (relative to projectRoot) */
   readonly tsconfig?: string;
-  /** Module format override */
-  readonly format?: "modules" | "service-worker";
 }
 
 /**
@@ -51,39 +47,4 @@ export interface DurableObjectBinding {
   readonly script_name?: string;
 }
 
-/**
- * The output of a bundling operation.
- */
-export interface BundleResult {
-  /** Absolute path to the main output file */
-  readonly main: string;
-  /** Additional modules collected during bundling (WASM, text, data, etc.) */
-  readonly modules: ReadonlyArray<Module>;
-  /** The module format of the entry point */
-  readonly type: "esm" | "commonjs";
-  /** Absolute path to the output directory */
-  readonly outputDir: string;
-}
-
-/**
- * Maps file extensions to Module.Type for parsing wrangler output.
- */
-export function moduleTypeFromExtension(ext: string): Module.Type | null {
-  switch (ext) {
-    case ".wasm":
-      return "CompiledWasm";
-    case ".txt":
-    case ".html":
-    case ".sql":
-      return "Text";
-    case ".bin":
-      return "Data";
-    case ".mjs":
-    case ".js":
-      return "ESModule";
-    case ".cjs":
-      return "CommonJS";
-    default:
-      return null;
-  }
-}
+export type BundleResult = Output;

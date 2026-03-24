@@ -7,7 +7,7 @@
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Rule } from "../../src/module-rules.js";
+import type { Rule } from "../../src/core/AdditionalModules.js";
 import type { BundleConfig, DurableObjectBinding } from "./types.js";
 
 /**
@@ -59,14 +59,13 @@ export function loadFixture(fixtureName: string): Effect.Effect<BundleConfig> {
       compatibilityFlags,
       define: config.define as Record<string, string> | undefined,
       rules,
-      findAdditionalModules: config.find_additional_modules as boolean | undefined,
       preserveFileNames: config.preserve_file_names as boolean | undefined,
       external: config.external as Array<string> | undefined,
       durableObjects,
       minify: config.minify as boolean | undefined,
       keepNames: config.keep_names as boolean | undefined,
       tsconfig: config.tsconfig as string | undefined,
-    } satisfies BundleConfig;
+    };
   });
 }
 

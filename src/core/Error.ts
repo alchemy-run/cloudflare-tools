@@ -4,39 +4,22 @@
 
 import * as Schema from "effect/Schema";
 
-export const BuildErrorLocation = Schema.Struct({
+export const DiagnosticLocation = Schema.Struct({
   file: Schema.String,
-  namespace: Schema.String,
   line: Schema.Number,
   column: Schema.Number,
-  length: Schema.Number,
-  lineText: Schema.String,
-  suggestion: Schema.String,
 });
 
-export const BuildErrorNote = Schema.Struct({
-  text: Schema.String,
-  location: Schema.NullOr(BuildErrorLocation),
-});
-
-export const BuildErrorMessage = Schema.Struct({
-  id: Schema.String,
-  pluginName: Schema.String,
-  text: Schema.String,
-  location: Schema.NullOr(BuildErrorLocation),
-  notes: Schema.Array(BuildErrorNote),
-
-  /**
-   * Optional user-specified data that is passed through unmodified. You can
-   * use this to stash the original error, for example.
-   */
-  detail: Schema.Any,
+export const Diagnostic = Schema.Struct({
+  message: Schema.String,
+  plugin: Schema.optional(Schema.String),
+  severity: Schema.Literals(["error", "warning"]),
+  location: Schema.optional(DiagnosticLocation),
 });
 
 export class BuildError extends Schema.TaggedErrorClass<BuildError>()("BuildError", {
   message: Schema.String,
-  errors: Schema.Array(BuildErrorMessage),
-  warnings: Schema.Array(BuildErrorMessage),
+  diagnostics: Schema.Array(Diagnostic),
 }) {}
 
 export class SystemError extends Schema.TaggedErrorClass<SystemError>()("SystemError", {
@@ -45,7 +28,7 @@ export class SystemError extends Schema.TaggedErrorClass<SystemError>()("SystemE
 }) {}
 
 export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()("ValidationError", {
-  reason: Schema.Literals(["MissingMetafile", "MissingEntrypoints", "MultipleEntrypoints"]),
+  reason: Schema.String,
   message: Schema.String,
 }) {}
 

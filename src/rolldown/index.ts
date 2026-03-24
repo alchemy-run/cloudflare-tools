@@ -1,1 +1,1 @@
-export { RolldownBundleLive, type RolldownBundleOptions } from "./bundle.js";
+export { RolldownBundler } from "./bundle.js";

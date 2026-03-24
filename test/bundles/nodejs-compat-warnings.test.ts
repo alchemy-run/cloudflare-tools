@@ -8,12 +8,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { bundleWithEsbuild } from "../harness/esbuild-bundler.js";
+import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
-import { bundleWithRspack } from "../harness/rspack-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
-import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
 
 describe("nodejs-compat-warnings", () => {
   let config: BundleConfig;
@@ -22,39 +20,19 @@ describe("nodejs-compat-warnings", () => {
     config = await Effect.runPromise(loadFixture("nodejs-compat-warnings"));
   });
 
-  describe.each([
-    {
-      name: "wrangler",
-      bundler: bundleWithWrangler,
-    },
-    {
-      name: "esbuild",
-      bundler: bundleWithEsbuild,
-    },
-    {
-      name: "rolldown",
-      bundler: bundleWithRolldown,
-    },
-    {
-      name: "rspack",
-      bundler: bundleWithRspack,
-    },
-  ])("$name", ({ bundler }) => {
-    let bundle: BundleResult;
+  let bundle: BundleResult;
 
-    it.beforeAll(async () => {
-      bundle = await Effect.runPromise(bundler(config));
-    });
+  it.beforeAll(async () => {
+    bundle = await Effect.runPromise(bundleWithRolldown(config));
+  });
 
-    it("builds successfully despite missing nodejs_compat flag", () => {
-      expect(bundle.main).toBeTruthy();
-      expect(bundle.type).toBe("esm");
-    });
+  it("builds successfully despite missing nodejs_compat flag", () => {
+    expect(bundle.main).toBeTruthy();
+    expect(bundle.format).toBe("esm");
+  });
 
-    it("preserves node:path as external import", async () => {
-      const code = await fs.readFile(bundle.main, "utf-8");
-      // Without nodejs_compat, node:path should be kept as an external import
-      expect(code).toContain("node:path");
-    });
+  it("preserves node:path as external import", async () => {
+    const code = await fs.readFile(outputPath(bundle), "utf-8");
+    expect(code).toContain("node:path");
   });
 });

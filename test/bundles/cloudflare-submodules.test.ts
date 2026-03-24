@@ -7,12 +7,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { bundleWithEsbuild } from "../harness/esbuild-bundler.js";
+import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
-import { bundleWithRspack } from "../harness/rspack-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
-import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
 
 describe("cloudflare-submodules", () => {
   let config: BundleConfig;
@@ -21,43 +19,24 @@ describe("cloudflare-submodules", () => {
     config = await Effect.runPromise(loadFixture("cloudflare-submodules"));
   });
 
-  describe.each([
-    {
-      name: "wrangler",
-      bundler: bundleWithWrangler,
-    },
-    {
-      name: "esbuild",
-      bundler: bundleWithEsbuild,
-    },
-    {
-      name: "rolldown",
-      bundler: bundleWithRolldown,
-    },
-    {
-      name: "rspack",
-      bundler: bundleWithRspack,
-    },
-  ])("$name", ({ bundler }) => {
-    let bundle: BundleResult;
+  let bundle: BundleResult;
 
-    it.beforeAll(async () => {
-      bundle = await Effect.runPromise(bundler(config));
-    });
+  it.beforeAll(async () => {
+    bundle = await Effect.runPromise(bundleWithRolldown(config));
+  });
 
-    it("builds successfully", () => {
-      expect(bundle.main).toBeTruthy();
-      expect(bundle.type).toBe("esm");
-    });
+  it("builds successfully", () => {
+    expect(bundle.main).toBeTruthy();
+    expect(bundle.format).toBe("esm");
+  });
 
-    it("preserves cloudflare:workers as external import", async () => {
-      const code = await fs.readFile(bundle.main, "utf-8");
-      expect(code).toContain("cloudflare:workers");
-    });
+  it("preserves cloudflare:workers as external import", async () => {
+    const code = await fs.readFile(outputPath(bundle), "utf-8");
+    expect(code).toContain("cloudflare:workers");
+  });
 
-    it("preserves cloudflare:sockets as external import", async () => {
-      const code = await fs.readFile(bundle.main, "utf-8");
-      expect(code).toContain("cloudflare:sockets");
-    });
+  it("preserves cloudflare:sockets as external import", async () => {
+    const code = await fs.readFile(outputPath(bundle), "utf-8");
+    expect(code).toContain("cloudflare:sockets");
   });
 });

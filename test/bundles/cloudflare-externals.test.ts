@@ -8,13 +8,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { bundleWithEsbuild } from "../harness/esbuild-bundler.js";
+import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
-import { bundleWithRspack } from "../harness/rspack-bundler.js";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
-import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
 
 describe("cloudflare-externals", () => {
   let config: BundleConfig;
@@ -23,60 +21,40 @@ describe("cloudflare-externals", () => {
     config = await Effect.runPromise(loadFixture("cloudflare-externals"));
   });
 
-  describe.each([
-    {
-      name: "wrangler",
-      bundler: bundleWithWrangler,
-    },
-    {
-      name: "esbuild",
-      bundler: bundleWithEsbuild,
-    },
-    {
-      name: "rolldown",
-      bundler: bundleWithRolldown,
-    },
-    {
-      name: "rspack",
-      bundler: bundleWithRspack,
-    },
-  ])("$name", ({ bundler }) => {
-    let bundle: BundleResult;
+  let bundle: BundleResult;
 
-    it.beforeAll(async () => {
-      bundle = await Effect.runPromise(bundler(config));
-    });
-
-    it("builds successfully", async () => {
-      expect(bundle.main).toBeTruthy();
-      expect(bundle.type).toBe("esm");
-      const exists = await fs.stat(bundle.main).then(
-        () => true,
-        () => false,
-      );
-      expect(exists).toBe(true);
-    });
-
-    it("preserves cloudflare:* imports as external", async () => {
-      const code = await fs.readFile(bundle.main, "utf-8");
-      // cloudflare:workers should appear as an import, not inlined
-      expect(code).toContain("cloudflare:workers");
-    });
-
-    it.effect("responds to fetch /", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("ok");
-      }),
-    );
-
-    it.effect("responds to fetch /do (durable object)", () =>
-      withRunner({ bundle, config }, async (runner) => {
-        const res = await runner.fetch("http://localhost/do");
-        expect(res.status).toBe(200);
-        expect(await res.text()).toBe("durable object ok");
-      }),
-    );
+  it.beforeAll(async () => {
+    bundle = await Effect.runPromise(bundleWithRolldown(config));
   });
+
+  it("builds successfully", async () => {
+    expect(bundle.main).toBeTruthy();
+    expect(bundle.format).toBe("esm");
+    const exists = await fs.stat(outputPath(bundle)).then(
+      () => true,
+      () => false,
+    );
+    expect(exists).toBe(true);
+  });
+
+  it("preserves cloudflare:* imports as external", async () => {
+    const code = await fs.readFile(outputPath(bundle), "utf-8");
+    expect(code).toContain("cloudflare:workers");
+  });
+
+  it.effect("responds to fetch /", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    }),
+  );
+
+  it.effect("responds to fetch /do (durable object)", () =>
+    withRunner({ bundle, config }, async (runner) => {
+      const res = await runner.fetch("http://localhost/do");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("durable object ok");
+    }),
+  );
 });

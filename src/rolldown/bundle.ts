@@ -1,234 +1,265 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
-import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
-import {
-  type InputOptions,
-  type OutputChunk,
-  type OutputOptions,
-  type Plugin,
-  rolldown,
-  watch,
-} from "rolldown";
-import {
-  collectAdditionalEntries,
-  hasNodejsCompat,
-  mapBuildError,
-  readEmittedJavaScriptModules,
-} from "../backend-utils.js";
-import {
-  Bundle,
-  type BundleResult,
-  type CloudflareOptions,
-  writeAdditionalModules,
-} from "../bundle.js";
-import { deriveDefines, deriveFormat } from "../cloudflare-defaults.js";
-import { BuildError, type BundleError } from "../core/Error.js";
-import type { Module } from "../module.js";
-import { cloudflareInternalPlugin } from "./plugins/cloudflare-internal.js";
-import { createModuleCollector } from "./plugins/module-collector.js";
-import { nodejsCompatWarningPlugin } from "./plugins/nodejs-compat-warning.js";
-import { createNodejsCompat } from "./plugins/nodejs-compat.js";
+import { readFile } from "node:fs/promises";
+import * as Bundler from "../core/Bundler.js";
+import { BuildError, SystemError, ValidationError } from "../core/Error.js";
+import { hash } from "../core/Hash.js";
+import { Module } from "../core/Module.js";
+import { Output } from "../core/Output.js";
+import { createPluginChain } from "../plugins/index.js";
+import { isSourceMapAsset } from "../plugins/additional-modules.js";
+import type { InputOptions, OutputAsset, OutputChunk, OutputOptions, RolldownOutput } from "rolldown";
+import { rolldown } from "rolldown";
 
-export type RolldownBundleOptions = CloudflareOptions;
+const hasNodejsCompat = (flags?: ReadonlyArray<string>) =>
+  flags?.some((flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2") ?? false;
 
-export const RolldownBundleLive = Layer.effect(
-  Bundle,
+interface DiagnosticLocation {
+  readonly file: string;
+  readonly line: number;
+  readonly column: number;
+}
+
+interface DiagnosticEntry {
+  readonly message: string;
+  readonly plugin: string | undefined;
+  readonly severity: "error" | "warning";
+  readonly location: DiagnosticLocation | undefined;
+}
+
+const toLocation = (value: unknown): DiagnosticLocation | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const line = typeof record.line === "number" ? record.line : undefined;
+  const column = typeof record.column === "number" ? record.column : undefined;
+  const file = typeof record.file === "string" ? record.file : undefined;
+  if (line === undefined || column === undefined || !file) {
+    return undefined;
+  }
+  return { file, line, column };
+};
+
+const toDiagnostic = (value: unknown, severity: "error" | "warning"): DiagnosticEntry => {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+  return {
+    message:
+      typeof record?.message === "string"
+        ? record.message
+        : value instanceof Error
+          ? value.message
+          : String(value),
+    plugin: typeof record?.plugin === "string" ? record.plugin : undefined,
+    severity,
+    location: toLocation(record?.loc),
+  };
+};
+
+const toBuildError = (cause: unknown): BuildError =>
+  cause instanceof BuildError
+    ? cause
+    : new BuildError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        diagnostics: [
+          ...(Array.isArray((cause as { errors?: ReadonlyArray<unknown> } | undefined)?.errors)
+            ? (cause as { errors: ReadonlyArray<unknown> }).errors.map((error) =>
+                toDiagnostic(error, "error"),
+              )
+            : [toDiagnostic(cause, "error")]),
+          ...(Array.isArray((cause as { warnings?: ReadonlyArray<unknown> } | undefined)?.warnings)
+            ? (cause as { warnings: ReadonlyArray<unknown> }).warnings.map((warning) =>
+                toDiagnostic(warning, "warning"),
+              )
+            : []),
+        ],
+      });
+
+const deriveDefines = (options: Bundler.Options) => {
+  const compatDate = options.cloudflare?.compatibilityDate;
+  const nodejsCompat = hasNodejsCompat(options.cloudflare?.compatibilityFlags);
+
+  return {
+    "process.env.NODE_ENV": '"production"',
+    "global.process.env.NODE_ENV": '"production"',
+    "globalThis.process.env.NODE_ENV": '"production"',
+    ...(nodejsCompat
+      ? {}
+      : {
+          "process.env": "{}",
+          "global.process.env": "{}",
+          "globalThis.process.env": "{}",
+        }),
+    ...(compatDate && compatDate >= "2022-03-21"
+      ? {
+          "navigator.userAgent": '"Cloudflare-Workers"',
+        }
+      : {}),
+    ...options.define,
+  };
+};
+
+const toBuffer = (source: string | Uint8Array) =>
+  typeof source === "string" ? Buffer.from(source) : Buffer.from(source);
+
+const createChunkModule = (chunk: OutputChunk, content: string | Uint8Array) =>
+  new Module({
+    name: chunk.fileName,
+    content: toBuffer(content),
+    hash: hash(toBuffer(content)),
+    type: "ESModule",
+  });
+
+const createSourceMapModule = (asset: OutputAsset) => {
+  const content = toBuffer(asset.source);
+  return new Module({
+    name: asset.fileName,
+    content,
+    hash: hash(content),
+    type: "SourceMap",
+  });
+};
+
+const createInputOptions = Effect.fn("createInputOptions")(function* (
+  options: Bundler.Options,
+  path: Path.Path,
+) {
+  const rootDir = path.resolve(options.rootDir ?? process.cwd());
+  const main = path.resolve(rootDir, options.main);
+  const outDir = path.resolve(rootDir, options.outDir ?? "dist");
+  const pluginChain = yield* Effect.tryPromise({
+    try: () =>
+      createPluginChain({
+        ...options,
+        main,
+        rootDir,
+        outDir,
+      }),
+    catch: (cause) =>
+      new SystemError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+
+  return {
+    rootDir,
+    outDir,
+    pluginChain,
+    inputOptions: {
+      input: pluginChain.entryId,
+      cwd: rootDir,
+      platform: "neutral",
+      plugins: [...pluginChain.plugins],
+      external: (id) => options.external?.includes(id) ?? false,
+      resolve: {
+        conditionNames: ["workerd", "worker", "browser", "module", "import", "default"],
+        extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"],
+      },
+      moduleTypes: {
+        ".js": "jsx",
+        ".mjs": "jsx",
+        ".cjs": "jsx",
+      },
+      transform: {
+        define: deriveDefines(options),
+      },
+      tsconfig: options.tsconfig ? path.resolve(rootDir, options.tsconfig) : true,
+    } satisfies InputOptions,
+    outputOptions: {
+      dir: outDir,
+      format: "esm",
+      sourcemap: options.sourcemap ?? true,
+      minify: options.minify ?? false,
+      keepNames: options.keepNames ?? true,
+      entryFileNames: "[name].js",
+      chunkFileNames: "[name]-[hash].js",
+      assetFileNames: "assets/[name]-[hash][extname]",
+    } satisfies OutputOptions,
+  };
+});
+
+const collectChunkAndSourceMapModules = async (output: RolldownOutput, directory: string) => {
+  const modules = await Promise.all(
+    output.output.flatMap((item) => {
+      if (item.type === "chunk") {
+        return [
+          readFile(`${directory}/${item.fileName}`).then((content) => createChunkModule(item, content)),
+        ];
+      }
+      if (isSourceMapAsset(item)) {
+        return [Promise.resolve(createSourceMapModule(item))];
+      }
+      return [];
+    }),
+  );
+
+  const byName = new Map(modules.map((module) => [module.name, module] as const));
+  return Array.from(byName.values());
+};
+
+export const RolldownBundler = Layer.effect(
+  Bundler.Bundler,
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
-    const makeBuildOptions = Effect.fn(function* (options: CloudflareOptions) {
-      const plugins: Array<Plugin> = [];
-      const moduleCollector = createModuleCollector({
-        rules: options.rules,
-        preserveFileNames: options.preserveFileNames,
-      });
-      plugins.push(moduleCollector.plugin);
-
-      let alias: Record<string, string> = {};
-      let inject: Record<string, string | [string, string]> | undefined;
-
-      if (hasNodejsCompat(options.compatibilityFlags)) {
-        const compat = yield* Effect.promise(() =>
-          createNodejsCompat({
-            compatibilityDate: options.compatibilityDate,
-            compatibilityFlags: options.compatibilityFlags,
-          }),
+    return Bundler.Bundler.of({
+      build: Effect.fn("RolldownBundler.build")(function* (options) {
+        const { inputOptions, outputOptions, outDir, pluginChain } = yield* createInputOptions(
+          options,
+          path,
         );
-        plugins.push(compat.plugin);
-        alias = compat.alias;
-        inject = compat.transform.inject;
-      } else {
-        plugins.push(nodejsCompatWarningPlugin());
-      }
 
-      plugins.push(cloudflareInternalPlugin());
-
-      const entries = yield* collectAdditionalEntries({
-        options,
-        fs,
-        path,
-        mainEntryName: path.basename(options.main, path.extname(options.main)),
-      }).pipe(Effect.mapError(mapBuildError));
-
-      const inputOptions = {
-        input: options.findAdditionalModules ? entries : options.main,
-        cwd: options.projectRoot,
-        platform: "browser",
-        plugins,
-        external: (id) => {
-          if (id === "__STATIC_CONTENT_MANIFEST") return true;
-          return options.external?.includes(id) === true;
-        },
-        resolve: {
-          alias,
-          conditionNames: ["workerd", "worker", "browser", "import", "default"],
-        },
-        moduleTypes: {
-          ".js": "jsx",
-          ".mjs": "jsx",
-          ".cjs": "jsx",
-        },
-        transform: {
-          define: deriveDefines(options),
-          ...(inject ? { inject } : {}),
-        },
-        tsconfig: options.tsconfig ? path.resolve(options.projectRoot, options.tsconfig) : true,
-      } satisfies InputOptions;
-
-      const outputOptions = {
-        dir: options.outputDir,
-        format: deriveFormat(options.format),
-        sourcemap: true,
-        minify: options.minify ?? false,
-        entryFileNames: "[name].js",
-        chunkFileNames: "[name]-[hash].js",
-        codeSplitting: options.findAdditionalModules,
-        keepNames: options.keepNames ?? true,
-      } satisfies OutputOptions;
-
-      return { inputOptions, outputOptions, moduleCollector };
-    });
-
-    const writeCopiedModules = (copiedModules: ReadonlyArray<Module>, entryDir: string) =>
-      copiedModules.length > 0
-        ? writeAdditionalModules(copiedModules, entryDir).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.provideService(Path.Path, path),
-          )
-        : Effect.void;
-
-    return Bundle.of({
-      build: Effect.fn(function* (options) {
-        const { inputOptions, outputOptions, moduleCollector } = yield* makeBuildOptions(options);
         const bundle = yield* Effect.tryPromise({
           try: () => rolldown(inputOptions),
-          catch: mapBuildError,
+          catch: toBuildError,
         });
 
         try {
-          const output = yield* Effect.tryPromise({
+          const result = yield* Effect.tryPromise({
             try: () => bundle.write(outputOptions),
-            catch: mapBuildError,
+            catch: toBuildError,
+          });
+          const additionalModules = yield* Effect.tryPromise({
+            try: () => pluginChain.rewriteAdditionalModules(result, outDir),
+            catch: (cause) =>
+              new SystemError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+          });
+          const bundledModules = yield* Effect.tryPromise({
+            try: () => collectChunkAndSourceMapModules(result, outDir),
+            catch: (cause) =>
+              new SystemError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
           });
 
-          const entryChunk = output.output.find(
+          const entryChunk = result.output.find(
             (item): item is OutputChunk => item.type === "chunk" && item.isEntry,
           );
           if (!entryChunk) {
-            return yield* new BuildError({
-              message: "Build failed to produce an entry chunk.",
-              errors: [],
-              warnings: [],
+            return yield* new ValidationError({
+              reason: "MissingEntryChunk",
+              message: "Build completed without producing an entry chunk.",
             });
           }
 
-          const main = path.resolve(options.outputDir, entryChunk.fileName);
-          const copiedModules = moduleCollector.getModules();
-          yield* writeCopiedModules(copiedModules, path.dirname(main));
-
-          const emittedModules: Array<Module> = output.output
-            .filter(
-              (item): item is OutputChunk =>
-                item.type === "chunk" && path.resolve(options.outputDir, item.fileName) !== main,
-            )
-            .map((chunk) => ({
-              name: chunk.fileName,
-              path: path.resolve(options.outputDir, chunk.fileName),
-              content: Buffer.from(chunk.code),
-              type: chunk.fileName.endsWith(".cjs") ? "CommonJS" : ("ESModule" as Module.Type),
-            }));
-
-          return {
-            main,
-            modules: [...emittedModules, ...copiedModules],
-            type: entryChunk.exports.length > 0 ? "esm" : "commonjs",
-            outputDir: options.outputDir,
-          } satisfies BundleResult;
+          return new Output({
+            directory: outDir,
+            main: entryChunk.fileName,
+            modules: [...bundledModules, ...additionalModules],
+            format: "esm",
+            warnings: [...pluginChain.getWarnings()],
+          });
         } finally {
           yield* Effect.promise(() => bundle.close()).pipe(Effect.ignore);
         }
       }),
-      watch: (options) =>
-        Stream.callback<Result.Result<BundleResult, BundleError>, never>((queue) =>
-          Effect.gen(function* () {
-            const { inputOptions, outputOptions, moduleCollector } =
-              yield* makeBuildOptions(options);
-            const watcher = watch({
-              ...inputOptions,
-              output: outputOptions,
-              watch: {},
-              experimental: { incrementalBuild: true },
-            });
-
-            watcher.on("event", async (event) => {
-              if (event.code === "BUNDLE_END") {
-                try {
-                  const result = await Effect.runPromise(
-                    Effect.gen(function* () {
-                      const entryFile = `${path.basename(options.main, path.extname(options.main))}.js`;
-                      const main = path.resolve(options.outputDir, entryFile);
-                      const code = yield* fs.readFileString(main);
-                      const copiedModules = moduleCollector.getModules();
-                      yield* writeCopiedModules(copiedModules, path.dirname(main));
-                      const emittedModules = yield* readEmittedJavaScriptModules({
-                        fs,
-                        path,
-                        outputDir: options.outputDir,
-                        main,
-                      });
-
-                      return {
-                        main,
-                        modules: [...emittedModules, ...copiedModules],
-                        type: /\bexport[\s{]/.test(code) ? "esm" : "commonjs",
-                        outputDir: options.outputDir,
-                      } satisfies BundleResult;
-                    }),
-                  );
-                  Queue.offerUnsafe(queue, Result.succeed(result));
-                } catch (error) {
-                  Queue.offerUnsafe(queue, Result.fail(mapBuildError(error)));
-                } finally {
-                  await event.result.close();
-                }
-              } else if (event.code === "ERROR") {
-                Queue.offerUnsafe(queue, Result.fail(mapBuildError(event.error)));
-                await event.result.close();
-              }
-            });
-
-            return yield* Effect.addFinalizer(() =>
-              Effect.promise(() => watcher.close()).pipe(Effect.ignore),
-            );
-          }).pipe(
-            Effect.catch((error) => Queue.offer(queue, Result.fail(error)).pipe(Effect.asVoid)),
-          ),
-        ),
     });
   }),
 );

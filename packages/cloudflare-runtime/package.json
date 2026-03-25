@@ -7,6 +7,9 @@
     "test:watch": "vitest",
     "prepublishOnly": "bun run build:clean"
   },
+  "dependencies": {
+    "workerd": "^1.20260317.1"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -16,8 +19,5 @@
   },
   "peerDependencies": {
     "effect": "catalog:"
-  },
-  "dependencies": {
-    "workerd": "^1.20260317.1"
   }
 }

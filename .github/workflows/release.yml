@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-type:
+        description: "Release type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # changelogithub needs full history
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: bun install
+
+      - name: Configure git identity
+        run: |
+          git config user.name "alchemy-releases[bot]"
+          git config user.email "alchemy-releases[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: bun version ${{ inputs.release-type }} -m "chore(release): v%s"
+
+      - name: Build
+        run: bun run build
+
+      - name: Push version commit and tag
+        run: git push --follow-tags
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+
+      - name: Create GitHub Release
+        run: bunx changelogithub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

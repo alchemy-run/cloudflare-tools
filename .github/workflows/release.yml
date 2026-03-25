@@ -44,17 +44,31 @@ jobs:
         id: bump
         working-directory: packages/cloudflare-bundler
         run: |
+          echo "fromVersion=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
           bun pm version ${{ inputs.release-type }} -m "chore(release): @distilled.cloud/cloudflare-bundler v%s"
-          echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+          echo "toVersion=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Push version commit and tag
-        run: git push --follow-tags
-
-      - name: Publish to npm with provenance
+      - name: Debug git state in packages/cloudflare-bundler
         working-directory: packages/cloudflare-bundler
-        run: npm publish --provenance --access public
+        run: |
+          git status
+          git log --oneline -3
+          git tag --list
 
-      - name: Create GitHub Release
-        run: bunx changelogithub --from v${{ steps.bump.outputs.version }}^ --to v${{ steps.bump.outputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Debug git state in root
+        run: |
+          git status
+          git log --oneline -3
+          git tag --list
+
+      # - name: Push version commit and tag
+      #   run: git push --follow-tags
+
+      # - name: Publish to npm with provenance
+      #   working-directory: packages/cloudflare-bundler
+      #   run: npm publish --provenance --access public
+
+      # - name: Create GitHub Release
+      #   run: bunx changelogithub --from v${{ steps.bump.outputs.fromVersion }} --to v${{ steps.bump.outputs.toVersion }}
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

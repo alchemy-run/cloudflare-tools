@@ -19,7 +19,7 @@ describe("module-rules", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("module-rules"));
+    config = await loadFixture("module-rules");
   });
 
   let bundle: BundleResult;

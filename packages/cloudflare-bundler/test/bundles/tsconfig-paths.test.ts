@@ -15,7 +15,7 @@ describe("tsconfig-paths", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("tsconfig-paths"));
+    config = await loadFixture("tsconfig-paths");
   });
 
   let bundle: BundleResult;

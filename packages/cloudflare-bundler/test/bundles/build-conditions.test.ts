@@ -16,7 +16,7 @@ describe("build-conditions", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("build-conditions"));
+    config = await loadFixture("build-conditions");
   });
 
   let bundle: BundleResult;

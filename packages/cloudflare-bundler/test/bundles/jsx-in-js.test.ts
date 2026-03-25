@@ -16,7 +16,7 @@ describe("jsx-in-js", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("jsx-in-js"));
+    config = await loadFixture("jsx-in-js");
   });
 
   let bundle: BundleResult;

@@ -17,7 +17,7 @@ describe("module-rules-advanced", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("module-rules-advanced"));
+    config = await loadFixture("module-rules-advanced");
   });
 
   let bundle: BundleResult;

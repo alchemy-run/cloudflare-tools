@@ -18,7 +18,7 @@ describe("named-exports", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("named-exports"));
+    config = await loadFixture("named-exports");
   });
 
   let bundle: BundleResult;

@@ -68,7 +68,8 @@
     "miniflare": "^4.20260317.0",
     "rolldown": "^1.0.0-rc.9",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "wrangler": "^4.77.0"
   },
   "peerDependencies": {
     "effect": "catalog:",

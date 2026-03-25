@@ -17,7 +17,7 @@ describe("build-options", () => {
   let baseConfig: BundleConfig;
 
   it.beforeAll(async () => {
-    baseConfig = await Effect.runPromise(loadFixture("build-options"));
+    baseConfig = await loadFixture("build-options");
   });
 
   describe("default (keepNames: true, no minify)", () => {

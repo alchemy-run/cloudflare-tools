@@ -17,7 +17,7 @@ describe("nodejs-compat-warnings", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("nodejs-compat-warnings"));
+    config = await loadFixture("nodejs-compat-warnings");
   });
 
   let bundle: BundleResult;

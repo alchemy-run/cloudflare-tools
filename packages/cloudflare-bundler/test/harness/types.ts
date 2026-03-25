@@ -13,29 +13,29 @@ import type { Output } from "../../src/Output.js";
  */
 export interface BundleConfig {
   /** Absolute path to the entry point (resolved from wrangler.jsonc "main") */
-  readonly entryPoint: string;
+  entryPoint: string;
   /** Absolute path to the fixture directory */
-  readonly projectRoot: string;
+  projectRoot: string;
   /** Cloudflare compatibility date */
-  readonly compatibilityDate: string;
+  compatibilityDate: string;
   /** Cloudflare compatibility flags (e.g., ["nodejs_compat"]) */
-  readonly compatibilityFlags: ReadonlyArray<string>;
+  compatibilityFlags: Array<string>;
   /** esbuild define replacements */
-  readonly define?: Record<string, string>;
+  define?: Record<string, string>;
   /** Module rules for non-JS imports */
-  readonly rules?: ReadonlyArray<AdditionalModuleRule>;
+  rules?: Array<AdditionalModuleRule>;
   /** Preserve original file names instead of hashing */
-  readonly preserveFileNames?: boolean;
+  preserveFileNames?: boolean;
   /** Additional modules to mark as external */
-  readonly external?: ReadonlyArray<string>;
+  external?: Array<string>;
   /** Durable Object bindings */
-  readonly durableObjects?: ReadonlyArray<DurableObjectBinding>;
+  durableObjects?: Array<DurableObjectBinding>;
   /** Whether to minify the output */
-  readonly minify?: boolean;
+  minify?: boolean;
   /** Whether to preserve function/class names (default: true) */
-  readonly keepNames?: boolean;
+  keepNames?: boolean;
   /** Path to tsconfig.json (relative to projectRoot) */
-  readonly tsconfig?: string;
+  tsconfig?: string;
 }
 
 /**

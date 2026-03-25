@@ -19,7 +19,7 @@ describe("navigator-user-agent", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("navigator-user-agent"));
+    config = await loadFixture("navigator-user-agent");
   });
 
   let bundle: BundleResult;

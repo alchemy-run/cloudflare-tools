@@ -19,7 +19,7 @@ describe("nodejs-compat", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("nodejs-compat"));
+    config = await loadFixture("nodejs-compat");
   });
 
   let bundle: BundleResult;

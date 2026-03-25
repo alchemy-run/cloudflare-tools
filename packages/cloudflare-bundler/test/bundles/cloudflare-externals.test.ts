@@ -18,7 +18,7 @@ describe("cloudflare-externals", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("cloudflare-externals"));
+    config = await loadFixture("cloudflare-externals");
   });
 
   let bundle: BundleResult;

@@ -16,7 +16,7 @@ describe("cloudflare-submodules", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("cloudflare-submodules"));
+    config = await loadFixture("cloudflare-submodules");
   });
 
   let bundle: BundleResult;

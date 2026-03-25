@@ -18,7 +18,7 @@ describe("custom-define", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("custom-define"));
+    config = await loadFixture("custom-define");
   });
 
   let bundle: BundleResult;

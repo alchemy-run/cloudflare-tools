@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
   "name": "jsx-in-js",
   "main": "src/index.js",
   "compatibility_date": "2025-07-01",

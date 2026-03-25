@@ -18,7 +18,7 @@ describe("node-env", () => {
   let config: BundleConfig;
 
   it.beforeAll(async () => {
-    config = await Effect.runPromise(loadFixture("node-env"));
+    config = await loadFixture("node-env");
   });
 
   let bundle: BundleResult;

@@ -15,7 +15,7 @@
     },
     "packages/cloudflare-bundler": {
       "name": "@distilled.cloud/cloudflare-bundler",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.15.0",
         "glob-to-regexp": "^0.4.1",
@@ -44,13 +44,13 @@
       "name": "@distilled.cloud/cloudflare-runtime",
       "version": "0.0.0",
       "dependencies": {
+        "capnp-es": "^0.0.14",
         "workerd": "^1.20260317.1",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
-        "capnp-es": "^0.0.14",
         "vitest": "catalog:",
       },
       "peerDependencies": {

@@ -41,12 +41,14 @@ jobs:
           git config user.email "alchemy-releases[bot]@users.noreply.github.com"
 
       - name: Bump version
-        run: 'bun pm version ${{ inputs.release-type }} -m "chore(release): v%s"'
+        working-directory: packages/cloudflare-bundler
+        run: 'bun pm version ${{ inputs.release-type }} -m "chore(release): @distilled.cloud/cloudflare-bundler v%s"'
 
       - name: Push version commit and tag
         run: git push --follow-tags
 
       - name: Publish to npm with provenance
+        working-directory: packages/cloudflare-bundler
         run: npm publish --provenance --access public
 
       - name: Create GitHub Release

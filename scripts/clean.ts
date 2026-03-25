@@ -1,5 +1,5 @@
 /**
- * We have multiple tsconfigs, so this script typechecks all of them in parallel.
+ * Removes build outputs: each workspace package's `dist/` and TypeScript incremental caches.
  */
 
 import * as fs from "node:fs/promises";
@@ -14,15 +14,32 @@ async function remove(filePath: string) {
   console.timeEnd(`remove ${filePath}`);
 }
 
-const promises: Array<Promise<void>> = [];
+const root = path.join(__dirname, "..");
 const start = Date.now();
-await remove(path.join(__dirname, "..", "dist"));
-for await (const name of fs.glob("**/tsconfig.tsbuildinfo", {
-  cwd: path.join(__dirname, ".."),
-  exclude: ["node_modules", "dist", ".wrangler", "workers-sdk"],
-})) {
-  promises.push(remove(name));
+
+const distRemovals: Array<Promise<void>> = [];
+distRemovals.push(remove(path.join(root, "dist")));
+
+const packagesDir = path.join(root, "packages");
+try {
+  for (const name of await fs.readdir(packagesDir)) {
+    distRemovals.push(remove(path.join(packagesDir, name, "dist")));
+  }
+} catch {
+  // no packages/ yet
 }
 
-await Promise.all(promises);
-console.log(`Removed ${count} files in ${Date.now() - start}ms`);
+await Promise.all(distRemovals);
+
+const cacheRemovals: Array<Promise<void>> = [];
+for await (const name of fs.glob("packages/**/tsconfig.tsbuildinfo", {
+  cwd: root,
+  exclude: ["**/node_modules/**", "**/dist/**"],
+})) {
+  cacheRemovals.push(remove(path.join(root, name)));
+}
+
+cacheRemovals.push(remove(path.join(root, "tsconfig.tsbuildinfo")));
+
+await Promise.all(cacheRemovals);
+console.log(`Removed ${count} paths in ${Date.now() - start}ms`);

@@ -1,5 +1,5 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  "extends": "../../../../../tsconfig.base.json",
   "include": ["./src/**/*"],
   "compilerOptions": {
     "noEmit": true,
@@ -7,6 +7,6 @@
     "jsxFactory": "h",
     "jsxFragmentFactory": "Fragment",
     "lib": ["ESNext", "WebWorker"],
-    "types": ["bun-types", "@cloudflare/workers-types"]
+    "types": ["node", "@cloudflare/workers-types"]
   }
 }

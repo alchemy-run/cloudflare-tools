@@ -1,6 +1,5 @@
-# dependencies (bun install)
+# dependencies
 node_modules
-!test/fixtures/build-conditions/node_modules/
 
 # output
 out

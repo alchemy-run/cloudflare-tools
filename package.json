@@ -1,18 +1,7 @@
 {
-  "name": "@distilled.cloud/cloudflare-bundler",
-  "version": "0.1.3",
-  "description": "Effect-native bundler for Cloudflare Workers.",
-  "keywords": [
-    "bundler",
-    "cloudflare",
-    "effect",
-    "esbuild",
-    "workers"
-  ],
-  "homepage": "https://github.com/alchemy-run/cloudflare-bundler#readme",
-  "bugs": {
-    "url": "https://github.com/alchemy-run/cloudflare-bundler/issues"
-  },
+  "name": "distilled-cloudflare",
+  "private": true,
+  "description": "Monorepo for Effect-native Cloudflare developer tools.",
   "license": "MIT",
   "author": {
     "name": "John Royal",
@@ -23,68 +12,26 @@
     "type": "git",
     "url": "git+https://github.com/alchemy-run/cloudflare-bundler.git"
   },
-  "files": [
-    "dist",
-    "src"
+  "workspaces": [
+    "packages/*"
   ],
   "type": "module",
-  "sideEffects": false,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "bun": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./rolldown": {
-      "bun": "./src/rolldown/index.ts",
-      "types": "./dist/rolldown/index.d.ts",
-      "import": "./dist/rolldown/index.js"
-    }
-  },
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
-    "build": "tsc",
-    "build:clean": "bun run scripts/clean.ts && tsc",
-    "format": "oxfmt",
-    "lint": "oxlint",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "build": "bun run --filter '@distilled.cloud/cloudflare-bundler' build",
+    "build:clean": "bun run --filter '@distilled.cloud/cloudflare-bundler' build:clean",
+    "format": "oxfmt packages scripts",
+    "lint": "oxlint packages scripts",
+    "test": "bun run --filter '@distilled.cloud/cloudflare-bundler' test",
+    "test:watch": "bun run --filter '@distilled.cloud/cloudflare-bundler' test:watch",
     "typecheck": "bun run scripts/typecheck.ts",
-    "prepublishOnly": "bun run build:clean",
     "submodules": "git submodule update --init --recursive"
   },
-  "dependencies": {
-    "@cloudflare/unenv-preset": "^2.15.0",
-    "glob-to-regexp": "^0.4.1",
-    "unenv": "^2.0.0-rc.24",
-    "unplugin": "^3.0.0"
-  },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260310.1",
-    "@effect/platform-node": "^4.0.0-beta.38",
-    "@effect/vitest": "^4.0.0-beta.38",
     "@types/bun": "latest",
-    "@types/glob-to-regexp": "^0.4.4",
     "effect-solutions": "^0.5.2",
-    "miniflare": "^4.20260317.0",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.56.0",
-    "rolldown": "^1.0.0-rc.10",
-    "vitest": "^4.1.1"
-  },
-  "peerDependencies": {
-    "effect": "^4.0.0-beta.38",
-    "rolldown": "^1.0.0-rc.9",
     "typescript": "^6.0.2"
-  },
-  "peerDependenciesMeta": {
-    "rolldown": {
-      "optional": true
-    }
   },
   "packageManager": "bun@1.3.10"
 }

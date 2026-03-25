@@ -63,7 +63,7 @@ function measureOutputSize(result: BundleResult): {
   let fileCount = 1;
 
   for (const mod of result.modules) {
-    const filePath = path.join(result.directory, mod.name);
+    const filePath = path.join(result.outDir, mod.name);
     const size = mod.content
       ? mod.content.byteLength
       : fs.existsSync(filePath)

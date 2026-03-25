@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-bundler",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Effect-native bundler for Cloudflare Workers.",
   "keywords": [
     "bundler",

@@ -3,19 +3,25 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "bun run build:clean",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "unplugin": "catalog:"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "vite": "^8.0.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:"
+    "@distilled.cloud/cloudflare-bundler": "workspace:*",
+    "effect": "catalog:",
+    "vite": "^6.1.0 || ^7.0.0 || ^8.0.0"
   }
 }

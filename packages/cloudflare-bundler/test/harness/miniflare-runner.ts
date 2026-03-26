@@ -24,19 +24,14 @@ export function createRunner(
   return Effect.try({
     try: () => {
       const { bundle, config } = options;
-      const modules = bundle.modules
-        .filter((module) => module.type !== "SourceMap")
-        .sort((left, right) => {
-          if (left.name === bundle.main) return -1;
-          if (right.name === bundle.main) return 1;
-          return left.name.localeCompare(right.name);
-        })
-        .map((module) => ({
-          type: module.type,
-          path: path.resolve(bundle.outDir, module.name),
-        }));
       const miniflareOptions: ConstructorParameters<typeof Miniflare>[0] = {
-        modules,
+        modules: bundle.modules
+          .filter((module) => module.type !== "SourceMap")
+          .map((module) => ({
+            type: module.type,
+            path: path.resolve(bundle.outDir, module.name),
+            contents: module.content,
+          })),
         modulesRoot: bundle.outDir,
         compatibilityDate: config.compatibilityDate,
         compatibilityFlags: [...config.compatibilityFlags],

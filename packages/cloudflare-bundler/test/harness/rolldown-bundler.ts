@@ -8,26 +8,29 @@ import { RolldownBundler } from "../../src/rolldown/index.js";
 import { BundleError } from "./bundle-error.js";
 import type { BundleConfig, BundleResult } from "./types.js";
 
-const layers = Layer.provide(RolldownBundler, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
+const layers = Layer.provideMerge(
+  RolldownBundler,
+  Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
+);
 
 export function bundleWithRolldown(config: BundleConfig): Effect.Effect<BundleResult, BundleError> {
   return Effect.gen(function* () {
     const bundler = yield* Bundler.Bundler;
-    const outDir = yield* Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      return yield* fs.makeTempDirectory({
+    const fs = yield* FileSystem.FileSystem;
+
+    const outDir = yield* fs
+      .makeTempDirectory({
         prefix: "distilled-bundler-rolldown-",
-      });
-    }).pipe(
-      Effect.provide(NodeFileSystem.layer),
-      Effect.mapError(
-        (cause) =>
-          new BundleError({
-            message: `Failed to create rolldown temp directory: ${String(cause)}`,
-            cause,
-          }),
-      ),
-    );
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new BundleError({
+              message: `Failed to create rolldown temp directory: ${String(cause)}`,
+              cause,
+            }),
+        ),
+      );
 
     return yield* bundler
       .build({

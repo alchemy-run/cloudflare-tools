@@ -18,7 +18,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    environment: default
+    environment: npm
     steps:
       - uses: actions/checkout@v6
         with:

@@ -7,37 +7,30 @@
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
-// import { bundleWithEsbuild } from "./harness/esbuild-bundler.js";
-import { bundleWithRolldown } from "./harness/rolldown-bundler.js";
-// import { bundleWithRspack } from "./harness/rspack-bundler.js";
 import { loadFixture } from "./harness/fixture.js";
+import { bundleWithRolldown } from "./harness/rolldown-bundler.js";
 import type { BundleConfig, BundleResult } from "./harness/types.js";
-// import { bundleWithWrangler } from "./harness/bundler.js";
-// import type { BundleConfig, BundleResult } from "./harness/types.js";
+import { bundleWithWrangler } from "./harness/wrangler-bundler.js";
 
-const fixtures = [
-  "additional-modules",
-  "build-conditions",
-  "build-options",
-  "cloudflare-externals",
-  "cloudflare-submodules",
-  "custom-define",
-  "jsx-in-js",
-  "module-rules",
-  "module-rules-advanced",
-  "named-exports",
-  "navigator-user-agent",
-  "node-env",
-  "nodejs-compat",
-  "nodejs-compat-warnings",
-  "service-worker",
-  "source-maps",
-  "static-content-manifest",
-  "tsconfig-paths",
-];
+const listFixtures = () => {
+  const entry = fs.readdirSync(path.resolve(import.meta.dirname, "fixtures"), {
+    withFileTypes: true,
+  });
+  const fixtures: Array<string> = [];
+  for (const fixture of entry) {
+    if (!fixture.isDirectory()) continue;
+    if (!fs.existsSync(path.resolve(import.meta.dirname, "bundles", `${fixture.name}.test.ts`))) {
+      throw new Error(`Fixture ${fixture.name} has no test file`);
+    }
+    fixtures.push(fixture.name);
+  }
+  return fixtures.sort();
+};
+
+const fixtures = listFixtures();
 
 const bundlers = [
-  // { name: "wrangler", fn: bundleWithWrangler },
+  { name: "wrangler", fn: bundleWithWrangler },
   //  { name: "esbuild", fn: bundleWithEsbuild },
   { name: "rolldown", fn: bundleWithRolldown },
   // { name: "rspack", fn: bundleWithRspack },
@@ -58,9 +51,9 @@ function measureOutputSize(result: BundleResult): {
   totalBytes: number;
   fileCount: number;
 } {
-  const mainBytes = fs.existsSync(result.main) ? fs.statSync(result.main).size : 0;
-  let totalBytes = mainBytes;
-  let fileCount = 1;
+  let mainBytes: number | undefined;
+  let totalBytes = 0;
+  let fileCount = 0;
 
   for (const mod of result.modules) {
     const filePath = path.join(result.outDir, mod.name);
@@ -69,8 +62,15 @@ function measureOutputSize(result: BundleResult): {
       : fs.existsSync(filePath)
         ? fs.statSync(filePath).size
         : 0;
+    if (mod.name === result.main) {
+      mainBytes = size;
+    }
     totalBytes += size;
     fileCount++;
+  }
+
+  if (!mainBytes) {
+    throw new Error(`Main module ${result.main} not found in output`);
   }
 
   return { mainBytes, totalBytes, fileCount };
@@ -82,7 +82,7 @@ async function runBenchmark(
   bundlerFn: (c: BundleConfig) => Effect.Effect<BundleResult, any>,
 ): Promise<BenchmarkEntry> {
   try {
-    const config = await Effect.runPromise(loadFixture(fixture));
+    const config = await loadFixture(fixture);
     const start = performance.now();
     const result = await Effect.runPromise(bundlerFn(config));
     const timeMs = performance.now() - start;
@@ -120,7 +120,7 @@ async function main() {
   // Warmup: run esbuild once to JIT-warm the runtime
   console.log("Warming up...\n");
   try {
-    const warmupConfig = await Effect.runPromise(loadFixture("node-env"));
+    const warmupConfig = await loadFixture("node-env");
     // await Effect.runPromise(bundleWithEsbuild(warmupConfig));
     await Effect.runPromise(bundleWithRolldown(warmupConfig));
     // await Effect.runPromise(bundleWithRspack(warmupConfig));

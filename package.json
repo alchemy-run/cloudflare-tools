@@ -34,7 +34,8 @@
     "test": "bun run --filter '@distilled.cloud/cloudflare-bundler' test",
     "test:watch": "bun run --filter '@distilled.cloud/cloudflare-bundler' test:watch",
     "typecheck": "bun run scripts/typecheck.ts",
-    "submodules": "git submodule update --init --recursive"
+    "submodules:init": "git submodule update --init --recursive",
+    "submodules:update": "git submodule update --remote --recursive"
   },
   "devDependencies": {
     "@types/bun": "latest",

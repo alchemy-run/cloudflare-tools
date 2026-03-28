@@ -1,4 +1,5 @@
 import type { Plugin } from "rolldown";
+import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { createUnplugin } from "unplugin";
 import { resolveUnenv } from "../nodejs-compat-env.js";
 
@@ -14,17 +15,17 @@ interface InjectBinding {
 
 interface ResolvedNodejsCompatOptions {
   readonly entry: string;
-  readonly alias: Record<
-    string,
-    {
-      readonly resolvedPath: string;
-      readonly source: string;
-    }
-  >;
-  readonly external: ReadonlyArray<string>;
   readonly polyfill: ReadonlyArray<string>;
   readonly nodeModulePattern: RegExp;
   readonly injectModules: ReadonlyMap<string, ReadonlyArray<InjectBinding>>;
+  readonly resolveImport: (
+    source: string,
+  ) =>
+    | {
+        readonly id: string;
+        readonly external: boolean;
+      }
+    | undefined;
 }
 
 const nodejsCompat = createUnplugin<ResolvedNodejsCompatOptions>((options) => ({
@@ -34,11 +35,11 @@ const nodejsCompat = createUnplugin<ResolvedNodejsCompatOptions>((options) => ({
       return id;
     }
 
-    const alias = options.alias[id];
-    if (alias) {
+    const resolvedImport = options.resolveImport(id);
+    if (resolvedImport) {
       return {
-        id: alias.resolvedPath,
-        external: options.external.includes(alias.source),
+        id: resolvedImport.id,
+        external: resolvedImport.external,
       };
     }
 
@@ -131,7 +132,7 @@ export interface NodejsCompatPluginOptions {
 }
 
 export async function createNodejsCompatPlugin(options: NodejsCompatPluginOptions): Promise<{
-  readonly plugin: Plugin;
+  readonly plugins: ReadonlyArray<Plugin>;
   readonly entryId: string;
 }> {
   const env = await resolveUnenv({
@@ -140,14 +141,19 @@ export async function createNodejsCompatPlugin(options: NodejsCompatPluginOption
   });
 
   return {
-    plugin: nodejsCompat.rolldown({
-      entry: options.entry,
-      alias: env.alias,
-      external: env.external,
-      polyfill: env.polyfill,
-      nodeModulePattern: env.nodeModulePattern,
-      injectModules: createInjectModules(env.inject),
-    }) as Plugin,
+    plugins: [
+      esmExternalRequirePlugin({
+        external: [...env.external],
+        skipDuplicateCheck: true,
+      }) as Plugin,
+      nodejsCompat.rolldown({
+        entry: options.entry,
+        polyfill: env.polyfill,
+        nodeModulePattern: env.nodeModulePattern,
+        injectModules: createInjectModules(env.inject),
+        resolveImport: env.resolveImport,
+      }) as Plugin,
+    ],
     entryId: WORKER_ENTRY_ID,
   };
 }

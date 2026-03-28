@@ -1,0 +1,7 @@
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nodejs-bare-specifiers",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-01",
+  "compatibility_flags": ["nodejs_compat"]
+}

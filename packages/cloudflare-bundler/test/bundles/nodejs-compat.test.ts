@@ -10,8 +10,10 @@
  */
 import { beforeAll, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as fs from "node:fs/promises";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
+import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
 import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
@@ -35,6 +37,11 @@ describe.concurrent("nodejs-compat", () => {
 
     it("builds successfully", () => {
       expect(bundle.main).toBeTruthy();
+    });
+
+    it("injects the process global into the worker entry", async () => {
+      const code = await fs.readFile(outputPath(bundle), "utf-8");
+      expect(code).toContain("globalThis.process");
     });
 
     it.effect("crypto.getRandomValues works", () =>
@@ -61,6 +68,14 @@ describe.concurrent("nodejs-compat", () => {
     it.effect("process global is defined", () =>
       withRunner({ bundle, config }, async (runner) => {
         const res = await runner.fetch("http://localhost/test-process");
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe("OK");
+      }),
+    );
+
+    it.effect("process.env stays available", () =>
+      withRunner({ bundle, config }, async (runner) => {
+        const res = await runner.fetch("http://localhost/test-process-env");
         expect(res.status).toBe(200);
         expect(await res.text()).toBe("OK");
       }),

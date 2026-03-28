@@ -20,10 +20,6 @@ export default {
       return new Response(typeof process !== "undefined" ? "OK" : "FAIL");
     }
 
-    if (url.pathname === "/test-process-env") {
-      return new Response(typeof process.env === "object" ? "OK" : "FAIL");
-    }
-
     if (url.pathname === "/test-buffer-is-buffer") {
       const buf = Buffer.from("test");
       return new Response(Buffer.isBuffer(buf) ? "OK" : "FAIL");

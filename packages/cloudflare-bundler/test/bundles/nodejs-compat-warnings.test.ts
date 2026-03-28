@@ -39,5 +39,13 @@ describe.concurrent("nodejs-compat-warnings", () => {
       const code = await fs.readFile(outputPath(bundle), "utf-8");
       expect(code).toContain("node:path");
     });
+
+    if (fn === bundleWithRolldown) {
+      it("collects a nodejs_compat warning", () => {
+        expect(bundle.warnings).toEqual([
+          "Node.js built-ins were imported without `nodejs_compat`: node:path",
+        ]);
+      });
+    }
   });
 });

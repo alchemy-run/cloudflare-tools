@@ -30,7 +30,7 @@ export async function createNodejsCompatWarningsPlugin(): Promise<{
 }> {
   const { nonPrefixedNodeModules } = await import("@cloudflare/unenv-preset");
   const pattern = new RegExp(
-    `^(node:)?(${nonPrefixedNodeModules.map((module) => escapePattern(module)).join("|")})$`,
+    `^(${nonPrefixedNodeModules.map((module) => escapePattern(module)).join("|")}|node:.+)$`,
   );
   const imports = new Set<string>();
 

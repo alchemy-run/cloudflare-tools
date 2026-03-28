@@ -43,7 +43,7 @@ export async function createPluginChain(options: Input): Promise<PluginChain> {
       cloudflareExternalsPlugin(),
       ...additionalModules.plugins,
       wasmHelperPlugin(),
-      ...(nodejsCompat ? [nodejsCompat.plugin] : []),
+      ...(nodejsCompat ? nodejsCompat.plugins : []),
       ...(warnings ? [warnings.plugin] : []),
     ],
     rewriteAdditionalModules: (output, directory) => additionalModules.rewrite(output, directory),

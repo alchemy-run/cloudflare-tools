@@ -36,12 +36,12 @@ describe.concurrent("cloudflare-submodules", () => {
 
     it("preserves cloudflare:workers as external import", async () => {
       const code = await fs.readFile(outputPath(bundle), "utf-8");
-      expect(code).toContain("cloudflare:workers");
+      expect(code).toMatch(/from\s+["']cloudflare:workers["']/);
     });
 
     it("preserves cloudflare:sockets as external import", async () => {
       const code = await fs.readFile(outputPath(bundle), "utf-8");
-      expect(code).toContain("cloudflare:sockets");
+      expect(code).toMatch(/from\s+["']cloudflare:sockets["']/);
     });
   });
 });

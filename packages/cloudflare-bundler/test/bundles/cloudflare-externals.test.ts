@@ -43,7 +43,7 @@ describe.concurrent("cloudflare-externals", () => {
 
     it("preserves cloudflare:* imports as external", async () => {
       const code = await fs.readFile(outputPath(bundle), "utf-8");
-      expect(code).toContain("cloudflare:workers");
+      expect(code).toMatch(/from\s+["']cloudflare:workers["']/);
     });
 
     it.effect("responds to fetch /", () =>

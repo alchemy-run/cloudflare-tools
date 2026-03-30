@@ -17,7 +17,6 @@ import { hash } from "../hash.js";
 import type { Input } from "../Input.js";
 import { Module } from "../Module.js";
 import { Output } from "../Output.js";
-import { isSourceMapAsset } from "../plugins/additional-modules.js";
 import { createPluginChain } from "../plugins/index.js";
 
 const hasNodejsCompat = (flags?: ReadonlyArray<string>) =>
@@ -187,7 +186,7 @@ const collectChunkAndSourceMapModules = async (output: RolldownOutput, directory
           ),
         ];
       }
-      if (isSourceMapAsset(item)) {
+      if (item.fileName.endsWith(".map")) {
         return [Promise.resolve(createSourceMapModule(item))];
       }
       return [];

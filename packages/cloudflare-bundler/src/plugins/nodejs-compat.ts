@@ -1,6 +1,5 @@
 import type { Plugin } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
-import { createUnplugin } from "unplugin";
 import { resolveUnenv } from "../nodejs-compat-env.js";
 
 const WORKER_ENTRY_ID = "virtual:distilled-cloudflare/worker-entry";
@@ -26,7 +25,7 @@ interface ResolvedNodejsCompatOptions {
     | undefined;
 }
 
-const nodejsCompat = createUnplugin<ResolvedNodejsCompatOptions>((options) => ({
+const createNodejsCompatRolldownPlugin = (options: ResolvedNodejsCompatOptions): Plugin => ({
   name: "distilled-nodejs-compat",
   resolveId(id) {
     if (id === WORKER_ENTRY_ID || id === USER_ENTRY_ID || id.startsWith(GLOBAL_INJECT_PREFIX)) {
@@ -102,7 +101,7 @@ const nodejsCompat = createUnplugin<ResolvedNodejsCompatOptions>((options) => ({
     }
     return lines.join("\n");
   },
-}));
+});
 
 const createInjectModules = (inject: Record<string, string | ReadonlyArray<string>>) => {
   const modules = new Map<string, Array<InjectBinding>>();
@@ -144,13 +143,13 @@ export async function createNodejsCompatPlugin(options: NodejsCompatPluginOption
         external: [...env.external],
         skipDuplicateCheck: true,
       }) as Plugin,
-      nodejsCompat.rolldown({
+      createNodejsCompatRolldownPlugin({
         entry: options.entry,
         polyfill: env.polyfill,
         nodeModulePattern: env.nodeModulePattern,
         injectModules: createInjectModules(env.inject),
         resolveImport: env.resolveImport,
-      }) as Plugin,
+      }),
     ],
     entryId: WORKER_ENTRY_ID,
   };

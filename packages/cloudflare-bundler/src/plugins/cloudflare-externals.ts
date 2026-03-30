@@ -1,12 +1,9 @@
 import type { Plugin } from "rolldown";
-import { createUnplugin } from "unplugin";
 
-const cloudflareExternals = createUnplugin(() => ({
+export const cloudflareExternalsPlugin = (): Plugin => ({
   name: "distilled-cloudflare-externals",
   resolveId: {
-    filter: {
-      id: /^cloudflare:/,
-    },
+    filter: { id: /^cloudflare:/ },
     handler(id) {
       return {
         id,
@@ -14,6 +11,4 @@ const cloudflareExternals = createUnplugin(() => ({
       };
     },
   },
-}));
-
-export const cloudflareExternalsPlugin = (): Plugin => cloudflareExternals.rolldown() as Plugin;
+});

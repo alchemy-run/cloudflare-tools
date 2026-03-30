@@ -1,23 +1,23 @@
 import type { Plugin } from "rolldown";
-import { createUnplugin } from "unplugin";
 
 const WASM_INIT_QUERY = /\.wasm\?init$/;
 const WASM_INIT_PREFIX = "\0distilled-wasm-init:";
 
-const wasmHelper = createUnplugin(() => ({
+const resolveWasmId = (id: string, importer: string | undefined) => {
+  const resolvedId = id.replace(/\?init$/, "");
+  return importer && resolvedId.startsWith(".")
+    ? new URL(resolvedId, `file://${importer}`).pathname
+    : resolvedId;
+};
+
+export const wasmHelperPlugin = (): Plugin => ({
   name: "distilled-wasm-helper",
-  resolveId: {
-    filter: {
-      id: WASM_INIT_QUERY,
-    },
-    handler(id, importer) {
-      const resolvedId = id.replace(/\?init$/, "");
-      const absoluteId =
-        importer && resolvedId.startsWith(".")
-          ? new URL(resolvedId, `file://${importer}`).pathname
-          : resolvedId;
-      return `${WASM_INIT_PREFIX}${absoluteId}`;
-    },
+  resolveId(id, importer) {
+    if (!WASM_INIT_QUERY.test(id)) {
+      return null;
+    }
+
+    return `${WASM_INIT_PREFIX}${resolveWasmId(id, importer)}`;
   },
   load(id) {
     if (!id.startsWith(WASM_INIT_PREFIX)) {
@@ -29,10 +29,8 @@ const wasmHelper = createUnplugin(() => ({
       `import wasmModule from ${JSON.stringify(wasmId)};`,
       `export default async (imports) => {`,
       `  const result = await WebAssembly.instantiate(wasmModule, imports);`,
-      `  return result.instance;`,
+      `  return "instance" in result ? result.instance : result;`,
       `};`,
     ].join("\n");
   },
-}));
-
-export const wasmHelperPlugin = (): Plugin => wasmHelper.rolldown() as Plugin;
+});

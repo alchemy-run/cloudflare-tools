@@ -1,26 +1,4 @@
 import type { Plugin } from "rolldown";
-import { createUnplugin } from "unplugin";
-
-interface NodejsCompatWarningsOptions {
-  readonly pattern: RegExp;
-  readonly imports: Set<string>;
-}
-
-const nodejsCompatWarnings = createUnplugin<NodejsCompatWarningsOptions>((options) => ({
-  name: "distilled-nodejs-compat-warnings",
-  resolveId: {
-    filter: {
-      id: options.pattern,
-    },
-    handler(id) {
-      options.imports.add(id);
-      return {
-        id,
-        external: true,
-      };
-    },
-  },
-}));
 
 const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -35,7 +13,19 @@ export async function createNodejsCompatWarningsPlugin(): Promise<{
   const imports = new Set<string>();
 
   return {
-    plugin: nodejsCompatWarnings.rolldown({ pattern, imports }) as Plugin,
+    plugin: {
+      name: "distilled-nodejs-compat-warnings",
+      resolveId: {
+        filter: { id: pattern },
+        handler(id) {
+          imports.add(id);
+          return {
+            id,
+            external: true,
+          };
+        },
+      },
+    },
     getWarnings: () =>
       imports.size === 0
         ? []

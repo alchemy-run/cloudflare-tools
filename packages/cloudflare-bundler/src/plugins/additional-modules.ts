@@ -1,7 +1,7 @@
 import globToRegExp from "glob-to-regexp";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { OutputAsset, Plugin, PluginContext } from "rolldown";
+import type { Plugin, PluginContext } from "rolldown";
 import { hash } from "../hash.js";
 import type { AdditionalModuleRule, AdditionalModulesOptions } from "../Input.js";
 import type { ModuleType } from "../Module.js";
@@ -110,6 +110,12 @@ export function createAdditionalModulesPlugin(options: AdditionalModulesOptions 
             return null;
           }
 
+          // Skip plugin-generated virtual modules like the wasm `?init` helper.
+          // Additional modules should only classify real resolved asset paths.
+          if (resolved.id.startsWith("\0")) {
+            return resolved;
+          }
+
           const matchedRule = ruleFilters.find(({ filters }) =>
             filters.some((filter) => filter.test(normalizePathForFilter(resolved.id))),
           )?.rule;
@@ -183,5 +189,3 @@ export function createAdditionalModulesPlugin(options: AdditionalModulesOptions 
     getModules: () => emittedModules,
   };
 }
-
-export const isSourceMapAsset = (asset: OutputAsset) => asset.fileName.endsWith(".map");

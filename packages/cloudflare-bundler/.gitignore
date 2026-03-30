@@ -1,1 +1,1 @@
-!test/fixtures/build-conditions/node_modules
+!test/fixtures/**/node_modules

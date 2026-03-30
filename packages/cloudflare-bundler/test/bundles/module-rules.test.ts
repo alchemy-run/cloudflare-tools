@@ -10,8 +10,10 @@
  */
 import { beforeAll, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as fs from "node:fs/promises";
 import { loadFixture } from "../harness/fixture.js";
 import { withRunner } from "../harness/miniflare-runner.js";
+import { outputPath } from "../harness/output.js";
 import { bundleWithRolldown } from "../harness/rolldown-bundler.js";
 import type { BundleConfig, BundleResult } from "../harness/types.js";
 import { bundleWithWrangler } from "../harness/wrangler-bundler.js";
@@ -54,6 +56,13 @@ describe.concurrent("module-rules", () => {
       expect(binModule).toBeDefined();
       expect(binModule!.name).toMatch(/test\.bin$/);
     });
+
+    if (fn === bundleWithRolldown) {
+      it("rewrites encoded module placeholders in the emitted chunk", async () => {
+        const code = await fs.readFile(outputPath(bundle), "utf-8");
+        expect(code).not.toContain("__DISTILLED_CLOUDFLARE_MODULE__:");
+      });
+    }
 
     it.effect("WASM add(1, 2) returns 3", () =>
       withRunner({ bundle, config }, async (runner) => {

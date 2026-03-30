@@ -220,14 +220,6 @@ export const RolldownBundler = Layer.effect(
             try: () => bundle.write(outputOptions),
             catch: toBuildError,
           });
-          const additionalModules = yield* Effect.tryPromise({
-            try: () => pluginChain.rewriteAdditionalModules(result, outDir),
-            catch: (cause) =>
-              new SystemError({
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-          });
           const bundledModules = yield* Effect.tryPromise({
             try: () => collectChunkAndSourceMapModules(result, outDir),
             catch: (cause) =>
@@ -250,7 +242,7 @@ export const RolldownBundler = Layer.effect(
           return new Output({
             outDir,
             main: entryChunk.fileName,
-            modules: [...bundledModules, ...additionalModules],
+            modules: [...bundledModules, ...pluginChain.getAdditionalModules()],
             warnings: [...pluginChain.getWarnings()],
           });
         } finally {

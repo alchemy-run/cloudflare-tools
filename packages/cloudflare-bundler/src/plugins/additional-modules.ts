@@ -1,8 +1,7 @@
 import globToRegExp from "glob-to-regexp";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { OutputAsset, Plugin, RolldownOutput } from "rolldown";
-import { createUnplugin } from "unplugin";
+import type { OutputAsset, Plugin, PluginContext } from "rolldown";
 import { hash } from "../hash.js";
 import type { AdditionalModuleRule, AdditionalModulesOptions } from "../Input.js";
 import type { ModuleType } from "../Module.js";
@@ -15,15 +14,9 @@ interface TrackedModule {
   readonly encodedId: string;
   readonly originalName: string;
   readonly type: ModuleType;
+  referenceId?: string;
   fileName?: string;
-}
-
-interface AdditionalModulesPluginOptions {
-  readonly trackedModules: Map<string, TrackedModule>;
-  readonly ruleFilters: ReadonlyArray<{
-    readonly rule: AdditionalModuleRule;
-    readonly filters: ReadonlyArray<RegExp>;
-  }>;
+  source?: Buffer;
 }
 
 const DEFAULT_MODULE_RULES: Array<AdditionalModuleRule> = [
@@ -61,43 +54,38 @@ function parseRules(
   return rules;
 }
 
-const additionalModules = createUnplugin<AdditionalModulesPluginOptions>((options) => ({
-  name: "distilled-additional-modules",
-  resolveId(source, importer) {
-    const matchedRule = options.ruleFilters.find(({ filters }) =>
-      filters.some((filter) => filter.test(source)),
-    )?.rule;
-    if (!matchedRule) {
-      return null;
-    }
+const cleanResolvedId = (id: string) => id.split(/[?#]/, 1)[0] ?? id;
+const normalizePathForFilter = (id: string) => cleanResolvedId(id).replaceAll("\\", "/");
 
-    const absolutePath = (
-      importer && source.startsWith(".")
-        ? path.resolve(path.dirname(importer), source)
-        : path.resolve(source)
-    ).split("?")[0]!;
-    const encodedId = `${MODULE_ID_PREFIX}${matchedRule.type}:${absolutePath}`;
-    const tracked = options.trackedModules.get(encodedId) ?? {
-      absolutePath,
-      encodedId,
-      originalName: path.basename(absolutePath),
-      type: matchedRule.type,
-    };
-    options.trackedModules.set(encodedId, tracked);
-    this.addWatchFile(absolutePath);
-    return {
-      id: encodedId,
-      external: true,
-    };
-  },
-}));
+const ensureTrackedModuleReference = async (
+  plugin: PluginContext,
+  tracked: TrackedModule,
+  preserveFileNames: boolean,
+) => {
+  if (tracked.referenceId) {
+    return tracked.referenceId;
+  }
+
+  const source = await readFile(tracked.absolutePath);
+  tracked.source = source;
+  tracked.referenceId = plugin.emitFile({
+    type: "asset",
+    ...(preserveFileNames
+      ? { fileName: tracked.originalName }
+      : { fileName: path.posix.join("assets", `${hash(source)}-${tracked.originalName}`) }),
+    originalFileName: tracked.absolutePath,
+    source,
+  });
+  return tracked.referenceId;
+};
 
 export function createAdditionalModulesPlugin(options: AdditionalModulesOptions | undefined): {
   readonly plugins: ReadonlyArray<Plugin>;
-  readonly rewrite: (output: RolldownOutput, directory: string) => Promise<ReadonlyArray<Module>>;
+  readonly getModules: () => ReadonlyArray<Module>;
 } {
   const trackedModules = new Map<string, TrackedModule>();
   const preserveFileNames = options?.preserveFileNames ?? false;
+  let emittedModules: ReadonlyArray<Module> = [];
 
   const ruleFilters = parseRules(options?.rules).map((rule) => ({
     rule,
@@ -106,63 +94,89 @@ export function createAdditionalModulesPlugin(options: AdditionalModulesOptions 
 
   return {
     plugins: [
-      additionalModules.rolldown({
-        trackedModules,
-        ruleFilters,
-      }) as Plugin,
-    ],
-    rewrite: async (output, directory) => {
-      const modules: Array<Module> = [];
-      const assets = new Map<string, TrackedModule>();
-
-      for (const tracked of trackedModules.values()) {
-        const content = await readFile(tracked.absolutePath);
-        const fileName = preserveFileNames
-          ? tracked.originalName
-          : path.posix.join("assets", `${hash(content)}-${tracked.originalName}`);
-        tracked.fileName = fileName;
-        assets.set(fileName, tracked);
-
-        const target = path.resolve(directory, fileName);
-        await mkdir(path.dirname(target), { recursive: true });
-        await writeFile(target, content);
-
-        modules.push(
-          new Module({
-            name: fileName,
-            content,
-            hash: hash(content),
-            type: tracked.type,
-          }),
-        );
-      }
-
-      for (const item of output.output) {
-        if (item.type !== "chunk") {
-          continue;
-        }
-
-        let nextCode = item.code;
-        for (const tracked of trackedModules.values()) {
-          if (!tracked.fileName || !nextCode.includes(tracked.encodedId)) {
-            continue;
+      {
+        name: "distilled-additional-modules",
+        async resolveId(source, importer, extraOptions) {
+          if (source.startsWith(MODULE_ID_PREFIX)) {
+            return null;
           }
 
-          const relativePath = path.posix.relative(
-            path.posix.dirname(item.fileName),
-            tracked.fileName,
-          );
-          const specifier = relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
-          nextCode = nextCode.split(tracked.encodedId).join(specifier);
-        }
+          const resolved = await this.resolve(source, importer, {
+            kind: extraOptions.kind,
+            isEntry: extraOptions.isEntry,
+            skipSelf: true,
+          });
+          if (!resolved) {
+            return null;
+          }
 
-        if (nextCode !== item.code) {
-          await writeFile(path.resolve(directory, item.fileName), nextCode);
-        }
-      }
+          const matchedRule = ruleFilters.find(({ filters }) =>
+            filters.some((filter) => filter.test(normalizePathForFilter(resolved.id))),
+          )?.rule;
+          if (!matchedRule) {
+            return resolved;
+          }
 
-      return modules;
-    },
+          const absolutePath = cleanResolvedId(resolved.id);
+          const encodedId = `${MODULE_ID_PREFIX}${matchedRule.type}:${absolutePath}`;
+          const tracked = trackedModules.get(encodedId) ?? {
+            absolutePath,
+            encodedId,
+            originalName: path.basename(absolutePath),
+            type: matchedRule.type,
+          };
+          trackedModules.set(encodedId, tracked);
+
+          return {
+            id: encodedId,
+            external: true,
+          };
+        },
+        async renderChunk(code, chunk) {
+          let nextCode = code;
+          let didChange = false;
+
+          for (const tracked of trackedModules.values()) {
+            if (!nextCode.includes(tracked.encodedId)) {
+              continue;
+            }
+
+            const referenceId = await ensureTrackedModuleReference(this, tracked, preserveFileNames);
+            const emittedFileName = this.getFileName(referenceId);
+            tracked.fileName = emittedFileName;
+
+            const relativePath = path.posix.relative(
+              path.posix.dirname(chunk.fileName),
+              emittedFileName,
+            );
+            const specifier = relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
+            nextCode = nextCode.split(tracked.encodedId).join(specifier);
+            didChange = true;
+          }
+
+          if (didChange) {
+            return nextCode;
+          }
+        },
+        generateBundle() {
+          emittedModules = Array.from(trackedModules.values()).flatMap((tracked) => {
+            if (!tracked.fileName || !tracked.source) {
+              return [];
+            }
+
+            return [
+              new Module({
+                name: tracked.fileName,
+                content: tracked.source,
+                hash: hash(tracked.source),
+                type: tracked.type,
+              }),
+            ];
+          });
+        },
+      },
+    ],
+    getModules: () => emittedModules,
   };
 }
 

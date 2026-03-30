@@ -1,4 +1,4 @@
-import type { Plugin, RolldownOutput } from "rolldown";
+import type { Plugin } from "rolldown";
 import type { Input } from "../Input.js";
 import type { Module } from "../Module.js";
 import { createAdditionalModulesPlugin } from "./additional-modules.js";
@@ -13,10 +13,7 @@ const hasNodejsCompat = (flags?: ReadonlyArray<string>) =>
 export interface PluginChain {
   readonly entryId: string;
   readonly plugins: ReadonlyArray<Plugin>;
-  readonly rewriteAdditionalModules: (
-    output: RolldownOutput,
-    directory: string,
-  ) => Promise<ReadonlyArray<Module>>;
+  readonly getAdditionalModules: () => ReadonlyArray<Module>;
   readonly getWarnings: () => ReadonlyArray<string>;
 }
 
@@ -46,7 +43,7 @@ export async function createPluginChain(options: Input): Promise<PluginChain> {
       ...(nodejsCompat ? nodejsCompat.plugins : []),
       ...(warnings ? [warnings.plugin] : []),
     ],
-    rewriteAdditionalModules: (output, directory) => additionalModules.rewrite(output, directory),
+    getAdditionalModules: () => additionalModules.getModules(),
     getWarnings: () => warnings?.getWarnings() ?? [],
   };
 }

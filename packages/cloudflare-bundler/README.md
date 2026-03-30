@@ -1,8 +1,6 @@
 # `@distilled.cloud/cloudflare-bundler`
 
-Effect-native Cloudflare Workers bundler built around a common core API and a rolldown implementation.
-
-Support for other bundlers is coming soon.
+Effect-native Cloudflare Workers bundler built around a common core API with a Rolldown backend.
 
 ## Install
 
@@ -41,15 +39,14 @@ const program = Effect.gen(function* () {
 const layer = Layer.provide(RolldownBundler, Layer.mergeAll(NodeFileSystem.layer, NodePath.layer));
 
 const result = await Effect.runPromise(Effect.provide(program, layer));
-console.log(result.directory, result.main, result.modules);
+console.log(result.outDir, result.main, result.modules, result.warnings);
 ```
 
 `build()` returns an `Output` with:
 
-- `directory`: absolute output directory
+- `outDir`: absolute output directory
 - `main`: relative path to the entry chunk within that directory
 - `modules`: all emitted modules, including the main ESM chunk and supported asset modules
-- `format`: always `"esm"` in v1
 - `warnings`: normalized build warnings
 
 ## API
@@ -87,18 +84,6 @@ The current backend is:
 - Rspack and esbuild adapters
 - Wrangler-specific `__STATIC_CONTENT_MANIFEST`
 - Filesystem scanning for dynamic import targets
-
-## Development
-
-This package lives in the [`distilled-cloudflare`](https://github.com/alchemy-run/cloudflare-bundler) monorepo. From the repository root:
-
-```bash
-bun install
-bun run format
-bun run lint
-bun run build
-bun run test
-```
 
 ## License
 

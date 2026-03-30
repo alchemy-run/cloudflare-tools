@@ -49,10 +49,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:clean": "bun run ../../scripts/clean.ts && tsc",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "bun run build:clean"
+    "typecheck": "bun run ../../scripts/typecheck.ts",
+    "prepublishOnly": "bun run clean && bun run build"
   },
   "dependencies": {
     "@cloudflare/unenv-preset": "^2.15.0",

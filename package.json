@@ -28,13 +28,15 @@
   },
   "type": "module",
   "scripts": {
-    "build": "bun run --filter '@distilled.cloud/cloudflare-bundler' build",
-    "build:clean": "bun run --filter '@distilled.cloud/cloudflare-bundler' build:clean",
-    "format": "oxfmt",
-    "lint": "oxlint --ignore-pattern 'workers-sdk'",
-    "test": "bun run --filter '@distilled.cloud/cloudflare-bundler' test",
-    "test:watch": "bun run --filter '@distilled.cloud/cloudflare-bundler' test:watch",
-    "typecheck": "bun run scripts/typecheck.ts",
+    "build": "turbo run build",
+    "check": "turbo run format lint typecheck",
+    "check:write": "bun run format:write && bun run lint:write && turbo run typecheck",
+    "format": "oxfmt format --check .",
+    "format:write": "oxfmt format .",
+    "lint": "oxlint lint --ignore-pattern 'workers-sdk'",
+    "lint:write": "oxlint lint --ignore-pattern 'workers-sdk' --fix",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
     "submodules:init": "git submodule update --init --recursive",
     "submodules:update": "git submodule update --remote --recursive"
   },
@@ -44,6 +46,7 @@
     "effect-solutions": "^0.5.2",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.57.0",
+    "turbo": "^2.9.0",
     "typescript": "catalog:"
   },
   "packageManager": "bun@1.3.11"

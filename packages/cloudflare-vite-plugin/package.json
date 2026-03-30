@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest --passWithNoTests",
     "prepublishOnly": "bun run build:clean",
     "typecheck": "tsc --noEmit"
   },
@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/cloudflare-bundler": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "vite": "^8.0.3",

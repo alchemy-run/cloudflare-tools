@@ -141,7 +141,11 @@ export function createAdditionalModulesPlugin(options: AdditionalModulesOptions 
               continue;
             }
 
-            const referenceId = await ensureTrackedModuleReference(this, tracked, preserveFileNames);
+            const referenceId = await ensureTrackedModuleReference(
+              this,
+              tracked,
+              preserveFileNames,
+            );
             const emittedFileName = this.getFileName(referenceId);
             tracked.fileName = emittedFileName;
 

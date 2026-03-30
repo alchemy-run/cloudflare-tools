@@ -20,9 +20,7 @@ export interface UnenvResolution {
   readonly entries: ReadonlyMap<string, string>;
   readonly polyfill: ReadonlyArray<string>;
   readonly nodeModulePattern: RegExp;
-  readonly resolveImport: (
-    source: string,
-  ) =>
+  readonly resolveImport: (source: string) =>
     | {
         readonly id: string;
         readonly external: boolean;

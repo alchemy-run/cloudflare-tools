@@ -18,9 +18,7 @@ interface ResolvedNodejsCompatOptions {
   readonly polyfill: ReadonlyArray<string>;
   readonly nodeModulePattern: RegExp;
   readonly injectModules: ReadonlyMap<string, ReadonlyArray<InjectBinding>>;
-  readonly resolveImport: (
-    source: string,
-  ) =>
+  readonly resolveImport: (source: string) =>
     | {
         readonly id: string;
         readonly external: boolean;

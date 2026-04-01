@@ -41,6 +41,21 @@
         "rolldown",
       ],
     },
+    "packages/cloudflare-rolldown-plugin": {
+      "name": "@distilled.cloud/cloudflare-rolldown-plugin",
+      "version": "0.0.1",
+      "dependencies": {
+        "@cloudflare/unenv-preset": "^2.16.0",
+        "unenv": "^2.0.0-rc.24",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "rolldown": "^1.0.0-rc.13",
+      },
+    },
     "packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
       "version": "0.0.0",
@@ -78,20 +93,6 @@
         "vite": "^6.1.0 || ^7.0.0 || ^8.0.0",
       },
     },
-    "packages/rolldown-plugin-cloudflare": {
-      "name": "@distilled.cloud/rolldown-plugin-cloudflare",
-      "version": "0.0.1",
-      "dependencies": {
-        "@cloudflare/unenv-preset": "^2.16.0",
-        "unenv": "^2.0.0-rc.24",
-      },
-      "devDependencies": {
-        "@cloudflare/workers-types": "catalog:",
-      },
-      "peerDependencies": {
-        "rolldown": "^1.0.0-rc.13",
-      },
-    },
   },
   "catalog": {
     "@cloudflare/workers-types": "^4.20260310.1",
@@ -123,11 +124,11 @@
 
     "@distilled.cloud/cloudflare-bundler": ["@distilled.cloud/cloudflare-bundler@workspace:packages/cloudflare-bundler"],
 
+    "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@workspace:packages/cloudflare-rolldown-plugin"],
+
     "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@workspace:packages/cloudflare-runtime"],
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:packages/cloudflare-vite-plugin"],
-
-    "@distilled.cloud/rolldown-plugin-cloudflare": ["@distilled.cloud/rolldown-plugin-cloudflare@workspace:packages/rolldown-plugin-cloudflare"],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.38", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.38" }, "peerDependencies": { "effect": "^4.0.0-beta.38" } }, "sha512-KHf4uUOgHhJ4AbquUmr+j1jBFKZ38AgTOSzLi3ifAArjJ5G8iUfvthqDn8Kbr4y4eyedcWoDwOHoOsxfryS87A=="],
 

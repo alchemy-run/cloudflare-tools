@@ -1,5 +1,5 @@
 {
-  "name": "@distilled.cloud/rolldown-plugin-cloudflare",
+  "name": "@distilled.cloud/cloudflare-rolldown-plugin",
   "version": "0.0.1",
   "description": "Rolldown plugin for Cloudflare Workers.",
   "keywords": [
@@ -20,12 +20,12 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
-    "directory": "packages/rolldown-plugin-cloudflare"
+    "directory": "packages/cloudflare-rolldown-plugin"
   },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "typecheck": "bun run ../../scripts/typecheck.ts",
     "prepublishOnly": "bun run clean && bun run build"
@@ -34,10 +34,11 @@
     "@cloudflare/unenv-preset": "^2.16.0",
     "unenv": "^2.0.0-rc.24"
   },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "vitest": "catalog:"
+  },
   "peerDependencies": {
     "rolldown": "^1.0.0-rc.13"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "catalog:"
   }
 }

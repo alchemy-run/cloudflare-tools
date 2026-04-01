@@ -2,7 +2,7 @@
   // NOTE: This is copied from https://github.com/Effect-TS/effect-smol/tree/main/packages/tools/oxc.
   // TODO: Take a sad song and make it better.
   "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "import", "oxc", "eslint", "unicorn", "node"],
+  "plugins": ["typescript", "import", "oxc", "eslint", "node"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",

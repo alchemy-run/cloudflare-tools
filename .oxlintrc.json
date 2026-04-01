@@ -92,7 +92,7 @@
   "ignorePatterns": ["workers-sdk"],
   "overrides": [
     {
-      "files": ["**/scripts/**/*.ts"],
+      "files": ["**/scripts/**/*.ts", "**/test/**/*.ts"],
       "rules": {
         "eslint/no-console": "off"
       }

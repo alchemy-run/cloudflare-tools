@@ -65,7 +65,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/glob-to-regexp": "^0.4.4",
-    "miniflare": "^4.20260317.0",
+    "miniflare": "^4.20260329.0",
     "rolldown": "^1.0.0-rc.9",
     "typescript": "catalog:",
     "vitest": "catalog:",

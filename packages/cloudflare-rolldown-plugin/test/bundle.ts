@@ -1,15 +1,19 @@
 import { rolldown } from "rolldown";
-import cloudflarePlugin from "../src/plugin";
+import cloudflare from "../src/plugin";
+import { createMiniflare } from "./utils/miniflare";
 
-const FIXTURE_NAME = "wasm-init";
+const FIXTURE_NAME = "hello-world";
 
 const bundle = await rolldown({
   input: `test/fixtures/${FIXTURE_NAME}.ts`,
-  plugins: [cloudflarePlugin({})],
+  plugins: [cloudflare()],
 });
 
-await bundle.write({
+const result = await bundle.generate({
   file: `dist/${FIXTURE_NAME}/index.js`,
   sourcemap: true,
   format: "esm",
 });
+await using mf = await createMiniflare(result, { compatibilityDate: "2026-04-01" });
+const response = await mf.dispatchFetch("http://localhost");
+console.log(await response.text());

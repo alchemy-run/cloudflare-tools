@@ -10,9 +10,9 @@ export interface CloudflarePluginOptions {
   compatibilityFlags?: Array<string>;
 }
 
-export type CloudflarePlugin = (options: CloudflarePluginOptions) => RolldownPluginOption;
+export type CloudflarePlugin = (options?: CloudflarePluginOptions) => RolldownPluginOption;
 
-const cloudflarePlugin: CloudflarePlugin = async (options?: CloudflarePluginOptions) => {
+const cloudflare: CloudflarePlugin = async (options) => {
   return [
     optionsPlugin,
     cloudflareExternalsPlugin,
@@ -22,4 +22,4 @@ const cloudflarePlugin: CloudflarePlugin = async (options?: CloudflarePluginOpti
   ];
 };
 
-export default cloudflarePlugin;
+export default cloudflare;

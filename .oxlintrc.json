@@ -51,7 +51,6 @@
     "unicorn/prefer-array-flat-map": "error",
     "unicorn/no-accessor-recursion": "error",
     "oxc/no-map-spread": "off",
-    "eslint/object-shorthand": "off",
     "eslint/no-unused-vars": "off",
     "eslint/require-yield": "off",
     "eslint/no-fallthrough": "off",

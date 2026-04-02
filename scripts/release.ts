@@ -2,7 +2,7 @@ import { $ } from "bun";
 import assert from "node:assert";
 import path from "node:path";
 
-const PACKAGE_DIRECTORY = "packages/cloudflare-bundler";
+const PACKAGE_DIRECTORY = "packages/cloudflare-rolldown-plugin";
 
 assert(
   process.env.NPM_CONFIG_USERCONFIG,
@@ -14,10 +14,10 @@ const type = parseReleaseType();
 const version = await updatePackageVersion();
 
 const previousTag = await getPreviousTag();
-const newTag = `cloudflare-bundler@${version}`;
+const newTag = `cloudflare-rolldown-plugin@${version}`;
 
 await $`git add ${PACKAGE_DIRECTORY}/package.json`;
-await $`git commit -m "chore(release): cloudflare-bundler v${version}"`;
+await $`git commit -m "chore(release): cloudflare-rolldown-plugin v${version}"`;
 await $`git tag -a ${newTag} -m ${newTag}`;
 await $`git push --follow-tags`;
 

@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "Rolldown plugin for Cloudflare Workers.",
   "keywords": [
     "cloudflare",
@@ -22,6 +22,24 @@
     "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
     "directory": "packages/cloudflare-rolldown-plugin"
   },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/plugin.js",
+  "types": "./dist/plugin.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/plugin.ts",
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
@@ -40,6 +58,6 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "rolldown": "^1.0.0-rc.13"
+    "rolldown": "^1.0.0-rc.9"
   }
 }

@@ -11,6 +11,8 @@ export default {
         return new Response(globalThis.process.env.NODE_ENV ?? "undefined");
       case "/typeof-process":
         return new Response(typeof process);
+      case "/user-agent":
+        return new Response(navigator.userAgent);
       default:
         return new Response("ok");
     }

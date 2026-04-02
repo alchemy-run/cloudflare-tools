@@ -1,18 +1,30 @@
-import type { MiniflareOptions } from "miniflare";
-import { Miniflare } from "miniflare";
+import { Miniflare, type MiniflareOptions, type Response } from "miniflare";
 import path from "node:path";
 import type { OutputAsset, OutputChunk, RolldownOutput } from "rolldown";
+
+interface MiniflareInstance {
+  fetch(path: string): Promise<Response>;
+  fetchText(path: string): Promise<string>;
+  fetchJson<T>(path: string): Promise<T>;
+  [Symbol.asyncDispose]: () => Promise<void>;
+}
 
 export async function createMiniflare(
   output: RolldownOutput,
   options: MiniflareOptions = {},
-): Promise<Miniflare & { [Symbol.asyncDispose]: () => Promise<void> }> {
+): Promise<MiniflareInstance> {
   const miniflare = new Miniflare({
     modules: formatModules(output.output),
     ...options,
   });
   await miniflare.ready;
-  return Object.assign(miniflare, { [Symbol.asyncDispose]: () => miniflare.dispose() });
+  const fetch = (path: string) => miniflare.dispatchFetch(`http://localhost${path}`);
+  return {
+    fetch,
+    fetchText: (path: string) => fetch(path).then((response) => response.text()),
+    fetchJson: <T>(path: string) => fetch(path).then((response) => response.json() as Promise<T>),
+    [Symbol.asyncDispose]: () => miniflare.dispose(),
+  };
 }
 
 interface Module {

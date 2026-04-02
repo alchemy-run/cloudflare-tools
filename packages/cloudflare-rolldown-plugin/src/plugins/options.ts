@@ -17,7 +17,7 @@ const DEFAULT_RESOLVE_EXTENSIONS = [
   ".ctx",
 ];
 
-export function makeOptionsPlugin(pluginOptions: CloudflarePluginOptions): Plugin {
+export function makeOptionsPlugin(pluginOptions: CloudflarePluginOptions) {
   return {
     name: "rolldown-plugin-cloudflare:options",
     options(options) {
@@ -47,5 +47,5 @@ export function makeOptionsPlugin(pluginOptions: CloudflarePluginOptions): Plugi
       });
       return options;
     },
-  };
+  } satisfies Plugin;
 }

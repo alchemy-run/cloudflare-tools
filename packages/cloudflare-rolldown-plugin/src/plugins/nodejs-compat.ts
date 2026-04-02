@@ -1,15 +1,16 @@
-import type { CloudflarePluginOptions } from "#/plugin";
 import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import assert from "node:assert";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
+import type { CloudflarePluginOptions } from "../plugin.js";
+import { hasNodejsCompat } from "../utils.js";
 
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(`^(${nonPrefixedNodeModules.join("|")}|node:.+)$`);
 const VIRTUAL_MODULE_ID_REGEXP = /^virtual:nodejs-global-inject\/.+$/;
 
 export function makeNodejsCompatPlugin(options: CloudflarePluginOptions): RolldownPluginOption {
-  if (options.compatibilityFlags?.includes("nodejs_compat")) {
+  if (hasNodejsCompat(options.compatibilityFlags)) {
     return makeUnenvPlugin(options);
   }
   return makeNodeJsImportWarningPlugin();

@@ -1,5 +1,5 @@
-import { sanitizePath } from "#/sanitize-path";
 import type { Plugin } from "rolldown";
+import { sanitizePath } from "../utils.js";
 
 const WASM_INIT_QUERY = /\.wasm\?init$/;
 

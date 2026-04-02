@@ -1,6 +1,6 @@
-import { sanitizePath } from "#/sanitize-path";
 import path from "node:path";
 import { RolldownMagicString, type Plugin } from "rolldown";
+import { sanitizePath } from "../utils.js";
 
 const MODULE_RULES = [
   { type: "CompiledWasm", pattern: /\.wasm(\?module)?$/ },

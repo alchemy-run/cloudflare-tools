@@ -75,7 +75,7 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption
         }
         return [
           ...polyfill.map((module) => `import "${module}";`),
-          ...injectVirtualModules.keys().map((module) => `import "${module}";`),
+          ...Array.from(injectVirtualModules.keys()).map((module) => `import "${module}";`),
           code,
         ].join("\n");
       },

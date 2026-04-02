@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
+// oxlint-disable-next-line import/no-unassigned-import
 import "node:perf_hooks";
 import { stderr } from "./early-process-access";
 

@@ -8,13 +8,13 @@ describe("nodejs_compat", () => {
     const built = await buildFixture({
       fixture: "node-compat/index.ts",
       pluginOptions: {
-        compatibilityDate: "2026-03-10",
+        compatibilityDate: "2025-07-01",
         compatibilityFlags: ["nodejs_compat"],
       },
     });
 
     await using miniflare = await createMiniflare(built.output, {
-      compatibilityDate: "2026-03-10",
+      compatibilityDate: "2025-07-01",
       compatibilityFlags: ["nodejs_compat"],
     });
 

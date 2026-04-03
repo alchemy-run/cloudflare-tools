@@ -1,5 +1,6 @@
 import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import assert from "node:assert";
+import { createRequire } from "node:module";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
@@ -26,6 +27,7 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption
   }).env;
 
   const injectVirtualModules = makeInjectVirtualModules(inject);
+  const require = createRequire(import.meta.url);
 
   return [
     esmExternalRequirePlugin({
@@ -38,6 +40,17 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption
         filter: { id: Object.keys(injectVirtualModules) },
         handler(id) {
           return injectVirtualModules.get(id);
+        },
+      },
+    },
+    {
+      name: "rolldown-plugin-cloudflare:nodejs-compat:unenv-preset-imports",
+      resolveId: {
+        filter: { id: /^@cloudflare\/unenv-preset\// },
+        async handler(id, importer, options) {
+          const resolved = await this.resolve(id, importer, options);
+          if (resolved) return resolved;
+          return { id: require.resolve(id) };
         },
       },
     },

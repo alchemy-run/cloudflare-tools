@@ -40,7 +40,7 @@ export async function buildFixture(options: BuildFixtureOptions): Promise<BuiltF
   });
 
   try {
-    const output = await bundle.generate({
+    const output = await bundle.write({
       file: defaultOutputPath(fixture),
       format: "esm",
       sourcemap: true,
@@ -65,5 +65,5 @@ function defaultOutputPath(fixture: string): string {
     path.basename(path.dirname(fixture)) === "fixtures"
       ? path.basename(fixture, path.extname(fixture))
       : path.basename(path.dirname(fixture));
-  return path.join("dist", "test", fixtureName, "index.js");
+  return path.join("out", fixtureName, "index.js");
 }

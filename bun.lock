@@ -43,7 +43,7 @@
     },
     "packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "unenv": "^2.0.0-rc.24",

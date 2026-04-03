@@ -7,7 +7,6 @@ import type { CloudflarePluginOptions } from "../plugin.js";
 import { hasNodejsCompat } from "../utils.js";
 
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(`^(${nonPrefixedNodeModules.join("|")}|node:.+)$`);
-const VIRTUAL_MODULE_ID_REGEXP = /^virtual:nodejs-global-inject\/.+$/;
 
 export function makeNodejsCompatPlugin(options: CloudflarePluginOptions): RolldownPluginOption {
   if (hasNodejsCompat(options.compatibilityFlags)) {
@@ -35,16 +34,8 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption
     }),
     {
       name: "rolldown-plugin-cloudflare:nodejs-compat:injects",
-      resolveId: {
-        filter: { id: VIRTUAL_MODULE_ID_REGEXP },
-        handler(id) {
-          if (injectVirtualModules.has(id)) {
-            return { id };
-          }
-        },
-      },
       load: {
-        filter: { id: VIRTUAL_MODULE_ID_REGEXP },
+        filter: { id: Object.keys(injectVirtualModules) },
         handler(id) {
           return injectVirtualModules.get(id);
         },
@@ -75,7 +66,7 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption
         }
         return [
           ...polyfill.map((module) => `import "${module}";`),
-          ...Array.from(injectVirtualModules.keys()).map((module) => `import "${module}";`),
+          ...Object.keys(injectVirtualModules).map((module) => `import "${module}";`),
           code,
         ].join("\n");
       },

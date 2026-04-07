@@ -1,5 +1,7 @@
 # `@distilled.cloud/cloudflare-bundler`
 
+> Deprecated: prefer [`@distilled.cloud/cloudflare-rolldown-plugin`](https://www.npmjs.com/package/@distilled.cloud/cloudflare-rolldown-plugin) instead.
+
 Effect-native Cloudflare Workers bundler built around a common core API with a Rolldown backend.
 
 ## Install

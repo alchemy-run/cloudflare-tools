@@ -9,9 +9,8 @@ assert(
 assert(process.env.GITHUB_TOKEN, "GITHUB_TOKEN is not set");
 
 const { packageName, type } = parseArgs();
-const version = await updatePackageVersion();
-
 const packageDirectory = `packages/${packageName}`;
+const version = await updatePackageVersion();
 
 const previousTag = await getPreviousTag();
 const newTag = `${packageName}@${version}`;

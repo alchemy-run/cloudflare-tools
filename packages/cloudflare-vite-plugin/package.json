@@ -1,7 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-vite-plugin",
   "version": "0.0.0",
-  "private": true,
   "files": [
     "dist",
     "src"

@@ -10,6 +10,7 @@ on:
         options:
           - "cloudflare-bundler"
           - "cloudflare-rolldown-plugin"
+          - "cloudflare-vite-plugin"
       release-type:
         description: "Release type"
         required: true

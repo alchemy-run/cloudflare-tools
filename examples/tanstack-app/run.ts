@@ -4,8 +4,15 @@ import * as path from "node:path";
 
 interface Module {
   path: string;
-  type: "ESModule";
-  contents: string | Uint8Array<ArrayBuffer>;
+  type:
+    | "ESModule"
+    | "CommonJS"
+    | "Text"
+    | "Data"
+    | "CompiledWasm"
+    | "PythonModule"
+    | "PythonRequirement";
+  contents?: string | Uint8Array<ArrayBuffer> | undefined;
 }
 
 async function readModules(dir: string, parent?: string): Promise<Array<Module>> {
@@ -23,9 +30,10 @@ async function readModules(dir: string, parent?: string): Promise<Array<Module>>
         console.warn(`Skipping non-file: ${path.join(dir, file.name)}`);
         return;
       }
+      const type = file.name.endsWith(".js") ? "ESModule" : "Text";
       modules.push({
         path: path.join(parent ?? "", file.name),
-        type: "ESModule",
+        type,
         contents: await fs.readFile(path.join(dir, file.name), "utf-8"),
       });
     }),
@@ -34,14 +42,31 @@ async function readModules(dir: string, parent?: string): Promise<Array<Module>>
 }
 
 const modules = await readModules("dist/server");
-console.log(modules);
+console.log(modules.map((m) => ({ path: m.path, type: m.type, contents: m.contents?.length })));
 
 const miniflare = new mf.Miniflare({
+  port: 3000,
   modules,
   compatibilityDate: "2026-03-10",
   compatibilityFlags: ["nodejs_compat"],
   assets: {
     directory: path.resolve(__dirname, "./dist/client"),
+    routerConfig: {
+      has_user_worker: true,
+      invoke_user_worker_ahead_of_assets: false,
+      debug: true,
+    },
+    assetConfig: {
+      html_handling: "auto-trailing-slash",
+      not_found_handling: "none",
+      debug: true,
+      has_static_routing: false,
+    },
   },
 });
-await miniflare.ready;
+const ready = await miniflare.ready;
+console.log(ready.toString());
+
+// const res = await miniflare.dispatchFetch(ready);
+// assert.equal(res.status, 200);
+// await miniflare.dispose();

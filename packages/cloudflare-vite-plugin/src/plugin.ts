@@ -10,7 +10,8 @@
 // Note on plugins:
 // - The Vite plugin API is an extension of the Rollup plugin API. Technically in Vite 8, it's extending the Rolldown plugin option type, but Rolldown implements the same interface as Rollup. The @distilled.cloud/cloudflare-bundler package uses unplugin (which also extends the Rollup plugin API) as the baseline, so this shouldn't matter.
 
-import type { AdditionalModulesOptions } from "@distilled.cloud/cloudflare-bundler";
+import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
+import type { RolldownPluginOption } from "rolldown";
 import type * as vite from "vite";
 
 // This will contain:
@@ -25,9 +26,35 @@ export interface PluginOptions {
   bindings?: Array<unknown>;
   durableObjects?: Array<unknown>;
   workflows?: Array<unknown>;
-  additionalModules?: AdditionalModulesOptions;
 }
 
-export default function cloudflareVitePlugin(_options: PluginOptions = {}): vite.PluginOption {
-  return [];
+async function resolvePlugins(pluginOption: RolldownPluginOption): Promise<Array<vite.Plugin>> {
+  const plugins: Array<vite.Plugin> = [];
+  if (Array.isArray(pluginOption)) {
+    for (const plugin of pluginOption) {
+      plugins.push(...(await resolvePlugins(plugin)));
+    }
+  } else if (pluginOption) {
+    // @ts-expect-error - this doesn't work
+    plugins.push(await pluginOption);
+  }
+  return plugins;
+}
+
+export default async function cloudflareVitePlugin(
+  options: PluginOptions = {},
+): Promise<Array<vite.Plugin>> {
+  const plugins = await resolvePlugins(
+    cloudflare({
+      compatibilityDate: options.compatibilityDate,
+      compatibilityFlags: options.compatibilityFlags,
+    }),
+  );
+  return plugins.map((plugin) => ({
+    enforce: "pre",
+    applyToEnvironment(environment) {
+      return environment.name !== "client";
+    },
+    ...plugin,
+  }));
 }

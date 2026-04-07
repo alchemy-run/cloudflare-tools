@@ -35,7 +35,17 @@ const program = Effect.gen(function* () {
               } }`,
             },
           ],
-          bindings: [{ name: "TEST", service: { name: "rpc" } }],
+          bindings: [
+            { name: "TEST", service: { name: "rpc" } },
+            {
+              name: "CONTAINER",
+              durableObjectNamespace: { className: "MyContainer" },
+            },
+          ],
+          durableObjectNamespaces: [
+            { className: "MyContainer", container: { imageName: "nginx:latest" } },
+          ],
+          containerEngine: { localDocker: { socketPath: "unix:///var/run/docker.sock" } },
         },
       },
       {

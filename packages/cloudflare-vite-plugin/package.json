@@ -9,9 +9,6 @@
     "prepublishOnly": "bun run build:clean",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "unplugin": "catalog:"
-  },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/cloudflare-bundler": "workspace:*",

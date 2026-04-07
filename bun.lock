@@ -43,7 +43,7 @@
     },
     "packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "unenv": "^2.0.0-rc.24",
@@ -97,9 +97,9 @@
   },
   "catalog": {
     "@cloudflare/workers-types": "^4.20260310.1",
-    "@effect/platform-node": "^4.0.0-beta.38",
-    "@effect/vitest": "^4.0.0-beta.38",
-    "effect": "^4.0.0-beta.38",
+    "@effect/platform-node": "^4.0.0-beta.43",
+    "@effect/vitest": "^4.0.0-beta.43",
+    "effect": "^4.0.0-beta.43",
     "typescript": "^6.0.2",
     "unplugin": "^3.0.0",
     "vitest": "^4.1.1",

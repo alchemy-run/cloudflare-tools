@@ -199,10 +199,27 @@ export interface Worker_Binding_MemoryCacheLimits {
   maxTotalValueSize?: number;
 }
 
+/**
+ * Matches {@link Worker_DurableObjectNamespace_ContainerOptions} in config.capnp.
+ */
+export interface Worker_DurableObjectNamespace_ContainerOptions {
+  /**
+   * Image name to be used to create the container using supported provider.
+   * By default, we pull the "latest" tag of this image.
+   */
+  imageName: string;
+}
+
 export type Worker_DurableObjectNamespace = {
   className?: string;
   preventEviction?: boolean;
   enableSql?: boolean;
+  /**
+   * If present, Durable Objects in this namespace have attached containers.
+   * workerd will talk to the configured container engine to start containers for each
+   * Durable Object based on the given image.
+   */
+  container?: Worker_DurableObjectNamespace_ContainerOptions;
 } & ({ uniqueKey?: string } | { ephemeralLocal?: Void });
 
 export type ExternalServer = { address?: string } & (

@@ -5,7 +5,7 @@ Rolldown plugin for Cloudflare Workers.
 ## Install
 
 ```bash
-bun add -d @distilled.cloud/cloudflare-rolldown-plugin rolldown
+bun add @distilled.cloud/cloudflare-rolldown-plugin rolldown
 ```
 
 ## Usage

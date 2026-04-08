@@ -142,6 +142,10 @@ export const RuntimeLive = Layer.effect(
                 }),
             ),
           );
+          yield* Effect.addFinalizer(() => Effect.ignore(process.kill({ killSignal: "SIGKILL" })));
+          yield* Effect.forkChild(
+            process.stderr.pipe(Stream.runForEach((log) => Effect.logError(log.toString()))),
+          );
           const count =
             (config.sockets?.length ?? 0) +
             (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +

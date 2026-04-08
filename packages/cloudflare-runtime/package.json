@@ -6,8 +6,7 @@
   "scripts": {
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests",
-    "prepublishOnly": "bun run build:clean",
-    "typecheck": "tsc --noEmit"
+    "prepublishOnly": "bun run build:clean"
   },
   "dependencies": {
     "capnp-es": "^0.0.14",

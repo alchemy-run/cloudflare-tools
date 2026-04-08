@@ -20,7 +20,10 @@ await $`git commit -m "chore(release): ${packageName} v${version}"`;
 await $`git tag -a ${newTag} -m ${newTag}`;
 await $`git push --follow-tags`;
 
-await $.cwd(packageDirectory)`npm publish --provenance --access public`;
+const cwd = $.cwd(packageDirectory);
+await cwd`bun pm pack`;
+const tarball = `distilled.cloud-${packageName}-${version}.tgz`;
+await cwd`npm publish ${tarball} --provenance --access public`;
 
 if (previousTag) {
   await $`bunx changelogithub --from ${previousTag} --to ${newTag}`;

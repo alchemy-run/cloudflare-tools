@@ -22,7 +22,11 @@ await $`git push --follow-tags`;
 
 await $.cwd(packageDirectory)`npm publish --provenance --access public`;
 
-await $`bunx changelogithub --from ${previousTag} --to ${newTag}`;
+if (previousTag) {
+  await $`bunx changelogithub --from ${previousTag} --to ${newTag}`;
+} else {
+  await $`bunx changelogithub --to ${newTag}`;
+}
 
 function parseArgs() {
   const packageName = process.argv[2];

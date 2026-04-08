@@ -7,7 +7,7 @@
     "rolldown",
     "workers"
   ],
-  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/rolldown-plugin-cloudflare#readme",
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/cloudflare-rolldown-plugin#readme",
   "bugs": {
     "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
   },

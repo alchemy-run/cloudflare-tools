@@ -114,15 +114,11 @@
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
       "devDependencies": {
-        "@cloudflare/workers-types": "catalog:",
-        "@effect/platform-node": "catalog:",
-        "@effect/vitest": "catalog:",
         "rolldown": "^1.0.0-rc.13",
         "vite": "^8.0.3",
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "catalog:",
         "vite": "^8.0.0",
       },
     },

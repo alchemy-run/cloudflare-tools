@@ -1,12 +1,12 @@
 import * as Effect from "effect/Effect";
-import { Miniflare } from "miniflare";
+import { Miniflare, type MiniflareOptions } from "miniflare";
 import * as path from "node:path";
+import type { ModuleType } from "../../src/Module.js";
 import type { BundleConfig, BundleResult } from "./types.js";
 
 export interface MiniflareRunnerOptions {
   readonly bundle: BundleResult;
   readonly config: BundleConfig;
-  readonly bindings?: Record<string, unknown>;
 }
 
 export interface RunningWorker {
@@ -24,18 +24,23 @@ export function createRunner(
   return Effect.try({
     try: () => {
       const { bundle, config } = options;
-      const miniflareOptions: ConstructorParameters<typeof Miniflare>[0] = {
+
+      type Options = Extract<MiniflareOptions, { modules: Array<any> }>;
+      type MiniflareModule = Options["modules"][number];
+
+      const miniflareOptions: Options = {
         modules: bundle.modules
           .filter((module) => module.type !== "SourceMap")
-          .map((module) => ({
-            type: module.type,
-            path: path.resolve(bundle.outDir, module.name),
-            contents: module.content,
-          })),
+          .map(
+            (module): MiniflareModule => ({
+              type: module.type as Exclude<ModuleType, "SourceMap">,
+              path: path.resolve(bundle.outDir, module.name),
+              contents: module.content as Uint8Array<ArrayBuffer>,
+            }),
+          ),
         modulesRoot: bundle.outDir,
         compatibilityDate: config.compatibilityDate,
         compatibilityFlags: [...config.compatibilityFlags],
-        bindings: options.bindings,
       };
 
       if (config.durableObjects && config.durableObjects.length > 0) {

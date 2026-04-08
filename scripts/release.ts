@@ -15,6 +15,8 @@ const version = await updatePackageVersion();
 const previousTag = await getPreviousTag();
 const newTag = `${packageName}@${version}`;
 
+await $`bun run build`;
+
 await $`git add ${packageDirectory}/package.json`;
 await $`git commit -m "chore(release): ${packageName} v${version}"`;
 await $`git tag -a ${newTag} -m ${newTag}`;

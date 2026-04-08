@@ -1,7 +1,7 @@
 import cloudflare, {
   type CloudflarePluginOptions,
 } from "@distilled.cloud/cloudflare-rolldown-plugin";
-import type { RolldownPluginOption } from "rolldown";
+import type * as rolldown from "rolldown";
 import type * as vite from "vite";
 
 export async function buildPlugins(options: CloudflarePluginOptions): Promise<Array<vite.Plugin>> {
@@ -11,29 +11,34 @@ export async function buildPlugins(options: CloudflarePluginOptions): Promise<Ar
       compatibilityFlags: options.compatibilityFlags,
     }),
   );
-  return plugins.map(
-    (plugin): vite.Plugin => ({
-      enforce: "pre",
-      applyToEnvironment(environment) {
-        return environment.name !== "client";
-      },
-      ...plugin,
-    }),
-  );
+  return plugins.map((plugin): vite.Plugin => {
+    if ("name" in plugin && plugin.name.startsWith("rolldown-plugin-cloudflare:")) {
+      return {
+        enforce: "pre",
+        applyToEnvironment(environment) {
+          return environment.name !== "client";
+        },
+        ...plugin,
+      } as vite.Plugin;
+    }
+    return plugin as vite.Plugin;
+  });
 }
 
-async function resolvePlugins(pluginOption: RolldownPluginOption): Promise<Array<vite.Plugin>> {
-  const plugins: Array<vite.Plugin> = [];
-  const awaited = await pluginOption;
-  if (!awaited) {
-    return plugins;
+async function resolvePlugins(
+  pluginOption: rolldown.RolldownPluginOption,
+): Promise<Array<rolldown.RolldownPlugin>> {
+  const result: Array<rolldown.RolldownPlugin> = [];
+  const plugins = await pluginOption;
+  if (!plugins) {
+    return result;
   }
-  if (Array.isArray(awaited)) {
-    for (const plugin of awaited) {
-      plugins.push(...(await resolvePlugins(plugin)));
+  if (Array.isArray(plugins)) {
+    for (const plugin of plugins) {
+      result.push(...(await resolvePlugins(plugin)));
     }
-  } else if ("name" in awaited) {
-    plugins.push(awaited as vite.Plugin);
+  } else {
+    result.push(plugins);
   }
-  return plugins;
+  return result;
 }

@@ -4,7 +4,6 @@
   "exclude": ["dist"],
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["bun"]
   },
   "references": [{ "path": "./tsconfig.workers.json" }]

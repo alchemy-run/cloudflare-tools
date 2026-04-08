@@ -1,7 +1,7 @@
 import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import assert from "node:assert";
 import { createRequire } from "node:module";
-import type { Plugin, RolldownPluginOption } from "rolldown";
+import type { Plugin } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
 import type { CloudflarePluginOptions } from "../plugin.js";
@@ -10,14 +10,14 @@ import { hasNodejsCompat } from "../utils.js";
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(`^(${nonPrefixedNodeModules.join("|")}|node:.+)$`);
 const VIRTUAL_MODULE_ID_REGEXP = /^virtual:nodejs-global-inject\/.+$/;
 
-export function makeNodejsCompatPlugin(options: CloudflarePluginOptions): RolldownPluginOption {
+export function makeNodejsCompatPlugin(options: CloudflarePluginOptions): Plugin | Array<Plugin> {
   if (hasNodejsCompat(options.compatibilityFlags)) {
     return makeUnenvPlugin(options);
   }
   return makeNodeJsImportWarningPlugin();
 }
 
-function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption {
+function makeUnenvPlugin(options: CloudflarePluginOptions): Array<Plugin> {
   const { alias, inject, external, polyfill } = defineEnv({
     presets: [
       getCloudflarePreset({
@@ -96,7 +96,7 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): RolldownPluginOption
   ];
 }
 
-function makeNodeJsImportWarningPlugin(): RolldownPluginOption {
+function makeNodeJsImportWarningPlugin(): Plugin {
   const imports = new Map<string, Set<string>>();
   return {
     name: "rolldown-plugin-cloudflare:nodejs-compat:import-warnings",

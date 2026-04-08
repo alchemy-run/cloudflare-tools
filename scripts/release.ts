@@ -28,7 +28,9 @@ function parseArgs() {
   const packageName = process.argv[2];
   const type = process.argv[3];
   assert(
-    packageName === "cloudflare-rolldown-plugin" || packageName === "cloudflare-bundler",
+    packageName === "cloudflare-rolldown-plugin" ||
+      packageName === "cloudflare-bundler" ||
+      packageName === "cloudflare-vite-plugin",
     `"${packageName}" is not a valid package name`,
   );
   assert(

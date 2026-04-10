@@ -1,6 +1,7 @@
 import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import assert from "node:assert";
 import { createRequire } from "node:module";
+import path from "node:path";
 import type { Plugin } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
@@ -98,21 +99,24 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): Array<Plugin> {
 
 function makeNodeJsImportWarningPlugin(): Plugin {
   const imports = new Map<string, Set<string>>();
+  let root = process.cwd();
   return {
-    name: "rolldown-plugin-cloudflare:nodejs-compat:import-warnings",
+    name: "rolldown-plugin-cloudflare:nodejs-import-warnings",
+    options(options) {
+      if (options.cwd) {
+        root = options.cwd;
+      }
+    },
     resolveId: {
       filter: { id: NODE_BUILTIN_MODULES_REGEXP },
-      async handler(id, importer, options) {
-        const resolved = await this.resolve(id, importer, options);
-        if (!resolved) {
-          if (importer) {
-            if (!imports.has(id)) {
-              imports.set(id, new Set());
-            }
-            imports.get(id)?.add(importer);
+      async handler(id, importer) {
+        if (importer) {
+          if (!imports.has(id)) {
+            imports.set(id, new Set());
           }
-          return { id, external: true };
+          imports.get(id)?.add(importer);
         }
+        return { id, external: true };
       },
     },
     buildStart() {
@@ -120,14 +124,16 @@ function makeNodeJsImportWarningPlugin(): Plugin {
     },
     buildEnd() {
       if (imports.size > 0) {
+        let message =
+          `Unexpected Node.js imports. ` +
+          `Do you need to enable the "nodejs_compat" compatibility flag? ` +
+          "Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n";
         for (const [id, importers] of imports.entries()) {
-          this.warn(
-            [
-              `Node.js built-in module "${id}" was imported without \`nodejs_compat\`. Imported from:`,
-              ...Array.from(importers).map((importer) => `- ${importer}`),
-            ].join("\n"),
-          );
+          for (const importer of importers) {
+            message += ` - "${id}" imported from "${path.relative(root, importer)}"\n`;
+          }
         }
+        this.warn(message);
       }
     },
   };

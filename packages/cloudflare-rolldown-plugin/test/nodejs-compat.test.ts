@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { makeNodejsCompatPlugin } from "../src/plugins/nodejs-compat.js";
 import { buildFixture } from "./utils/build-fixture";
 import { createMiniflare } from "./utils/miniflare";
@@ -74,10 +74,8 @@ describe("nodejs_compat", () => {
     const warnings: Array<string> = [];
     plugin.buildStart?.call({});
 
-    const resolve = vi.fn().mockResolvedValue(undefined);
-    const context = { resolve };
-    await plugin.resolveId?.handler?.call(context, "node:fs", "test/fixtures/example-a.ts", {});
-    await plugin.resolveId?.handler?.call(context, "node:fs", "test/fixtures/example-b.ts", {});
+    await plugin.resolveId?.handler?.call({}, "node:fs", "test/fixtures/example-a.ts", {});
+    await plugin.resolveId?.handler?.call({}, "node:fs", "test/fixtures/example-b.ts", {});
 
     plugin.buildEnd?.call({
       warn(message: string) {
@@ -85,12 +83,13 @@ describe("nodejs_compat", () => {
       },
     });
 
-    expect(resolve).toHaveBeenCalledTimes(2);
+    console.log(warnings);
+
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain(
-      'Node.js built-in module "node:fs" was imported without `nodejs_compat`.',
-    );
-    expect(warnings[0]).toContain("- test/fixtures/example-a.ts");
-    expect(warnings[0]).toContain("- test/fixtures/example-b.ts");
+    expect(warnings[0]).toContain("Unexpected Node.js imports.");
+    expect(warnings[0]).toContain('Do you need to enable the "nodejs_compat" compatibility flag?');
+    expect(warnings[0]).toContain("https://developers.cloudflare.com/workers/runtime-apis/nodejs/");
+    expect(warnings[0]).toContain('- "node:fs" imported from "test/fixtures/example-a.ts"');
+    expect(warnings[0]).toContain('- "node:fs" imported from "test/fixtures/example-b.ts"');
   });
 });

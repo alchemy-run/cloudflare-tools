@@ -83,8 +83,6 @@ describe("nodejs_compat", () => {
       },
     });
 
-    console.log(warnings);
-
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("Unexpected Node.js imports.");
     expect(warnings[0]).toContain('Do you need to enable the "nodejs_compat" compatibility flag?');

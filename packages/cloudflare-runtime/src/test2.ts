@@ -51,7 +51,7 @@ const program = Effect.gen(function* () {
   yield* Effect.never;
 });
 
-const layers = Layer.provideMerge(
+export const layers = Layer.provideMerge(
   Layer.merge(
     Layer.provide(Bindings.SessionProviderLive, Bindings.AccessLive),
     Runtime.RuntimeLive,
@@ -59,11 +59,11 @@ const layers = Layer.provideMerge(
   Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, Auth.fromEnv()),
 );
 
-const controller = new AbortController();
-process.on("SIGINT", () => {
-  controller.abort();
-});
+// const controller = new AbortController();
+// process.on("SIGINT", () => {
+//   controller.abort();
+// });
 
-await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(layers)), {
-  signal: controller.signal,
-});
+// await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(layers)), {
+//   signal: controller.signal,
+// });

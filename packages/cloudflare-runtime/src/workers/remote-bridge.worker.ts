@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { deserializeHeaders, serializeHeaders } from "../bridge1/interface.worker.ts";
 import type {
   RpcAbort,
   RpcRequest,
@@ -65,16 +66,7 @@ export class RemoteBridge extends DurableObject<Env> {
         if (!promise) {
           return;
         }
-        const headers = new Headers();
-        for (const [key, value] of Object.entries(json.data.headers)) {
-          if (Array.isArray(value)) {
-            for (const v of value) {
-              headers.append(key, v);
-            }
-          } else {
-            headers.set(key, value);
-          }
-        }
+        const headers = deserializeHeaders(json.data.headers);
         if ("body" in json.data) {
           promise.resolve(new Response(json.data.body, { status: json.data.status, headers }));
         } else {
@@ -107,7 +99,7 @@ export class RemoteBridge extends DurableObject<Env> {
         this.responseStreams.delete(json.id);
         break;
       }
-      case "upgrade.websocket": {
+      case "websocket.upgrade": {
         const promise = this.queue.get(json.id);
         if (!promise) {
           return;
@@ -182,7 +174,7 @@ export class RemoteBridge extends DurableObject<Env> {
       data: {
         url: request.url,
         method: request.method,
-        headers: Object.fromEntries(request.headers),
+        headers: serializeHeaders(request.headers),
         body: request.body ? await request.text() : null,
       },
     };

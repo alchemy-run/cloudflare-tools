@@ -6,7 +6,9 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env) {
-    if (request.url.includes("/ws")) {
+    if (request.url.includes("/hello")) {
+      return new Response("Hello, world!");
+    } else if (request.url.includes("/ws")) {
       const [server, client] = Object.values(new WebSocketPair());
       server.accept();
       server.addEventListener("open", () => {

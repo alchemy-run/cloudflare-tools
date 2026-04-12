@@ -91,7 +91,10 @@
   "ignorePatterns": ["workers-sdk", "examples/tanstack-app/src/routeTree.gen.ts"],
   "overrides": [
     {
-      "files": ["**/src/**/*.ts"],
+      "files": [
+        "packages/cloudflare-rolldown-plugin/src/**/*.ts",
+        "packages/cloudflare-vite-plugin/src/**/*.ts"
+      ],
       "rules": {
         "eslint/no-console": "error"
       }

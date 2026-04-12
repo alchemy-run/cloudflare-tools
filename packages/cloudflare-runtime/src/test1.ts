@@ -33,7 +33,7 @@ const program = Effect.gen(function* () {
         name: "local-bridge",
         worker: {
           compatibilityDate: "2026-03-10",
-          modules: [yield* bundleAsEsModule("src/bridge3/local.worker.ts")],
+          modules: [yield* bundleAsEsModule("src/bridge/local.worker.ts")],
           bindings: [
             { name: "USER_WORKER", service: { name: "user-worker" } },
             { name: "BRIDGE", durableObjectNamespace: { className: "LocalBridge" } },
@@ -73,7 +73,7 @@ const program = Effect.gen(function* () {
         name: "remote-bridge",
         worker: {
           compatibilityDate: "2026-03-10",
-          modules: [yield* bundleAsEsModule("src/bridge3/remote.worker.ts")],
+          modules: [yield* bundleAsEsModule("src/bridge/remote.worker.ts")],
           bindings: [{ name: "BRIDGE", durableObjectNamespace: { className: "RemoteBridge" } }],
           durableObjectNamespaces: [{ className: "RemoteBridge", uniqueKey: "remote-bridge" }],
           durableObjectStorage: {

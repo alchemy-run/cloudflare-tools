@@ -1,31 +1,6 @@
 import { newWebSocketRpcSession } from "capnweb";
 import { DurableObject } from "cloudflare:workers";
-
-export interface WebSocketBridge {
-  message(id: string, message: string | ArrayBuffer): Promise<void>;
-  close(id: string, code: number, reason: string, wasClean: boolean): Promise<void>;
-  error(id: string, error: unknown): Promise<void>;
-}
-
-export interface Bridge {
-  fetch(request: Request): Promise<
-    | {
-        kind: "response";
-        response: Response;
-      }
-    | {
-        kind: "upgrade";
-        status: number;
-        headers: Headers;
-        id: string;
-      }
-    | {
-        kind: "error";
-        error: Error;
-      }
-  >;
-  websocket: WebSocketBridge;
-}
+import type { Bridge, WebSocketBridge } from "./api.shared";
 
 interface Env {
   USER_WORKER: Fetcher;
@@ -86,6 +61,9 @@ export class LocalBridge extends DurableObject<Env> {
           error: error as Error,
         };
       }
+    },
+    queue: async (name, messages, metadata) => {
+      return await this.env.USER_WORKER.queue(name, messages, metadata);
     },
     websocket: {
       message: async (id: string, message: string | ArrayBuffer) => {

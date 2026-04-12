@@ -1,17 +1,49 @@
 import { RpcSession, type RpcTransport } from "capnweb";
-import { DurableObject } from "cloudflare:workers";
-import type { Bridge, WebSocketBridge } from "./local.worker";
+import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import type { Bridge, WebSocketBridge } from "./api.shared";
 
 interface Env {
   BRIDGE: DurableObjectNamespace<RemoteBridge>;
   BRIDGE_SECRET: string;
 }
 
-export default {
-  fetch: async (request: Request, env: Env) => {
-    return env.BRIDGE.getByName("global").fetch(request);
-  },
-};
+export default class extends WorkerEntrypoint<Env> {
+  get bridge() {
+    return this.env.BRIDGE.getByName("global");
+  }
+
+  async fetch(request: Request) {
+    return await this.bridge.fetch(request);
+  }
+
+  async queue(batch: MessageBatch<unknown>) {
+    const result = await this.bridge.queue(
+      batch.queue,
+      batch.messages.map((message) => ({
+        id: message.id,
+        timestamp: message.timestamp,
+        attempts: message.attempts,
+        body: message.body,
+      })),
+      batch.metadata,
+    );
+    if (result.ackAll) {
+      batch.ackAll();
+    }
+    if (result.retryBatch.retry) {
+      batch.retryAll({ delaySeconds: result.retryBatch.delaySeconds });
+    }
+    const messages = Object.groupBy(batch.messages, (message) => message.id);
+    for (const id of result.explicitAcks) {
+      messages[id]?.forEach((message) => message.ack());
+    }
+    for (const retryMessage of result.retryMessages) {
+      messages[retryMessage.msgId]?.forEach((message) =>
+        message.retry({ delaySeconds: retryMessage.delaySeconds }),
+      );
+    }
+  }
+}
 
 export class RemoteBridge extends DurableObject {
   transport?: Transport;
@@ -78,6 +110,14 @@ export class RemoteBridge extends DurableObject {
       case "error":
         return new Response(result.error.message, { status: 500 });
     }
+  }
+
+  async queue(
+    name: string,
+    messages: Array<ServiceBindingQueueMessage>,
+    metadata?: MessageBatchMetadata,
+  ) {
+    return await this.main?.queue(name, messages, metadata);
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {

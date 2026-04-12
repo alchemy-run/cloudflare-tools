@@ -35,12 +35,23 @@ export interface RpcResponse {
   data: {
     status: number;
     headers: Record<string, string | Array<string>>;
-    body: string | null;
+    body?: string | null;
   };
 }
 
+export interface RpcResponseChunk {
+  type: "response.chunk";
+  id: string;
+  data: string;
+}
+
+export interface RpcResponseEnd {
+  type: "response.end";
+  id: string;
+}
+
 export interface RpcUpgradeWebSocket {
-  type: "upgrade.websocket";
+  type: "websocket.upgrade";
   id: string;
   data: {
     status: number;

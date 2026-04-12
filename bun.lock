@@ -107,9 +107,11 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:",
+        "@distilled.cloud/cloudflare": "^0.7.12",
         "@distilled.cloud/cloudflare-rolldown-plugin": "^0.1.2",
         "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
+        "capnweb": "^0.6.1",
         "rolldown": "^1.0.0-rc.14",
         "vitest": "catalog:",
       },
@@ -228,6 +230,8 @@
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@4.0.0", "", {}, "sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA=="],
 
+    "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@0.7.12", "", { "dependencies": { "@distilled.cloud/core": "0.7.12", "effect": "4.0.0-beta.43" } }, "sha512-NKudsnDxvNf0ddl3HHw4U/yXYOdcqiO+/FqxVDBjR1Twzp3GAUeb/g1Sga15hjI47cPJUkttoGEvASBQEhsa8g=="],
+
     "@distilled.cloud/cloudflare-bundler": ["@distilled.cloud/cloudflare-bundler@workspace:packages/cloudflare-bundler"],
 
     "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@workspace:packages/cloudflare-rolldown-plugin"],
@@ -235,6 +239,8 @@
     "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@workspace:packages/cloudflare-runtime"],
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:packages/cloudflare-vite-plugin"],
+
+    "@distilled.cloud/core": ["@distilled.cloud/core@0.7.12", "", { "dependencies": { "effect": "4.0.0-beta.43" } }, "sha512-1vPhoNXUVAogZZcGguKlkEISkAC+c3BF+UIzT24jsbHRsHpCoPqYuye+0Fn6tm879SWrVhIkhjb5AdYe1gMNzQ=="],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.43", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.43" }, "peerDependencies": { "effect": "^4.0.0-beta.43" } }, "sha512-nMZ9JsD6CzJNQ+5pDUFbPw7PSZdQdTQ092MbYrocVtvlf6qEFU/hji3ITvRIOX7eabyQ8AUyp55qFPQUeq+GIA=="],
 
@@ -717,6 +723,8 @@
     "caniuse-lite": ["caniuse-lite@1.0.30001787", "", {}, "sha512-mNcrMN9KeI68u7muanUpEejSLghOKlVhRqS/Za2IeyGllJ9I9otGpR9g3nsw7n4W378TE/LyIteA0+/FOZm4Kg=="],
 
     "capnp-es": ["capnp-es@0.0.14", "", { "peerDependencies": { "typescript": "^5.7.3" }, "optionalPeers": ["typescript"], "bin": { "capnp-es": "dist/compiler/capnpc-js.mjs", "capnpc-js": "dist/compiler/capnpc-js.mjs", "capnpc-dts": "dist/compiler/capnpc-dts.mjs", "capnpc-ts": "dist/compiler/capnpc-ts.mjs" } }, "sha512-8lWj4GJISiqRSlAJGkWpI4Azib7QY5UDIkqxeHcI7aAnXVk9SFuWxl1Fme+2HhzNANV0WTJqwUZvvXvloc3sBA=="],
+
+    "capnweb": ["capnweb@0.6.1", "", {}, "sha512-fmhV26QPd1ewf5R74h55oVZnGwIcSaRMzbfLQUy8+zOBjuTmT3KXoT8wxHvnp1m9Ht9BoUUS5ZwNLoVLfQTyBg=="],
 
     "chai": ["chai@6.2.2", "", {}, "sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg=="],
 

@@ -4,7 +4,10 @@
   "exclude": ["dist"],
   "compilerOptions": {
     "outDir": "dist",
-    "types": ["bun"]
+    "types": ["bun"],
+    "paths": {
+      "#/*": ["./src/*"]
+    }
   },
   "references": [{ "path": "./tsconfig.workers.json" }]
 }

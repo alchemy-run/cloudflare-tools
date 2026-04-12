@@ -3,6 +3,8 @@ import type {
   RpcAbort,
   RpcRequest,
   RpcResponse,
+  RpcResponseChunk,
+  RpcResponseEnd,
   RpcUpgradeWebSocket,
   RpcWebSocketClose,
   RpcWebSocketMessage,
@@ -21,6 +23,7 @@ export default {
 
 export class RemoteBridge extends DurableObject<Env> {
   queue = new Map<string, PromiseWithResolvers<Response>>();
+  responseStreams = new Map<string, WritableStreamDefaultWriter<string>>();
 
   async fetch(request: Request) {
     if (
@@ -53,7 +56,9 @@ export class RemoteBridge extends DurableObject<Env> {
       | RpcResponse
       | RpcUpgradeWebSocket
       | RpcWebSocketMessage
-      | RpcWebSocketClose;
+      | RpcWebSocketClose
+      | RpcResponseChunk
+      | RpcResponseEnd;
     switch (json.type) {
       case "response": {
         const promise = this.queue.get(json.id);
@@ -70,13 +75,36 @@ export class RemoteBridge extends DurableObject<Env> {
             headers.set(key, value);
           }
         }
-        promise.resolve(
-          new Response(json.data.body, {
-            status: json.data.status,
-            headers,
-          }),
-        );
+        if ("body" in json.data) {
+          promise.resolve(new Response(json.data.body, { status: json.data.status, headers }));
+        } else {
+          const stream = new TransformStream<string, string>();
+          this.responseStreams.set(json.id, stream.writable.getWriter());
+          promise.resolve(
+            new Response(stream.readable.pipeThrough(new TextEncoderStream()), {
+              status: json.data.status,
+              headers,
+            }),
+          );
+        }
         this.queue.delete(json.id);
+        break;
+      }
+      case "response.chunk": {
+        const stream = this.responseStreams.get(json.id);
+        if (!stream) {
+          return;
+        }
+        stream.write(json.data);
+        break;
+      }
+      case "response.end": {
+        const stream = this.responseStreams.get(json.id);
+        if (!stream) {
+          return;
+        }
+        stream.close();
+        this.responseStreams.delete(json.id);
         break;
       }
       case "upgrade.websocket": {

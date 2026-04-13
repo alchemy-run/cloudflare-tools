@@ -16,14 +16,11 @@ const deployBridge = Effect.gen(function* () {
   const listQueues = yield* queues.listQueues;
   const createConsumer = yield* queues.createConsumer;
   const queue = yield* createQueue({
-    queueName: "remote-bindings",
+    queueName: "my-john-queue",
     accountId,
-  }).pipe(
-    Effect.catch(() =>
-      queues.listQueues({ accountId }).pipe(Effect.map((queues) => queues.result[0])),
-    ),
-  );
+  });
   console.log("queue deployed", queue);
+  // console.log("queue deployed", queue);
   // const worker = yield* createBetaWorker({
   //   name: "remote-bindings",
   //   subdomain: { enabled: true },
@@ -49,6 +46,7 @@ const deployBridge = Effect.gen(function* () {
     queueId: queue.queueId!,
     accountId,
     scriptName: "remote-bindings",
+    type: "worker",
   });
   console.log("consumer deployed", consumer);
 });
@@ -57,27 +55,30 @@ const program = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
   const sessionProvider = yield* Bindings.SessionProvider;
   const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
-  const queue = yield* queues.createQueue({
-    queueName: "my-queue",
-    accountId,
-  });
-  const { remoteBindings, workerBindings } = yield* Bindings.buildBindings([
+  const { remoteBindings, workerBindings, additionalServices } = yield* Bindings.buildBindings([
     {
       name: "KV",
       type: "kv_namespace",
       namespaceId: "c2399b3754ea4199a765e8c388eb2603",
     },
+    {
+      name: "QUEUE",
+      type: "queue",
+      queueName: "my-john-queue",
+    },
   ]);
   const options: Bindings.SessionOptions = {
     accountId,
-    scriptName: "remote-bindings",
+    scriptName: "my-john-worker",
     bindings: remoteBindings,
   };
   const loopback = yield* Effect.acquireRelease(
     Effect.sync(() =>
       Bun.serve({
         async fetch() {
+          console.log("[serve] loopback fetch", options);
           const config = await Effect.runPromise(sessionProvider.create(options));
+          console.log("[serve] loopback config", config);
           return Response.json(config);
         },
       }),
@@ -102,6 +103,7 @@ const program = Effect.gen(function* () {
         },
       },
       ...(yield* Bindings.Services(loopback.port!)),
+      ...additionalServices,
     ],
   });
   yield* Effect.log(server);

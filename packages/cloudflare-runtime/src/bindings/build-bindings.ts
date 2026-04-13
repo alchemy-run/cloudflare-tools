@@ -134,16 +134,18 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           };
         }
         case "queue": {
-          remoteBindings.push({
-            name: binding.name,
-            type: "queue",
-            queueName: binding.queueName,
-            raw: true,
-          });
-          return {
-            name: binding.name,
-            queue: makeServiceDesignator(binding.name),
-          };
+          // This makes the whole remote worker fail with 503 errors!
+          // remoteBindings.push({
+          //   name: binding.name,
+          //   type: "queue",
+          //   queueName: binding.queueName,
+          //   raw: true,
+          // });
+          // return {
+          //   name: binding.name,
+          //   queue: makeServiceDesignator(binding.name),
+          // };
+          return yield* new UnsupportedBindingError(binding);
         }
         case "r2_bucket": {
           remoteBindings.push({

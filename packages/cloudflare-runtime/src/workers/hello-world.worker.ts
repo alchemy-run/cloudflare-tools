@@ -7,7 +7,12 @@ interface Env {
 
 export default {
   async fetch(request, env) {
-    if (request.url.includes("/hello")) {
+    if (request.url.includes("/queue")) {
+      const message = await env.QUEUE.send({
+        message: "Hello, world!",
+      });
+      return Response.json(message);
+    } else if (request.url.includes("/hello")) {
       return new Response("Hello, world!");
     } else if (request.url.includes("/ws")) {
       const [server, client] = Object.values(new WebSocketPair());

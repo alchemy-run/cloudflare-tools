@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
-    "miniflare": "^4.20260329.0",
+    "miniflare": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

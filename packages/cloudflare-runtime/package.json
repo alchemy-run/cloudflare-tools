@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "capnp-es": "^0.0.14",
-    "workerd": "^1.20260317.1"
+    "workerd": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
-    "@distilled.cloud/cloudflare": "^0.7.12",
-    "@distilled.cloud/cloudflare-rolldown-plugin": "^0.1.2",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "capnweb": "^0.6.1",

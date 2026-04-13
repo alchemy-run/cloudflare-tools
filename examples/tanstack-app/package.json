@@ -34,9 +34,9 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
     "jsdom": "^28.1.0",
-    "miniflare": "^4.20260401.0",
-    "typescript": "^5.7.2",
-    "vite": "^8.0.0"
+    "miniflare": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

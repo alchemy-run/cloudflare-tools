@@ -1,4 +1,4 @@
-import type { ServiceDesignator, Worker_Binding } from "#/runtime/config.types";
+import type { Service, ServiceDesignator, Worker_Binding } from "#/runtime/config.types";
 import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -10,21 +10,13 @@ export type Binding = Exclude<
 >;
 
 class UnsupportedBindingError extends Data.TaggedError("UnsupportedBindingError")<{
-  name: string;
-  type: string;
+  message: string;
+  binding: Binding;
 }> {}
-
-function makeServiceDesignator(binding: string): ServiceDesignator {
-  return {
-    name: "remote-bindings:client",
-    props: {
-      json: JSON.stringify({ binding }),
-    },
-  };
-}
 
 export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
   const remoteBindings: Array<SessionOptions.Binding> = [];
+  const additionalServices: Array<Service> = [];
   const workerBindings = yield* Effect.forEach(
     bindings,
     Effect.fn(function* (binding): Effect.fn.Return<Worker_Binding, UnsupportedBindingError> {
@@ -42,18 +34,18 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
               innerBindings: [
                 {
                   name: "fetcher",
-                  service: makeServiceDesignator(binding.name),
+                  service: makeRemoteBindingServiceDesignator(binding.name),
                 },
               ],
             },
           };
         }
         case "analytics_engine":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "assets":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "browser":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "d1": {
           remoteBindings.push({
             name: binding.name,
@@ -68,7 +60,7 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
               innerBindings: [
                 {
                   name: "fetcher",
-                  service: makeServiceDesignator(binding.name),
+                  service: makeRemoteBindingServiceDesignator(binding.name),
                 },
               ],
             },
@@ -81,11 +73,11 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           };
         }
         case "dispatch_namespace":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "durable_object_namespace":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "hyperdrive":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "images": {
           remoteBindings.push({
             name: binding.name,
@@ -99,7 +91,7 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
               innerBindings: [
                 {
                   name: "fetcher",
-                  service: makeServiceDesignator(binding.name),
+                  service: makeRemoteBindingServiceDesignator(binding.name),
                 },
               ],
             },
@@ -120,13 +112,13 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           });
           return {
             name: binding.name,
-            kvNamespace: makeServiceDesignator(binding.name),
+            kvNamespace: makeRemoteBindingServiceDesignator(binding.name),
           };
         }
         case "mtls_certificate":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "pipelines":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "plain_text": {
           return {
             name: binding.name,
@@ -145,7 +137,7 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           //   name: binding.name,
           //   queue: makeServiceDesignator(binding.name),
           // };
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         }
         case "r2_bucket": {
           remoteBindings.push({
@@ -157,11 +149,11 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           });
           return {
             name: binding.name,
-            r2Bucket: makeServiceDesignator(binding.name),
+            r2Bucket: makeRemoteBindingServiceDesignator(binding.name),
           };
         }
         case "secret_key":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "secret_text": {
           return {
             name: binding.name,
@@ -169,9 +161,9 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           };
         }
         case "secrets_store_secret":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "send_email":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "service": {
           remoteBindings.push({
             name: binding.name,
@@ -181,7 +173,7 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           });
           return {
             name: binding.name,
-            service: makeServiceDesignator(binding.name),
+            service: makeRemoteBindingServiceDesignator(binding.name),
           };
         }
         case "text_blob": {
@@ -191,7 +183,7 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           };
         }
         case "vectorize":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
         case "version_metadata": {
           return {
             name: binding.name,
@@ -215,7 +207,7 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           };
         }
         case "workflow":
-          return yield* new UnsupportedBindingError(binding);
+          return yield* makeUnsupportedBindingError(binding);
       }
     }),
     { concurrency: "unbounded" },
@@ -223,5 +215,22 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
   return {
     remoteBindings,
     workerBindings,
+    additionalServices,
   };
 });
+
+function makeUnsupportedBindingError(binding: Binding): UnsupportedBindingError {
+  return new UnsupportedBindingError({
+    message: `Unsupported binding: ${binding.type}`,
+    binding,
+  });
+}
+
+function makeRemoteBindingServiceDesignator(binding: string): ServiceDesignator {
+  return {
+    name: "remote-bindings:client",
+    props: {
+      json: JSON.stringify({ binding }),
+    },
+  };
+}

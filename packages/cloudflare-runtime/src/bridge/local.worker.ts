@@ -1,7 +1,12 @@
 import type { RpcStub } from "capnweb";
 import { newWebSocketRpcSession } from "capnweb";
 import { DurableObject } from "cloudflare:workers";
-import type { Bridge, WebSocketBridge } from "./api.shared";
+import {
+  LOCAL_CONFIGURE_PATH,
+  REMOTE_WEBSOCKET_PATH,
+  type Bridge,
+  type WebSocketBridge,
+} from "./api.shared";
 
 interface Env {
   USER_WORKER: Fetcher;
@@ -15,9 +20,43 @@ export default {
 };
 
 export class LocalBridge extends DurableObject<Env> {
-  remote?: RpcStub<WebSocketBridge>;
+  private remote?: RpcStub<WebSocketBridge>;
 
-  localMain: Bridge = {
+  async fetch(request: Request) {
+    if (request.method === "POST" && request.url.endsWith(LOCAL_CONFIGURE_PATH)) {
+      if (this.remote) {
+        this.remote[Symbol.dispose]();
+      }
+      const json = await request.json<{ remote: string }>();
+      try {
+        this.remote = await this.connectToRemote(json.remote);
+        return new Response("OK");
+      } catch (error) {
+        return new Response(error instanceof Error ? error.message : String(error), {
+          status: 500,
+        });
+      }
+    }
+    return new Response("Not Implemented", { status: 501 });
+  }
+
+  private async connectToRemote(remote: string) {
+    const url = new URL(remote);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = REMOTE_WEBSOCKET_PATH;
+    const ws = new WebSocket(url.toString());
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener("open", () => {
+        resolve();
+      });
+      ws.addEventListener("error", (event) => {
+        reject(event.error);
+      });
+    });
+    return newWebSocketRpcSession<WebSocketBridge>(ws, this.localMain);
+  }
+
+  private readonly localMain: Bridge = {
     fetch: async (request: Request) => {
       console.log("[local] fetching", request.url);
       const response = await this.env.USER_WORKER.fetch(request);
@@ -79,16 +118,4 @@ export class LocalBridge extends DurableObject<Env> {
       console.log("[local] websocket error", id, error);
     },
   };
-
-  async fetch(request: Request) {
-    if (request.method === "POST" && request.url.endsWith("/__configure")) {
-      if (this.remote) {
-        this.remote[Symbol.dispose]();
-      }
-      const json = await request.json<{ remote: string }>();
-      this.remote = newWebSocketRpcSession<WebSocketBridge>(json.remote, this.localMain);
-      return new Response("OK");
-    }
-    return new Response("Not found", { status: 404 });
-  }
 }

@@ -10,7 +10,6 @@ const program = Effect.gen(function* () {
   const bridge = yield* Bridge.Bridge;
   const runtime = yield* Runtime.Runtime;
   const sessionProvider = yield* Bindings.SessionProvider;
-  const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
   const { remoteBindings, workerBindings, additionalServices } = yield* Bindings.buildBindings([
     {
       name: "KV",
@@ -19,7 +18,7 @@ const program = Effect.gen(function* () {
     },
   ]);
   const options: Bindings.SessionOptions = {
-    accountId,
+    accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
     scriptName: "my-john-worker",
     bindings: remoteBindings,
   };
@@ -66,8 +65,8 @@ const program = Effect.gen(function* () {
       ...additionalServices,
     ],
   });
-  yield* Effect.log({ server, remoteBridgeUrl });
   yield* bridge.configure("http://localhost:1338", remoteBridgeUrl);
+  yield* Effect.log({ server, remoteBridgeUrl });
   yield* Effect.never;
 });
 

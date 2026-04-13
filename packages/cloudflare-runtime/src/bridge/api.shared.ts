@@ -1,3 +1,6 @@
+export const LOCAL_CONFIGURE_PATH = "/__distilled/bridge/configure";
+export const REMOTE_WEBSOCKET_PATH = "/__distilled/bridge/websocket";
+
 export interface WebSocketBridge {
   webSocketMessage(id: string, message: string | ArrayBuffer): Promise<void>;
   webSocketClose(id: string, code: number, reason: string, wasClean: boolean): Promise<void>;

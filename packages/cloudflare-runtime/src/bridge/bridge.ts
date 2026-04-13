@@ -8,8 +8,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
+import { LOCAL_CONFIGURE_PATH } from "./api.shared";
 
-const TAG = "distilled:remote-bridge:2026.04.13-13:41";
+const TAG = "distilled:remote-bridge:2026.04.13-14:53";
 
 export class BridgeError extends Data.TaggedError("BridgeError")<{
   message: string;
@@ -79,18 +80,24 @@ export const BridgeLive = Layer.effect(
             (cause) => new BridgeError({ message: "Failed to deploy remote bridge", cause }),
           ),
         );
-        yield* createScriptSubdomain({ accountId, scriptName, enabled: true }).pipe(
+        yield* createScriptSubdomain({
+          accountId,
+          scriptName,
+          enabled: true,
+        }).pipe(
           Effect.mapError(
             (cause) => new BridgeError({ message: "Failed to create subdomain", cause }),
           ),
         );
         return;
       },
-      (_, scriptName) =>
-        subdomain.pipe(
-          Effect.map(({ subdomain }) => `https://${scriptName}.${subdomain}.workers.dev`),
-          Effect.tap(() => Effect.forkDetach(tail.create(scriptName))),
-        ),
+      (effect, scriptName) =>
+        Effect.zipWith(
+          subdomain,
+          effect,
+          ({ subdomain }) => `https://${scriptName}.${subdomain}.workers.dev`,
+          { concurrent: true },
+        ).pipe(Effect.tap(() => Effect.forkDetach(tail.create(scriptName)))),
     );
 
     const local = Effect.fn(function* (userWorkerName: string) {
@@ -116,30 +123,28 @@ export const BridgeLive = Layer.effect(
     const configure = Effect.fn((local: string, remote: string) =>
       Effect.tryPromise({
         try: async () => {
-          const localUrl = new URL(local);
-          localUrl.pathname = "/__configure";
-          const remoteWebSocketUrl = new URL(remote);
-          remoteWebSocketUrl.protocol = remoteWebSocketUrl.protocol === "https:" ? "wss:" : "ws:";
-          remoteWebSocketUrl.pathname = "/__connect";
+          const localUrl = new URL(LOCAL_CONFIGURE_PATH, local);
           const response = await fetch(localUrl, {
             method: "POST",
-            body: JSON.stringify({ remote: remoteWebSocketUrl.toString() }),
+            body: JSON.stringify({ remote }),
           });
-          return response;
+          return response.ok
+            ? ({ ok: true } as const)
+            : ({ ok: false, error: await response.text() } as const);
         },
-        catch: (error) => new BridgeError({ message: "Failed to configure bridge", cause: error }),
+        catch: (error) =>
+          new BridgeError({ message: "Failed to fetch local bridge", cause: error }),
       }).pipe(
         Effect.flatMap((response) =>
           response.ok
             ? Effect.void
             : Effect.fail(
                 new BridgeError({
-                  message: "Failed to configure bridge",
-                  cause: response,
+                  message: `Failed to configure bridge: ${response.error}`,
                 }),
               ),
         ),
-        Effect.tap(() => Effect.log("Bridge configured")),
+        Effect.tap(() => Effect.logDebug("Bridge configured")),
       ),
     );
 

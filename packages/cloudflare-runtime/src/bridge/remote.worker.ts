@@ -1,6 +1,6 @@
 import { RpcSession, type RpcStub, type RpcTransport } from "capnweb";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import type { Bridge, WebSocketBridge } from "./api.shared";
+import { REMOTE_WEBSOCKET_PATH, type Bridge, type WebSocketBridge } from "./api.shared";
 
 interface Env {
   BRIDGE: DurableObjectNamespace<RemoteBridge>;
@@ -90,7 +90,10 @@ export class RemoteBridge extends DurableObject {
   }
 
   async fetch(request: Request) {
-    if (request.headers.get("upgrade") === "websocket" && request.url.endsWith("/__connect")) {
+    if (
+      request.headers.get("upgrade") === "websocket" &&
+      request.url.endsWith(REMOTE_WEBSOCKET_PATH)
+    ) {
       const [server, client] = Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(server, ["local"]);
       this.makeSession(server);

@@ -1,26 +1,12 @@
 import { kVoid, type Service } from "#/runtime/config.types";
 import { bundleAsEsModule } from "#/utils/bundle";
 import * as Effect from "effect/Effect";
-import { SessionProvider, type SessionOptions } from "./session";
 
-export const WorkerLive = Effect.fn(function* (options: SessionOptions) {
-  const session = yield* SessionProvider;
-  const server = yield* Effect.acquireRelease(
-    // TODO: effectify
-    Effect.sync(() =>
-      Bun.serve({
-        fetch: async () => {
-          const config = await Effect.runPromise(session.create(options));
-          return Response.json(config);
-        },
-      }),
-    ),
-    (server) => Effect.promise(() => server.stop()),
-  );
-  const loopback = {
-    name: "remote-bindings:loopback",
+export const Services = Effect.fn(function* (configPort: number) {
+  const config = {
+    name: "remote-bindings:config",
     external: {
-      address: `localhost:${server.port}`,
+      address: `localhost:${configPort}`,
       http: {},
     },
   } satisfies Service;
@@ -36,7 +22,7 @@ export const WorkerLive = Effect.fn(function* (options: SessionOptions) {
         },
         {
           name: "LOOPBACK",
-          service: { name: loopback.name },
+          service: { name: config.name },
         },
       ],
       durableObjectNamespaces: [
@@ -57,7 +43,5 @@ export const WorkerLive = Effect.fn(function* (options: SessionOptions) {
       globalOutbound: { name: outbound.name },
     },
   } satisfies Service;
-  return {
-    services: [client, outbound, loopback],
-  };
+  return [client, outbound, config];
 });

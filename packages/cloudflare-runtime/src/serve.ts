@@ -1,67 +1,13 @@
-import * as queues from "@distilled.cloud/cloudflare/queues";
-import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Bindings from "./bindings";
+import * as Bridge from "./bridge/bridge";
 import { layers, run } from "./layers";
-import { kVoid } from "./runtime/config.types";
 import * as Runtime from "./runtime/runtime";
-import { bundle, bundleAsEsModule } from "./utils/bundle";
-
-const deployBridge = Effect.gen(function* () {
-  const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
-  const createBetaWorker = yield* workers.createBetaWorker;
-  const createBetaWorkerVersion = yield* workers.createBetaWorkerVersion;
-  const createQueue = yield* queues.createQueue;
-  const getQueue = yield* queues.getQueue;
-  const listQueues = yield* queues.listQueues;
-  const createConsumer = yield* queues.createConsumer;
-  const queue = yield* createQueue({
-    queueName: "my-john-queue",
-    accountId,
-  });
-  console.log("queue deployed", queue);
-  // console.log("queue deployed", queue);
-  // const worker = yield* createBetaWorker({
-  //   name: "remote-bindings",
-  //   subdomain: { enabled: true },
-  //   accountId,
-  // });
-  // console.log("worker deployed", worker);
-  const files = yield* bundle("src/bridge/remote.worker.ts");
-  const version = yield* createBetaWorkerVersion({
-    workerId: "remote-bindings",
-    accountId,
-    compatibilityDate: "2026-03-10",
-    mainModule: "worker.js",
-    modules: [
-      {
-        name: "worker.js",
-        contentBase64: Buffer.from(files[0].code).toString("base64"),
-        contentType: "application/javascript+module",
-      },
-    ],
-    bindings: [
-      {
-        name: "BRIDGE",
-        type: "durable_object_namespace",
-        className: "RemoteBridge",
-      },
-    ],
-    // migrations: { newSqliteClasses: ["RemoteBridge"] },
-    deploy: true,
-  });
-  console.log("version deployed", version);
-  const consumer = yield* createConsumer({
-    queueId: queue.queueId!,
-    accountId,
-    scriptName: "remote-bindings",
-    type: "worker",
-  });
-  console.log("consumer deployed", consumer);
-});
+import { bundleAsEsModule } from "./utils/bundle";
 
 const program = Effect.gen(function* () {
+  const bridge = yield* Bridge.Bridge;
   const runtime = yield* Runtime.Runtime;
   const sessionProvider = yield* Bindings.SessionProvider;
   const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
@@ -70,11 +16,6 @@ const program = Effect.gen(function* () {
       name: "KV",
       type: "kv_namespace",
       namespaceId: "c2399b3754ea4199a765e8c388eb2603",
-    },
-    {
-      name: "QUEUE",
-      type: "queue",
-      queueName: "my-john-queue",
     },
   ]);
   const options: Bindings.SessionOptions = {
@@ -95,6 +36,7 @@ const program = Effect.gen(function* () {
     ),
     (loopback) => Effect.promise(() => loopback.stop()),
   );
+  const remoteBridgeUrl = yield* bridge.deploy("remote-bindings");
   const server = yield* runtime.serve({
     sockets: [
       {
@@ -105,7 +47,7 @@ const program = Effect.gen(function* () {
       {
         name: "bridge",
         address: "127.0.0.1:1338",
-        service: { name: "bridge" },
+        service: { name: "bridge:local" },
       },
     ],
     services: [
@@ -117,36 +59,13 @@ const program = Effect.gen(function* () {
           bindings: workerBindings,
         },
       },
-      {
-        name: "bridge",
-        worker: {
-          compatibilityDate: "2026-03-10",
-          compatibilityFlags: ["experimental", "enable_request_signal"],
-          modules: [yield* bundleAsEsModule("src/bridge/local.worker.ts")],
-          bindings: [
-            { name: "USER_WORKER", service: { name: "user" } },
-            { name: "BRIDGE", durableObjectNamespace: { className: "LocalBridge" } },
-          ],
-          durableObjectNamespaces: [
-            { className: "LocalBridge", ephemeralLocal: kVoid, preventEviction: true },
-          ],
-        },
-      },
+      yield* bridge.local("user"),
       ...(yield* Bindings.Services(loopback.port!)),
       ...additionalServices,
     ],
   });
-  yield* Effect.log(server);
-  yield* Effect.promise(async () => {
-    const response = await fetch("http://localhost:1338/__configure", {
-      method: "POST",
-      body: JSON.stringify({ remote: "wss://remote-bindings.johnroyal.workers.dev/__connect" }),
-    });
-    console.log("[serve] configure response", {
-      status: response.status,
-      text: await response.text(),
-    });
-  });
+  yield* Effect.log({ server, remoteBridgeUrl });
+  yield* bridge.configure("http://localhost:1338", remoteBridgeUrl);
   yield* Effect.never;
 });
 

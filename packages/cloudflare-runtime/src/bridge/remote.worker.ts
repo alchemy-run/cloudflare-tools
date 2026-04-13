@@ -82,6 +82,13 @@ export class RemoteBridge extends DurableObject {
     this.remoteMain = this.session.getRemoteMain();
   }
 
+  private destroySession() {
+    this.remoteMain?.[Symbol.dispose]();
+    this.remoteMain = undefined;
+    this.session = undefined;
+    this.transport = undefined;
+  }
+
   async fetch(request: Request) {
     if (request.headers.get("upgrade") === "websocket" && request.url.endsWith("/__connect")) {
       const [server, client] = Object.values(new WebSocketPair());
@@ -134,7 +141,7 @@ export class RemoteBridge extends DurableObject {
     if (tags[0] === "remote") {
       this.remoteMain?.webSocketClose(tags[1], code, reason, wasClean);
     } else {
-      this.remoteMain?.[Symbol.dispose]();
+      this.destroySession();
     }
   }
 

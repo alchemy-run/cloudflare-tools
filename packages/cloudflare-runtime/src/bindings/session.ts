@@ -139,13 +139,12 @@ export const SessionProviderLive = Layer.effect(
     return SessionProvider.of({
       create: Effect.fn(
         function* (options) {
-          const [previewToken, { url, headers }] = yield* Effect.all(
+          const [{ previewToken }, { url, headers }] = yield* Effect.all(
             [
               createPreviewUploadToken(options).pipe(
                 Effect.flatMap((cfPreviewUploadConfigToken) =>
                   uploadPreviewScript(options, cfPreviewUploadConfigToken),
                 ),
-                Effect.map((result) => result.previewToken),
               ),
               getWorkerHost(options).pipe(
                 Effect.flatMap(

@@ -1,4 +1,4 @@
-import { kVoid, type Service, type ServiceDesignator } from "#/runtime/config.types";
+import { kVoid, type Service } from "#/runtime/config.types";
 import { bundleAsEsModule } from "#/utils/bundle";
 import * as Effect from "effect/Effect";
 import { SessionProvider, type SessionOptions } from "./session";
@@ -59,11 +59,5 @@ export const WorkerLive = Effect.fn(function* (options: SessionOptions) {
   } satisfies Service;
   return {
     services: [client, outbound, loopback],
-    make: (binding: string): ServiceDesignator => ({
-      name: client.name,
-      props: {
-        json: JSON.stringify({ binding }),
-      },
-    }),
   };
 });

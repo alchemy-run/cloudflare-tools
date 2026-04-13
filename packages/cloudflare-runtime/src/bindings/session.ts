@@ -95,7 +95,7 @@ export const SessionProviderLive = Layer.effect(
     ) {
       const script = yield* bundle("src/bindings/workers/remote.worker.ts").pipe(
         Effect.map(
-          ({ output }) =>
+          (output) =>
             new File([output[0].code], "worker.js", {
               type: "application/javascript+module",
             }),

@@ -1,7 +1,0 @@
-{
-  "extends": "../../../tsconfig.base.json",
-  "include": ["./bundles/**/*.ts", "./harness/**/*.ts", "../vitest.config.ts", "../src/**/*.ts"],
-  "compilerOptions": {
-    "noEmit": true
-  }
-}

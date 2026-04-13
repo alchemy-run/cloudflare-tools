@@ -1,6 +1,0 @@
-{
-  "$schema": "../../../node_modules/wrangler/config-schema.json",
-  "name": "module-rules-wasm-module",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-07-01"
-}

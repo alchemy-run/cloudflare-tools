@@ -1,7 +1,0 @@
-{
-  "$schema": "../../../node_modules/wrangler/config-schema.json",
-  "name": "module-rules-advanced",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-07-01",
-  "rules": [{ "type": "Text", "globs": ["**/*.custom"], "fallthrough": true }]
-}

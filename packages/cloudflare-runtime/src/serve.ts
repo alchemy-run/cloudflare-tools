@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Bindings from "./bindings";
 import { layers, run } from "./layers";
+import { kVoid } from "./runtime/config.types";
 import * as Runtime from "./runtime/runtime";
 import { bundle, bundleAsEsModule } from "./utils/bundle";
 
@@ -40,6 +41,15 @@ const deployBridge = Effect.gen(function* () {
         contentType: "application/javascript+module",
       },
     ],
+    bindings: [
+      {
+        name: "BRIDGE",
+        type: "durable_object_namespace",
+        className: "RemoteBridge",
+      },
+    ],
+    // migrations: { newSqliteClasses: ["RemoteBridge"] },
+    deploy: true,
   });
   console.log("version deployed", version);
   const consumer = yield* createConsumer({
@@ -92,6 +102,11 @@ const program = Effect.gen(function* () {
         address: "127.0.0.1:1337",
         service: { name: "user" },
       },
+      {
+        name: "bridge",
+        address: "127.0.0.1:1338",
+        service: { name: "bridge" },
+      },
     ],
     services: [
       {
@@ -102,12 +117,37 @@ const program = Effect.gen(function* () {
           bindings: workerBindings,
         },
       },
+      {
+        name: "bridge",
+        worker: {
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: ["experimental", "enable_request_signal"],
+          modules: [yield* bundleAsEsModule("src/bridge/local.worker.ts")],
+          bindings: [
+            { name: "USER_WORKER", service: { name: "user" } },
+            { name: "BRIDGE", durableObjectNamespace: { className: "LocalBridge" } },
+          ],
+          durableObjectNamespaces: [
+            { className: "LocalBridge", ephemeralLocal: kVoid, preventEviction: true },
+          ],
+        },
+      },
       ...(yield* Bindings.Services(loopback.port!)),
       ...additionalServices,
     ],
   });
   yield* Effect.log(server);
+  yield* Effect.promise(async () => {
+    const response = await fetch("http://localhost:1338/__configure", {
+      method: "POST",
+      body: JSON.stringify({ remote: "wss://remote-bindings.johnroyal.workers.dev/__connect" }),
+    });
+    console.log("[serve] configure response", {
+      status: response.status,
+      text: await response.text(),
+    });
+  });
   yield* Effect.never;
 });
 
-await run(deployBridge.pipe(Effect.scoped, Effect.provide(layers)));
+await run(program.pipe(Effect.scoped, Effect.provide(layers)));

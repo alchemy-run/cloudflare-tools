@@ -1,9 +1,9 @@
 import { bundle } from "#/utils/bundle";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ServiceMap from "effect/ServiceMap";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Access from "./access";
 import type { RemoteProxyConfig } from "./workers/config.shared";
@@ -43,7 +43,7 @@ export declare namespace SessionOptions {
   }
 }
 
-export class SessionProvider extends ServiceMap.Service<
+export class SessionProvider extends Context.Service<
   SessionProvider,
   {
     readonly create: (options: SessionOptions) => Effect.Effect<RemoteProxyConfig, SessionError>;

@@ -1,9 +1,9 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { PlatformError } from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
@@ -30,7 +30,7 @@ export const ControlMessage = Schema.Union([
 ]);
 export type ControlMessage = typeof ControlMessage.Type;
 
-export class Runtime extends ServiceMap.Service<
+export class Runtime extends Context.Service<
   Runtime,
   {
     readonly compatibilityDate: string;

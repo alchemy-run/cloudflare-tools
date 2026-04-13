@@ -1,9 +1,9 @@
 import { cachedFunction } from "#/utils/cached-function";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as ServiceMap from "effect/ServiceMap";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
@@ -15,7 +15,7 @@ export class AccessError extends Schema.TaggedErrorClass<AccessError>(
   cause: Schema.optional(Schema.Defect),
 }) {}
 
-export class Access extends ServiceMap.Service<
+export class Access extends Context.Service<
   Access,
   {
     readonly getAccessHeaders: (

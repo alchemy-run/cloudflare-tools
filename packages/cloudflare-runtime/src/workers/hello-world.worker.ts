@@ -2,10 +2,11 @@
 
 interface Env {
   KV: KVNamespace;
+  QUEUE: Queue;
 }
 
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request, env) {
     if (request.url.includes("/hello")) {
       return new Response("Hello, world!");
     } else if (request.url.includes("/ws")) {
@@ -56,4 +57,10 @@ export default {
       });
     }
   },
-};
+  queue: async (batch) => {
+    for (const message of batch.messages) {
+      console.log(message.body);
+      message.ack();
+    }
+  },
+} satisfies ExportedHandler<Env>;

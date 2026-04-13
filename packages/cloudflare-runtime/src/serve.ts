@@ -1,13 +1,66 @@
+import * as queues from "@distilled.cloud/cloudflare/queues";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Bindings from "./bindings";
 import { layers, run } from "./layers";
 import * as Runtime from "./runtime/runtime";
-import { bundleAsEsModule } from "./utils/bundle";
+import { bundle, bundleAsEsModule } from "./utils/bundle";
+
+const deployBridge = Effect.gen(function* () {
+  const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+  const createBetaWorker = yield* workers.createBetaWorker;
+  const createBetaWorkerVersion = yield* workers.createBetaWorkerVersion;
+  const createQueue = yield* queues.createQueue;
+  const getQueue = yield* queues.getQueue;
+  const listQueues = yield* queues.listQueues;
+  const createConsumer = yield* queues.createConsumer;
+  const queue = yield* createQueue({
+    queueName: "remote-bindings",
+    accountId,
+  }).pipe(
+    Effect.catch(() =>
+      queues.listQueues({ accountId }).pipe(Effect.map((queues) => queues.result[0])),
+    ),
+  );
+  console.log("queue deployed", queue);
+  // const worker = yield* createBetaWorker({
+  //   name: "remote-bindings",
+  //   subdomain: { enabled: true },
+  //   accountId,
+  // });
+  // console.log("worker deployed", worker);
+  const files = yield* bundle("src/bridge/remote.worker.ts");
+  const version = yield* createBetaWorkerVersion({
+    workerId: "remote-bindings",
+    accountId,
+    compatibilityDate: "2026-03-10",
+    mainModule: "worker.js",
+    modules: [
+      {
+        name: "worker.js",
+        contentBase64: Buffer.from(files[0].code).toString("base64"),
+        contentType: "application/javascript+module",
+      },
+    ],
+  });
+  console.log("version deployed", version);
+  const consumer = yield* createConsumer({
+    queueId: queue.queueId!,
+    accountId,
+    scriptName: "remote-bindings",
+  });
+  console.log("consumer deployed", consumer);
+});
 
 const program = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
   const sessionProvider = yield* Bindings.SessionProvider;
+  const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+  const queue = yield* queues.createQueue({
+    queueName: "my-queue",
+    accountId,
+  });
   const { remoteBindings, workerBindings } = yield* Bindings.buildBindings([
     {
       name: "KV",
@@ -16,7 +69,7 @@ const program = Effect.gen(function* () {
     },
   ]);
   const options: Bindings.SessionOptions = {
-    accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
+    accountId,
     scriptName: "remote-bindings",
     bindings: remoteBindings,
   };
@@ -55,4 +108,4 @@ const program = Effect.gen(function* () {
   yield* Effect.never;
 });
 
-await run(program.pipe(Effect.scoped, Effect.provide(layers)));
+await run(deployBridge.pipe(Effect.scoped, Effect.provide(layers)));

@@ -4,7 +4,7 @@ import * as Bindings from "./bindings";
 import * as Bridge from "./bridge/bridge";
 import { layers, run } from "./layers";
 import * as Runtime from "./runtime/runtime";
-import { bundleAsEsModule } from "./utils/bundle";
+import * as Bundle from "./utils/bundle";
 
 const program = Effect.gen(function* () {
   const bridge = yield* Bridge.Bridge;
@@ -55,7 +55,9 @@ const program = Effect.gen(function* () {
         name: "user",
         worker: {
           compatibilityDate: "2026-03-10",
-          modules: [yield* bundleAsEsModule("src/workers/hello-world.worker.ts")],
+          modules: yield* Bundle.bundle("src/workers/hello-world.worker.ts").pipe(
+            Effect.flatMap(Bundle.bundleOutputToWorkerd),
+          ),
           bindings: workerBindings,
         },
       },

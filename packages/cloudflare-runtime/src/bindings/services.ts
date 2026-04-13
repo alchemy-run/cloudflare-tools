@@ -1,5 +1,5 @@
 import { kVoid, type Service } from "#/runtime/config.types";
-import { bundleAsEsModule } from "#/utils/bundle";
+import * as Bundle from "#/utils/bundle";
 import * as Effect from "effect/Effect";
 
 export const Services = Effect.fn(function* (configPort: number) {
@@ -14,7 +14,9 @@ export const Services = Effect.fn(function* (configPort: number) {
     name: "remote-bindings:outbound",
     worker: {
       compatibilityDate: "2026-03-10",
-      modules: [yield* bundleAsEsModule("src/bindings/workers/outbound.worker.ts")],
+      modules: yield* Bundle.bundle("src/bindings/workers/outbound.worker.ts").pipe(
+        Effect.flatMap(Bundle.bundleOutputToWorkerd),
+      ),
       bindings: [
         {
           name: "PROXY",
@@ -39,7 +41,9 @@ export const Services = Effect.fn(function* (configPort: number) {
     name: "remote-bindings:client",
     worker: {
       compatibilityDate: "2026-03-10",
-      modules: [yield* bundleAsEsModule("src/bindings/workers/client.worker.ts")],
+      modules: yield* Bundle.bundle("src/bindings/workers/client.worker.ts").pipe(
+        Effect.flatMap(Bundle.bundleOutputToWorkerd),
+      ),
       globalOutbound: { name: outbound.name },
     },
   } satisfies Service;

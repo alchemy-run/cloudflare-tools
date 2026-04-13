@@ -1,5 +1,5 @@
 import { kVoid, type Service } from "#/runtime/config.types";
-import { bundle, bundleAsEsModule } from "#/utils/bundle";
+import * as Bundle from "#/utils/bundle";
 import * as Tail from "#/utils/tail";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
@@ -50,12 +50,15 @@ export const BridgeLive = Layer.effect(
         if (existing?.tags?.includes(TAG)) {
           return;
         }
+        const files = yield* Bundle.bundle("src/bridge/remote.worker.ts").pipe(
+          Effect.flatMap(Bundle.bundleOutputToFiles),
+        );
         yield* putScript({
           scriptName,
           accountId,
           metadata: {
             compatibilityDate: "2026-03-10",
-            mainModule: "worker.js",
+            mainModule: files[0].name,
             bindings: [
               {
                 name: "BRIDGE",
@@ -70,14 +73,7 @@ export const BridgeLive = Layer.effect(
                 },
             tags: [TAG],
           },
-          files: [
-            yield* bundle("src/bridge/remote.worker.ts").pipe(
-              Effect.map(
-                ([entry]) =>
-                  new File([entry.code], "worker.js", { type: "application/javascript+module" }),
-              ),
-            ),
-          ],
+          files,
         }).pipe(
           Effect.mapError(
             (cause) => new BridgeError({ message: "Failed to deploy remote bridge", cause }),
@@ -103,7 +99,9 @@ export const BridgeLive = Layer.effect(
         worker: {
           compatibilityDate: "2026-03-10",
           compatibilityFlags: ["experimental", "enable_request_signal"],
-          modules: [yield* bundleAsEsModule("src/bridge/local.worker.ts")],
+          modules: yield* Bundle.bundle("src/bridge/local.worker.ts").pipe(
+            Effect.flatMap(Bundle.bundleOutputToWorkerd),
+          ),
           bindings: [
             { name: "USER_WORKER", service: { name: userWorkerName } },
             { name: "BRIDGE", durableObjectNamespace: { className: "LocalBridge" } },

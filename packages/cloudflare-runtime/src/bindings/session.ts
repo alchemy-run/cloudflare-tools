@@ -1,4 +1,4 @@
-import { bundle } from "#/utils/bundle";
+import * as Bundle from "#/utils/bundle";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -93,13 +93,8 @@ export const SessionProviderLive = Layer.effect(
       options: SessionOptions,
       cfPreviewUploadConfigToken: string,
     ) {
-      const script = yield* bundle("src/bindings/workers/remote.worker.ts").pipe(
-        Effect.map(
-          (output) =>
-            new File([output[0].code], "worker.js", {
-              type: "application/javascript+module",
-            }),
-        ),
+      const files = yield* Bundle.bundle("src/bindings/workers/remote.worker.ts").pipe(
+        Effect.flatMap(Bundle.bundleOutputToFiles),
       );
       return yield* createScriptEdgePreview({
         accountId: options.accountId,
@@ -122,9 +117,9 @@ export const SessionProviderLive = Layer.effect(
         metadata: {
           compatibilityDate: "2025-04-28",
           bindings: options.bindings,
-          mainModule: script.name,
+          mainModule: files[0].name,
         },
-        files: [script],
+        files,
       }).pipe(Effect.timeout(30_000));
     });
 

@@ -1,58 +1,59 @@
+import type { Worker_Module } from "#/runtime/config.types";
 import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as Effect from "effect/Effect";
-import { flow } from "effect/Function";
-import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
-import * as Rolldown from "rolldown";
+import path from "node:path";
+import type { BundleOutput } from "./bundle.vendor";
+import { build } from "./bundle.vendor";
 
-type Output = [Rolldown.OutputChunk, ...Array<Rolldown.OutputChunk | Rolldown.OutputAsset>];
+export function bundle(entry: string): Effect.Effect<BundleOutput> {
+  return build({ input: entry, plugins: [cloudflare()] }).pipe(Effect.orDie);
+}
 
-export const bundle = Effect.fn((entry: string) =>
-  Effect.promise(async (): Promise<Output> => {
-    const bundle = await Rolldown.rolldown({
-      input: entry,
-      plugins: [cloudflare()],
-    });
-    const { output } = await bundle.generate({
-      file: "worker.js",
-      format: "esm",
-      minify: false,
-    });
-    await bundle.close();
-    return output;
-  }),
-);
+export function bundleOutputToWorkerd(bundle: BundleOutput): Effect.Effect<Array<Worker_Module>> {
+  return Effect.sync(() => {
+    const modules: Array<Worker_Module> = [];
+    for (const file of bundle.files) {
+      if (file.path.endsWith(".map") || file.content instanceof Uint8Array) {
+        continue;
+      }
+      modules.push({
+        name: file.path,
+        esModule: file.content,
+      });
+    }
+    return modules;
+  });
+}
 
-const transformRolldownOutput = (output: Output) => ({
-  name: "worker.js",
-  esModule: output[0].code,
-});
-
-export const bundleAsEsModule = flow(bundle, Effect.map(transformRolldownOutput));
-
-export const watch = (entry: string) =>
-  Stream.callback<Output>((queue) =>
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const watcher = Rolldown.watch({
-          input: entry,
-          plugins: [
-            cloudflare(),
-            {
-              name: "alchemy:watch-bundle",
-              generateBundle(_outputOptions, bundle) {
-                Queue.offerUnsafe(queue, Object.values(bundle) as Output);
-              },
-            },
-          ],
-          output: {
-            file: "worker.js",
-            format: "esm",
-            minify: false,
-          },
-        });
-        return watcher;
+export function bundleOutputToFiles(bundle: BundleOutput): Effect.Effect<[File, ...Array<File>]> {
+  return Effect.forEach(bundle.files, (file) =>
+    Effect.succeed(
+      new File([file.content], file.path, {
+        type: contentTypeFromExtension(path.extname(file.path)),
       }),
-      (watcher) => Effect.promise(() => watcher.close()),
     ),
-  ).pipe(Stream.map(transformRolldownOutput));
+  );
+}
+
+function contentTypeFromExtension(extension: string): string {
+  switch (extension) {
+    case ".wasm":
+      return "application/wasm";
+    case ".txt":
+    case ".html":
+    case ".sql":
+    case ".custom":
+      return "text/plain";
+    case ".bin":
+      return "application/octet-stream";
+    case ".mjs":
+    case ".js":
+      return "application/javascript+module";
+    case ".cjs":
+      return "application/javascript";
+    case ".map":
+      return "application/source-map";
+    default:
+      return "application/octet-stream";
+  }
+}

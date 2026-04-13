@@ -1,9 +1,5 @@
-import * as Auth from "@distilled.cloud/cloudflare/Auth";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Bindings from "./bindings";
 import * as Runtime from "./runtime/runtime";
 import { bundleAsEsModule } from "./utils/bundle";
@@ -50,14 +46,6 @@ const program = Effect.gen(function* () {
   yield* Effect.log(server);
   yield* Effect.never;
 });
-
-export const layers = Layer.provideMerge(
-  Layer.merge(
-    Layer.provide(Bindings.SessionProviderLive, Bindings.AccessLive),
-    Runtime.RuntimeLive,
-  ),
-  Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, Auth.fromEnv()),
-);
 
 // const controller = new AbortController();
 // process.on("SIGINT", () => {

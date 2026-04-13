@@ -1,7 +1,8 @@
-import { Effect, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
+import { layers } from "./layers";
 import { kVoid } from "./runtime/config.types";
 import * as Runtime from "./runtime/runtime";
-import { layers } from "./test2";
 import { bundleAsEsModule } from "./utils/bundle";
 
 const program = Effect.gen(function* () {
@@ -26,6 +27,7 @@ const program = Effect.gen(function* () {
         name: "user-worker",
         worker: {
           compatibilityDate: "2026-03-10",
+          compatibilityFlags: ["enable_request_signal"],
           modules: [yield* bundleAsEsModule("src/workers/hello-world.worker.ts")],
         },
       },
@@ -33,6 +35,7 @@ const program = Effect.gen(function* () {
         name: "local-bridge",
         worker: {
           compatibilityDate: "2026-03-10",
+          compatibilityFlags: ["experimental", "enable_request_signal"],
           modules: [yield* bundleAsEsModule("src/bridge/local.worker.ts")],
           bindings: [
             { name: "USER_WORKER", service: { name: "user-worker" } },

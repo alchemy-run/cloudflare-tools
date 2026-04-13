@@ -1,4 +1,4 @@
-import { RpcSession, type RpcTransport } from "capnweb";
+import { RpcSession, type RpcStub, type RpcTransport } from "capnweb";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import type { Bridge, WebSocketBridge } from "./api.shared";
 
@@ -48,27 +48,7 @@ export default class extends WorkerEntrypoint<Env> {
 export class RemoteBridge extends DurableObject {
   transport?: Transport;
   session?: RpcSession<Bridge>;
-  main?: Bridge;
-
-  bridge: WebSocketBridge = {
-    message: async (id: string, message: string | ArrayBuffer) => {
-      console.log("[remote] websocket message", id, message);
-      const [target] = this.ctx.getWebSockets(id);
-      if (target) {
-        target.send(message);
-      }
-    },
-    close: async (id: string, code: number, reason: string, wasClean: boolean) => {
-      console.log("[remote] websocket close", id, code, reason, wasClean);
-      const [target] = this.ctx.getWebSockets(id);
-      if (target) {
-        target.close(code, reason);
-      }
-    },
-    error: async (id: string, error: unknown) => {
-      console.log("[remote] websocket error", id, error);
-    },
-  };
+  remoteMain?: RpcStub<Bridge>;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -80,8 +60,26 @@ export class RemoteBridge extends DurableObject {
 
   private makeSession(ws: WebSocket) {
     this.transport = new Transport(ws, this.ctx);
-    this.session = new RpcSession<Bridge>(this.transport, this.bridge);
-    this.main = this.session.getRemoteMain();
+    this.session = new RpcSession<Bridge>(this.transport, {
+      webSocketMessage: async (id: string, message: string | ArrayBuffer) => {
+        console.log("[remote] websocket message", id, message);
+        const [target] = this.ctx.getWebSockets(id);
+        if (target) {
+          target.send(message);
+        }
+      },
+      webSocketClose: async (id: string, code: number, reason: string, wasClean: boolean) => {
+        console.log("[remote] websocket close", id, code, reason, wasClean);
+        const [target] = this.ctx.getWebSockets(id);
+        if (target) {
+          target.close(code, reason);
+        }
+      },
+      webSocketError: async (id: string, error: unknown) => {
+        console.log("[remote] websocket error", id, error);
+      },
+    } satisfies WebSocketBridge);
+    this.remoteMain = this.session.getRemoteMain();
   }
 
   async fetch(request: Request) {
@@ -91,11 +89,10 @@ export class RemoteBridge extends DurableObject {
       this.makeSession(server);
       return new Response(null, { status: 101, webSocket: client });
     }
-    if (!this.main) {
+    if (!this.remoteMain) {
       return new Response("Bad Gateway", { status: 502 });
     }
-    console.log("[remote] fetching", request.url);
-    const result = await this.main.fetch(request);
+    const result = await this.remoteMain.fetch(request);
     switch (result.kind) {
       case "response":
         return result.response;
@@ -107,8 +104,6 @@ export class RemoteBridge extends DurableObject {
           headers: result.headers,
           webSocket: client,
         });
-      case "error":
-        return new Response(result.error.message, { status: 500 });
     }
   }
 
@@ -117,15 +112,15 @@ export class RemoteBridge extends DurableObject {
     messages: Array<ServiceBindingQueueMessage>,
     metadata?: MessageBatchMetadata,
   ) {
-    return await this.main?.queue(name, messages, metadata);
+    return await this.remoteMain?.queue(name, messages, metadata);
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const tags = this.ctx.getTags(ws) as ["local"] | ["remote", string];
     if (tags[0] === "remote") {
-      this.main?.websocket.message(tags[1], message);
+      this.remoteMain?.webSocketMessage(tags[1], message);
     } else {
-      this.transport?.put(message);
+      this.transport?.push(message.toString());
     }
   }
 
@@ -137,16 +132,16 @@ export class RemoteBridge extends DurableObject {
   ): Promise<void> {
     const tags = this.ctx.getTags(ws) as ["local"] | ["remote", string];
     if (tags[0] === "remote") {
-      this.main?.websocket.close(tags[1], code, reason, wasClean);
+      this.remoteMain?.webSocketClose(tags[1], code, reason, wasClean);
     } else {
-      this.transport?.abort(new Error(`WebSocket closed: ${code} ${reason}`));
+      this.remoteMain?.[Symbol.dispose]();
     }
   }
 
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     const tags = this.ctx.getTags(ws) as ["local"] | ["remote", string];
     if (tags[0] === "remote") {
-      this.main?.websocket.error(tags[1], error);
+      this.remoteMain?.webSocketError(tags[1], error);
     }
   }
 }
@@ -160,12 +155,12 @@ class Transport implements RpcTransport {
     private readonly ctx: DurableObjectState,
   ) {}
 
-  put(message: string | ArrayBuffer) {
+  push(message: string) {
     const pull = this.pulls.shift();
     if (pull) {
-      pull.resolve(message.toString());
+      pull.resolve(message);
     } else {
-      this.pushes.push(message.toString());
+      this.pushes.push(message);
     }
   }
 
@@ -187,6 +182,9 @@ class Transport implements RpcTransport {
   }
 
   abort(reason: any): void {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.close(1006, reason.message);
+    }
     while (this.pulls.length > 0) {
       this.pulls.shift()?.reject(reason);
     }

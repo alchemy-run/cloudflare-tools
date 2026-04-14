@@ -1,3 +1,4 @@
+import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Bindings from "./bindings";
@@ -67,7 +68,53 @@ const program = Effect.gen(function* () {
   });
   yield* bridge.configure("http://localhost:1338", remoteBridgeUrl);
   yield* Effect.log({ server, remoteBridgeUrl });
-  yield* Effect.never;
 });
 
-await run(program.pipe(Effect.scoped, Effect.provide(layers)));
+const testQueuePush = Effect.gen(function* () {
+  const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+  const createQueue = yield* queues.createQueue;
+  const createConsumer = yield* queues.createConsumer;
+  const pushMessage = yield* queues.pushMessage;
+  const deleteConsumer = yield* queues.deleteConsumer;
+  const deleteQueue = yield* queues.deleteQueue;
+
+  console.log("[testQueuePush] creating queue");
+  const queue = yield* createQueue({
+    accountId,
+    queueName: "test-queue",
+  });
+  yield* Effect.addFinalizer(() => {
+    console.log("[testQueuePush] deleting queue", queue.queueId);
+    return deleteQueue({
+      accountId,
+      queueId: queue.queueId!,
+    }).pipe(Effect.tapError(Effect.logWarning), Effect.ignore);
+  });
+  console.log("[testQueuePush] creating consumer for queue", queue.queueId);
+  const consumer = yield* createConsumer({
+    accountId,
+    queueId: queue.queueId!,
+    scriptName: "remote-bindings",
+    type: "worker",
+  });
+  yield* Effect.addFinalizer(() => {
+    console.log("[testQueuePush] deleting consumer", consumer.consumerId);
+    return deleteConsumer({
+      accountId,
+      queueId: queue.queueId!,
+      consumerId: consumer.consumerId!,
+    }).pipe(Effect.tapError(Effect.logWarning), Effect.ignore);
+  });
+  console.log("[testQueuePush] pushing message to queue", queue.queueId);
+  const message = yield* pushMessage({
+    accountId,
+    queueId: queue.queueId!,
+    body: "Hello, world!",
+    contentType: "text",
+  }).pipe(Effect.tapError(Effect.logError));
+  yield* Effect.log("[testQueuePush] pushMessage", message);
+});
+
+await run(
+  Effect.all([program, testQueuePush, Effect.never]).pipe(Effect.scoped, Effect.provide(layers)),
+);

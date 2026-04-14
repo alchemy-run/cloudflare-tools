@@ -17,7 +17,7 @@ export default class extends WorkerEntrypoint<Env> {
   }
 
   async queue(batch: MessageBatch<unknown>) {
-    const result = await this.bridge.queue(
+    const result = await this.bridge.dispatchQueue(
       batch.queue,
       batch.messages.map((message) => ({
         id: message.id,
@@ -52,10 +52,12 @@ export class RemoteBridge extends DurableObject {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const [local] = this.ctx.getWebSockets("local");
-    if (local) {
-      this.makeSession(local);
-    }
+    this.ctx.blockConcurrencyWhile(async () => {
+      const [local] = this.ctx.getWebSockets("local");
+      if (local) {
+        this.makeSession(local);
+      }
+    });
   }
 
   private makeSession(ws: WebSocket) {
@@ -117,12 +119,12 @@ export class RemoteBridge extends DurableObject {
     }
   }
 
-  async queue(
+  async dispatchQueue(
     name: string,
     messages: Array<ServiceBindingQueueMessage>,
     metadata?: MessageBatchMetadata,
-  ) {
-    return await this.remoteMain?.queue(name, messages, metadata);
+  ): Promise<FetcherQueueResult> {
+    return await this.remoteMain!.dispatchQueue(name, messages, metadata);
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {

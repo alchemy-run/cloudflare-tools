@@ -109,7 +109,7 @@
   },
   "catalog": {
     "@cloudflare/workers-types": "4.20260409.1",
-    "@distilled.cloud/cloudflare": "0.10.0",
+    "@distilled.cloud/cloudflare": "https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4",
     "@effect/platform-node": "4.0.0-beta.48",
     "@effect/vitest": "4.0.0-beta.48",
     "effect": "4.0.0-beta.48",
@@ -202,7 +202,7 @@
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@4.0.0", "", {}, "sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA=="],
 
-    "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@0.10.0", "", { "dependencies": { "@distilled.cloud/core": "0.10.0", "effect": "4.0.0-beta.48" } }, "sha512-jvzSp8VXJBBJy76+ykZnituERtVPqUBh1mHb7K0KvA2FYXI0a9CUjqxLCCtS/xm/xPoZPwyM7ALXk3662+rShw=="],
+    "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4", { "dependencies": { "@distilled.cloud/core": "0.10.1", "effect": "4.0.0-beta.48" }, "peerDependencies": { "effect": "4.0.0-beta.48" } }, "sha512-j0MaEL2Xw5oZeyexuWJboF11sRXwDJOI/r+buA56phdGoc43hrgrakiOOCmV3wZi7PbhdSjXhjnTfTLz53miGQ=="],
 
     "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@workspace:packages/cloudflare-rolldown-plugin"],
 
@@ -210,7 +210,7 @@
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:packages/cloudflare-vite-plugin"],
 
-    "@distilled.cloud/core": ["@distilled.cloud/core@0.10.0", "", { "dependencies": { "effect": "4.0.0-beta.48" } }, "sha512-GgJXJmmC9zPAt5/Uqg+CP8GUXB8q9+EA2F8bKHVi28XBRmWVDzBxqec1FUgVun+4k5HOZVy6Jg1c88phqy1ivw=="],
+    "@distilled.cloud/core": ["@distilled.cloud/core@0.10.1", "", { "dependencies": { "effect": "4.0.0-beta.48" } }, "sha512-RAilOgmIDHn1KJ6pdNDPK4uCzZtM9ywdelcSKnvPWSEhnztR6ye9EOwbz2U8ELHaXF91g5EPDwyLc5s2PJjeYA=="],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.48", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.48" }, "peerDependencies": { "effect": "^4.0.0-beta.48" } }, "sha512-IFECogXd6BW0qtzZgCF9HdwP4tVMhz9D+hwFmGWh5cmqCeDIA2YnmWuhCsJZ9/iNwfpsWv9a68mysAcUFwTS+A=="],
 

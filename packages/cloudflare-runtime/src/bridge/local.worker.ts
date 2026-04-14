@@ -95,7 +95,8 @@ export class LocalBridge extends DurableObject<Env> {
         };
       }
     },
-    queue: async (name, messages, metadata) => {
+    dispatchQueue: async (name, messages, metadata) => {
+      console.log("[local] dispatch queue", JSON.stringify({ name, messages, metadata }, null, 2));
       return await this.env.USER_WORKER.queue(name, messages, metadata);
     },
     webSocketMessage: async (id: string, message: string | ArrayBuffer) => {

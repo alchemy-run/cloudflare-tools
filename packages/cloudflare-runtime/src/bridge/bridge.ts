@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import { LOCAL_CONFIGURE_PATH } from "./api.shared";
 
-const TAG = "distilled:remote-bridge:2026.04.13-14:53";
+const TAG = "distilled:remote-bridge:2026.04.13-17:02";
 
 export class BridgeError extends Data.TaggedError("BridgeError")<{
   message: string;
@@ -105,7 +105,11 @@ export const BridgeLive = Layer.effect(
         name: "bridge:local",
         worker: {
           compatibilityDate: "2026-03-10",
-          compatibilityFlags: ["experimental", "enable_request_signal"],
+          compatibilityFlags: [
+            "experimental",
+            "enable_request_signal",
+            "service_binding_extra_handlers",
+          ],
           modules: yield* Bundle.bundle("src/bridge/local.worker.ts").pipe(
             Effect.flatMap(Bundle.bundleOutputToWorkerd),
           ),

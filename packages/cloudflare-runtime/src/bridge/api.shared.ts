@@ -20,7 +20,7 @@ export interface Bridge extends WebSocketBridge {
         id: string;
       }
   >;
-  queue(
+  dispatchQueue(
     name: string,
     messages: Array<ServiceBindingQueueMessage>,
     metadata?: MessageBatchMetadata,

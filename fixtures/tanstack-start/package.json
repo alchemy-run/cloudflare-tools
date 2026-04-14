@@ -1,5 +1,5 @@
 {
-  "name": "tanstack-app",
+  "name": "@fixtures/tanstack-start",
   "private": true,
   "type": "module",
   "imports": {

@@ -1,10 +1,14 @@
 export const LOCAL_CONFIGURE_PATH = "/__distilled/bridge/configure";
 export const REMOTE_WEBSOCKET_PATH = "/__distilled/bridge/websocket";
 
-export interface ConfigureRequest {
-  remote: string;
-  local: string;
-}
+export type ProxyControllerMessage =
+  | {
+      type: `${"local" | "remote"}.set`;
+      value: string;
+    }
+  | {
+      type: `${"local" | "remote"}.unset`;
+    };
 
 export interface WebSocketBridge {
   webSocketMessage(id: string, message: string | ArrayBuffer): Promise<void>;

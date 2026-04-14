@@ -64,7 +64,8 @@ const program = Effect.gen(function* () {
     ],
   });
   const port = server[0].port;
-  yield* localBridge.configure(`http://localhost:${port}`, remoteBridgeUrl);
+  yield* localBridge.configure({ type: "local.set", value: `http://localhost:${port}` });
+  yield* localBridge.configure({ type: "remote.set", value: remoteBridgeUrl });
   yield* Effect.log({ server, remoteBridgeUrl });
 });
 

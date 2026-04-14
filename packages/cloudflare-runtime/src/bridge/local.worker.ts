@@ -5,7 +5,7 @@ import {
   LOCAL_CONFIGURE_PATH,
   REMOTE_WEBSOCKET_PATH,
   type Bridge,
-  type ConfigureRequest,
+  type ProxyControllerMessage,
   type WebSocketBridge,
 } from "./api.shared";
 
@@ -22,26 +22,44 @@ export default {
 export class LocalBridge extends DurableObject<Env> {
   private remote?: RpcStub<WebSocketBridge>;
   private local?: string;
+  private queue = new Map<Request, PromiseWithResolvers<Response>>();
+  private retryQueue = new Map<Request, PromiseWithResolvers<Response>>();
 
   async fetch(request: Request) {
     if (request.method === "POST" && request.url.endsWith(LOCAL_CONFIGURE_PATH)) {
-      if (this.remote) {
-        this.remote[Symbol.dispose]();
-        this.remote = undefined;
-        this.local = undefined;
-      }
-      const json = await request.json<ConfigureRequest>();
-      this.local = json.local;
       try {
-        this.remote = await this.connectToRemote(json.remote);
-        return new Response("OK");
+        return await this.handleProxyControllerRequest(request);
       } catch (error) {
         return new Response(error instanceof Error ? error.message : String(error), {
           status: 500,
         });
       }
     }
-    return await this.fetchUserWorker(request);
+    return await this.handleUserWorkerRequest(request);
+  }
+
+  private async handleProxyControllerRequest(request: Request) {
+    const message = await request.json<ProxyControllerMessage>();
+    switch (message.type) {
+      case "local.set": {
+        this.local = message.value;
+        break;
+      }
+      case "local.unset": {
+        this.local = undefined;
+        break;
+      }
+      case "remote.set": {
+        this.remote = await this.connectToRemote(message.value);
+        break;
+      }
+      case "remote.unset": {
+        this.remote?.[Symbol.dispose]();
+        this.remote = undefined;
+        break;
+      }
+    }
+    return new Response("OK");
   }
 
   private async connectToRemote(remote: string) {
@@ -60,19 +78,58 @@ export class LocalBridge extends DurableObject<Env> {
     return newWebSocketRpcSession<WebSocketBridge>(ws, this.localMain);
   }
 
-  private async fetchUserWorker(request: Request) {
-    if (!this.local) {
-      return new Response("Bad Gateway", { status: 502 });
+  private handleUserWorkerRequest(request: Request) {
+    const promise = Promise.withResolvers<Response>();
+    this.queue.set(request, promise);
+    this.processQueue();
+    return promise.promise;
+  }
+
+  private *getOrderedQueue() {
+    yield* this.retryQueue;
+    yield* this.queue;
+  }
+
+  private processQueue() {
+    for (const [request, promise] of this.getOrderedQueue()) {
+      const local = this.local;
+      if (!local) {
+        break;
+      }
+      this.queue.delete(request);
+      this.retryQueue.delete(request);
+      const original = new URL(request.url);
+      const proxied = new URL(original.pathname + original.search, local);
+      this.ctx.waitUntil(
+        fetch(proxied, request)
+          .then(promise.resolve)
+          .catch((error) => {
+            if (this.local === local) {
+              promise.reject(error);
+              return;
+            }
+            if (request.method === "GET" || request.method === "HEAD") {
+              this.retryQueue.set(request, promise);
+            } else {
+              promise.resolve(
+                new Response(
+                  "Your worker restarted mid-request. Please try sending the request again. Only GET or HEAD requests are retried automatically.",
+                  {
+                    status: 503,
+                    headers: { "Retry-After": "0" },
+                  },
+                ),
+              );
+            }
+          }),
+      );
     }
-    const original = new URL(request.url);
-    const proxied = new URL(original.pathname + original.search, this.local);
-    return fetch(proxied, request);
   }
 
   private readonly localMain: Bridge = {
     fetch: async (request: Request) => {
       console.log("[local] fetching", request.url);
-      const response = await this.fetchUserWorker(request);
+      const response = await this.handleUserWorkerRequest(request);
       if (response.webSocket) {
         const ws = response.webSocket;
         const id = crypto.randomUUID();

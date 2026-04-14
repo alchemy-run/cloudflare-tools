@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
-import { LOCAL_CONFIGURE_PATH } from "./api.shared";
+import { LOCAL_CONFIGURE_PATH, type ProxyControllerMessage } from "./api.shared";
 
 const TAG = "distilled:remote-bridge:2026.04.13-17:02";
 
@@ -20,7 +20,7 @@ export class BridgeError extends Data.TaggedError("BridgeError")<{
 }> {}
 
 export interface LocalBridge {
-  readonly configure: (local: string, remote: string) => Effect.Effect<void, BridgeError>;
+  readonly configure: (message: ProxyControllerMessage) => Effect.Effect<void, BridgeError>;
 }
 
 export class Bridge extends Context.Service<
@@ -157,15 +157,16 @@ export const BridgeLive = Layer.effect(
         ],
       });
       return {
-        configure: Effect.fn((local: string, remote: string) =>
+        configure: Effect.fn((message: ProxyControllerMessage) =>
           Effect.tryPromise({
             try: async () => {
-              console.log("[local] configuring", local, remote);
+              console.log("[local] configuring", message);
               const response = await fetch(
                 new URL(LOCAL_CONFIGURE_PATH, `http://localhost:${port}`),
                 {
                   method: "POST",
-                  body: JSON.stringify({ remote, local }),
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(message),
                 },
               );
               return response.ok
@@ -184,8 +185,11 @@ export const BridgeLive = Layer.effect(
                     }),
                   ),
             ),
-            Effect.tap(() => Effect.logDebug("Local bridge configured")),
+            // This indicates an eventual consistency issue, i.e. that the remote worker is not yet ready.
+            // Retry aggressively.
             Effect.retry({
+              while: (error) =>
+                error.message.includes("Failed to establish the WebSocket connection"),
               schedule: Schedule.exponential("500 millis"),
               times: 20,
             }),

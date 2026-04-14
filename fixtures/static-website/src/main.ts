@@ -2,6 +2,7 @@ import heroImg from "./assets/hero.png";
 import typescriptLogo from "./assets/typescript.svg";
 import viteLogo from "./assets/vite.svg";
 import { setupCounter } from "./counter.ts";
+// oxlint-disable-next-line import/no-unassigned-import
 import "./style.css";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `

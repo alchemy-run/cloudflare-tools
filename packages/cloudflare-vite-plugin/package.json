@@ -47,8 +47,8 @@
     "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*"
   },
   "devDependencies": {
-    "rolldown": "^1.0.0-rc.13",
-    "vite": "^8.0.3",
+    "rolldown": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

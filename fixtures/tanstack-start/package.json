@@ -1,5 +1,5 @@
 {
-  "name": "tanstack-app",
+  "name": "@fixtures/tanstack-start",
   "private": true,
   "type": "module",
   "imports": {
@@ -8,7 +8,10 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "pretest": "playwright install chromium"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
@@ -25,18 +28,15 @@
   },
   "devDependencies": {
     "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@distilled.cloud/test-utils": "workspace:*",
+    "@playwright/test": "catalog:",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "^16.3.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "jsdom": "^28.1.0",
-    "miniflare": "^4.20260401.0",
-    "typescript": "^5.7.2",
-    "vite": "^8.0.0"
+    "vite": "catalog:"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

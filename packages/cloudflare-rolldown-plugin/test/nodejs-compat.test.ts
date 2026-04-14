@@ -1,7 +1,7 @@
+import { createMiniflareFromRolldown } from "@distilled.cloud/test-utils/miniflare";
 import { describe, expect, it } from "vitest";
 import { makeNodejsCompatPlugin } from "../src/plugins/nodejs-compat.js";
 import { buildFixture } from "./utils/build-fixture";
-import { createMiniflare } from "./utils/miniflare";
 
 describe("nodejs_compat", () => {
   it("runs node builtin imports with nodejs_compat enabled", async () => {
@@ -13,7 +13,7 @@ describe("nodejs_compat", () => {
       },
     });
 
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
       compatibilityFlags: ["nodejs_compat"],
     });

@@ -1,6 +1,6 @@
+import { createMiniflareFromRolldown } from "@distilled.cloud/test-utils/miniflare";
 import { describe, expect, it } from "vitest";
 import { buildFixture } from "./utils/build-fixture";
-import { createMiniflare } from "./utils/miniflare";
 import { getAsset, getEntryChunk, hasCloudflareModuleReferences } from "./utils/output";
 
 describe("additional modules", async () => {
@@ -9,7 +9,7 @@ describe("additional modules", async () => {
   });
 
   it("supports Data modules with a .bin extension", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -19,7 +19,7 @@ describe("additional modules", async () => {
   });
 
   it("supports Text modules with .html, .txt, and .sql extensions", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -29,7 +29,7 @@ describe("additional modules", async () => {
   });
 
   it("supports text filenames containing double underscores", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -37,7 +37,7 @@ describe("additional modules", async () => {
   });
 
   it("supports subpath imports for text modules", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -47,7 +47,7 @@ describe("additional modules", async () => {
   });
 
   it("supports .wasm, .wasm?module, and .wasm?init imports", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 

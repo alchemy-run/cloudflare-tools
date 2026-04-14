@@ -20,9 +20,9 @@
     "catalog": {
       "@cloudflare/workers-types": "^4.20260310.1",
       "@distilled.cloud/cloudflare": "https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4",
-      "@effect/platform-node": "^4.0.0-beta.43",
-      "@effect/vitest": "^4.0.0-beta.43",
-      "effect": "^4.0.0-beta.43",
+      "@effect/platform-node": "^4.0.0-beta.48",
+      "@effect/vitest": "^4.0.0-beta.48",
+      "effect": "^4.0.0-beta.48",
       "@playwright/test": "^1.52.0",
       "rolldown": "^1.0.0-rc.9",
       "typescript": "^6.0.2",

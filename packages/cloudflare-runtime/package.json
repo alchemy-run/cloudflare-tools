@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "capnp-es": "^0.0.14",
-    "workerd": "catalog:"
+    "workerd": "^1.20260414.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",

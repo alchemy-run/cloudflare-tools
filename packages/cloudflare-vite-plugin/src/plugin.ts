@@ -92,7 +92,8 @@ export default async function cloudflareVitePlugin(
                 target: TARGET,
                 emitAssets: true,
                 copyPublicDir: false,
-                rolldownOptions: {
+                // This is aliased to `rolldownOptions` in Vite 8.
+                rollupOptions: {
                   preserveEntrySignatures: "strict",
                 },
               },

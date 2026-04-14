@@ -6,5 +6,5 @@
       "options": { "trailingComma": "none" }
     }
   ],
-  "ignorePatterns": ["workers-sdk", "**/dist/**", "examples/tanstack-app/src/routeTree.gen.ts"]
+  "ignorePatterns": ["workers-sdk", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"]
 }

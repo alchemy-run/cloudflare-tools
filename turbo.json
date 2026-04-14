@@ -17,7 +17,7 @@
       "outputs": ["tsconfig.tsbuildinfo"]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["build", "^build"],
       "outputs": []
     }
   }

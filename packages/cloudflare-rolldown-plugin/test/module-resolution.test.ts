@@ -1,7 +1,7 @@
+import { createMiniflareFromRolldown } from "@distilled.cloud/test-utils/miniflare";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildFixture } from "./utils/build-fixture";
-import { createMiniflare } from "./utils/miniflare";
 
 describe("module resolution", async () => {
   const built = await buildFixture({
@@ -16,7 +16,7 @@ describe("module resolution", async () => {
   });
 
   it("supports package exports and subpath exports", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -29,7 +29,7 @@ describe("module resolution", async () => {
   });
 
   it("supports explicit and extensionless resolution for js and cjs modules", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -42,7 +42,7 @@ describe("module resolution", async () => {
   });
 
   it("coexists with user aliases", async () => {
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 

@@ -88,7 +88,7 @@
       }
     ]
   },
-  "ignorePatterns": ["workers-sdk", "examples/tanstack-app/src/routeTree.gen.ts"],
+  "ignorePatterns": ["workers-sdk", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"],
   "overrides": [
     {
       "files": [

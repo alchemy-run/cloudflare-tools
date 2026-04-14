@@ -1,8 +1,8 @@
+import { createMiniflareFromRolldown } from "@distilled.cloud/test-utils/miniflare";
 import type { ResolveIdResult } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { cloudflareExternalsPlugin } from "../src/plugins/cloudflare-externals.js";
 import { buildFixture } from "./utils/build-fixture";
-import { createMiniflare } from "./utils/miniflare";
 
 describe("cloudflare externals", () => {
   it("marks supported cloudflare:* builtins as external", () => {
@@ -29,7 +29,7 @@ describe("cloudflare externals", () => {
       fixture: "cloudflare-imports/index.ts",
     });
 
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 
@@ -46,7 +46,7 @@ describe("cloudflare externals", () => {
       fixture: "cloudflare-imports/index.ts",
     });
 
-    await using miniflare = await createMiniflare(built.output, {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",
     });
 

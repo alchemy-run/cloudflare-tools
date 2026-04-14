@@ -19,7 +19,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "capnweb": "^0.6.1",
-    "rolldown": "^1.0.0-rc.14",
+    "rolldown": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

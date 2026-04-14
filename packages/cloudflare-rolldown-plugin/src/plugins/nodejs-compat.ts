@@ -6,7 +6,7 @@ import type { Plugin } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
 import type { CloudflarePluginOptions } from "../plugin.js";
-import { hasNodejsCompat } from "../utils.js";
+import { hasNodejsAls, hasNodejsCompat } from "../utils.js";
 
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(`^(${nonPrefixedNodeModules.join("|")}|node:.+)$`);
 const VIRTUAL_MODULE_ID_REGEXP = /^virtual:nodejs-global-inject\/.+$/;
@@ -14,6 +14,9 @@ const VIRTUAL_MODULE_ID_REGEXP = /^virtual:nodejs-global-inject\/.+$/;
 export function makeNodejsCompatPlugin(options: CloudflarePluginOptions): Plugin | Array<Plugin> {
   if (hasNodejsCompat(options.compatibilityFlags)) {
     return makeUnenvPlugin(options);
+  }
+  if (hasNodejsAls(options.compatibilityFlags)) {
+    return makeNodeJsAlsPlugin();
   }
   return makeNodeJsImportWarningPlugin();
 }
@@ -95,6 +98,18 @@ function makeUnenvPlugin(options: CloudflarePluginOptions): Array<Plugin> {
       },
     } satisfies Plugin,
   ];
+}
+
+function makeNodeJsAlsPlugin(): Plugin {
+  return {
+    name: "rolldown-plugin-cloudflare:nodejs-als",
+    resolveId: {
+      filter: { id: /^(node:)?async_hooks$/ },
+      handler(id) {
+        return { id, external: true };
+      },
+    },
+  };
 }
 
 function makeNodeJsImportWarningPlugin(): Plugin {

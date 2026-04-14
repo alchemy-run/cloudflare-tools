@@ -1,0 +1,28 @@
+{
+  "name": "@distilled.cloud/test-utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./miniflare": {
+      "bun": "./src/miniflare.ts",
+      "types": "./dist/miniflare.d.ts",
+      "import": "./dist/miniflare.js"
+    },
+    "./miniflare-module": {
+      "bun": "./src/miniflare-module.ts",
+      "types": "./dist/miniflare-module.d.ts",
+      "import": "./dist/miniflare-module.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "miniflare": "^4.20260329.0"
+  },
+  "devDependencies": {
+    "rolldown": "catalog:"
+  }
+}

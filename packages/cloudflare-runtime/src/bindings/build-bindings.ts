@@ -2,7 +2,7 @@ import type { Service, ServiceDesignator, Worker_Binding } from "#/runtime/confi
 import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { SessionOptions } from "./session";
+import type { RemoteBinding } from "./remote-session";
 
 export type Binding = Exclude<
   NonNullable<PutScriptRequest["metadata"]["bindings"]>[number],
@@ -15,7 +15,7 @@ class UnsupportedBindingError extends Data.TaggedError("UnsupportedBindingError"
 }> {}
 
 export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
-  const remoteBindings: Array<SessionOptions.Binding> = [];
+  const remoteBindings: Array<RemoteBinding> = [];
   const additionalServices: Array<Service> = [];
   const workerBindings = yield* Effect.forEach(
     bindings,

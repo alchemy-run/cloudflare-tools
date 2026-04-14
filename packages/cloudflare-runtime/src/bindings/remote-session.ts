@@ -13,45 +13,46 @@ export class SessionError extends Data.TaggedError("SessionError")<{
   cause?: unknown;
 }> {}
 
-export interface SessionOptions {
+export interface RemoteSessionOptions {
   scriptName: string;
   accountId: string;
-  bindings: Array<SessionOptions.Binding>;
+  bindings: Array<RemoteBinding>;
   host?: string;
   zoneId?: string;
-  routes?: Array<SessionOptions.Route>;
+  routes?: Array<Route>;
 }
 
-export declare namespace SessionOptions {
-  type Metadata = NonNullable<NonNullable<workers.CreateScriptEdgePreviewRequest["metadata"]>>;
-  export type Binding = NonNullable<NonNullable<Metadata["bindings"]>>[number];
-  export type Route = SimpleRoute | ZoneIdRoute | ZoneNameRoute | CustomDomainRoute;
-  export type SimpleRoute = string;
-  export interface ZoneIdRoute {
-    pattern: string;
-    zone_id: string;
-    custom_domain?: boolean;
-  }
-  export interface ZoneNameRoute {
-    pattern: string;
-    zone_name: string;
-    custom_domain?: boolean;
-  }
-  export interface CustomDomainRoute {
-    pattern: string;
-    custom_domain: boolean;
-  }
+type Metadata = NonNullable<NonNullable<workers.CreateScriptEdgePreviewRequest["metadata"]>>;
+export type RemoteBinding = NonNullable<NonNullable<Metadata["bindings"]>>[number];
+
+export type Route = SimpleRoute | ZoneIdRoute | ZoneNameRoute | CustomDomainRoute;
+export type SimpleRoute = string;
+export interface ZoneIdRoute {
+  pattern: string;
+  zone_id: string;
+  custom_domain?: boolean;
+}
+export interface ZoneNameRoute {
+  pattern: string;
+  zone_name: string;
+  custom_domain?: boolean;
+}
+export interface CustomDomainRoute {
+  pattern: string;
+  custom_domain: boolean;
 }
 
-export class SessionProvider extends Context.Service<
-  SessionProvider,
+export class RemoteSession extends Context.Service<
+  RemoteSession,
   {
-    readonly create: (options: SessionOptions) => Effect.Effect<RemoteProxyConfig, SessionError>;
+    readonly create: (
+      options: RemoteSessionOptions,
+    ) => Effect.Effect<RemoteProxyConfig, SessionError>;
   }
->()("SessionProvider") {}
+>()("RemoteSession") {}
 
-export const SessionProviderLive = Layer.effect(
-  SessionProvider,
+export const RemoteSessionLive = Layer.effect(
+  RemoteSession,
   Effect.gen(function* () {
     const access = yield* Access.Access;
     const http = yield* HttpClient.HttpClient;
@@ -60,7 +61,7 @@ export const SessionProviderLive = Layer.effect(
     const getSubdomain = yield* workers.getSubdomain;
     const createScriptEdgePreview = yield* workers.createScriptEdgePreview;
 
-    const createPreviewUploadToken = Effect.fn(function* (options: SessionOptions) {
+    const createPreviewUploadToken = Effect.fn(function* (options: RemoteSessionOptions) {
       const { token, exchangeUrl } = yield* options.zoneId
         ? createZoneEdgePreviewSession({
             zoneId: options.zoneId,
@@ -90,7 +91,7 @@ export const SessionProviderLive = Layer.effect(
     });
 
     const uploadPreviewScript = Effect.fn(function* (
-      options: SessionOptions,
+      options: RemoteSessionOptions,
       cfPreviewUploadConfigToken: string,
     ) {
       const files = yield* Bundle.bundle("src/bindings/workers/remote.worker.ts").pipe(
@@ -123,7 +124,7 @@ export const SessionProviderLive = Layer.effect(
       }).pipe(Effect.timeout(30_000));
     });
 
-    const getWorkerHost = Effect.fn(function* (options: SessionOptions) {
+    const getWorkerHost = Effect.fn(function* (options: RemoteSessionOptions) {
       if (options.host) {
         return options.host;
       }
@@ -131,7 +132,7 @@ export const SessionProviderLive = Layer.effect(
       return `${options.scriptName}.${subdomain}.workers.dev`;
     });
 
-    return SessionProvider.of({
+    return RemoteSession.of({
       create: Effect.fn(
         function* (options) {
           const [{ previewToken }, { url, headers }] = yield* Effect.all(

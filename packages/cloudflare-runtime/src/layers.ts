@@ -10,7 +10,7 @@ import * as Tail from "./utils/tail";
 
 export const layers = Layer.provideMerge(
   Layer.mergeAll(
-    Layer.provide(Bindings.SessionProviderLive, Bindings.AccessLive),
+    Layer.provide(Bindings.RemoteSessionLive, Bindings.AccessLive),
     Layer.provide(Bridge.BridgeLive, Tail.TailLive),
     Runtime.RuntimeLive,
   ),

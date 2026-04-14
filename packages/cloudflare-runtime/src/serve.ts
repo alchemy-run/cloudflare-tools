@@ -10,7 +10,7 @@ import * as Bundle from "./utils/bundle";
 const program = Effect.gen(function* () {
   const bridge = yield* Bridge.Bridge;
   const runtime = yield* Runtime.Runtime;
-  const sessionProvider = yield* Bindings.SessionProvider;
+  const sessionProvider = yield* Bindings.RemoteSession;
   const { remoteBindings, workerBindings, additionalServices } = yield* Bindings.buildBindings([
     {
       name: "KV",
@@ -18,7 +18,7 @@ const program = Effect.gen(function* () {
       namespaceId: "c2399b3754ea4199a765e8c388eb2603",
     },
   ]);
-  const options: Bindings.SessionOptions = {
+  const options: Bindings.RemoteSessionOptions = {
     accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
     scriptName: "my-john-worker",
     bindings: remoteBindings,

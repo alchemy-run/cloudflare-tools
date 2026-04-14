@@ -1,11 +1,11 @@
 {
   "name": "@distilled.cloud/cloudflare-runtime",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest --passWithNoTests",
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "bun run build:clean"
   },
   "dependencies": {

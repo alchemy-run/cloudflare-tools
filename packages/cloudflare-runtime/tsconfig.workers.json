@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.worker.ts", "src/**/*.shared.ts", "src/workers.d.ts"],
+  "include": ["**/*.worker.ts", "**/*.shared.ts", "src/workers.d.ts"],
   "compilerOptions": {
-    "outDir": "out",
+    "tsBuildInfoFile": ".cache/workers/tsconfig.tsbuildinfo",
+    "outDir": ".cache/workers",
     "emitDeclarationOnly": true
   }
 }

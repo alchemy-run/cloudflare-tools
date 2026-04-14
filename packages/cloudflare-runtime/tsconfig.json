@@ -1,13 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*", "test.ts"],
-  "exclude": ["dist"],
+  "exclude": ["dist", ".cache"],
   "compilerOptions": {
-    "outDir": "dist",
-    "types": ["bun"],
-    "paths": {
-      "#/*": ["./src/*"]
-    }
+    "tsBuildInfoFile": ".cache/root/tsconfig.tsbuildinfo",
+    "outDir": ".cache/root"
   },
-  "references": [{ "path": "./tsconfig.workers.json" }]
+  "references": [
+    { "path": "./tsconfig.workers.json" },
+    { "path": "./tsconfig.sandbox.json" },
+    { "path": "./tsconfig.emit.json" }
+  ]
 }

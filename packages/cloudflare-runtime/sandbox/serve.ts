@@ -1,18 +1,18 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Bindings from "./bindings";
-import * as Bridge from "./bridge/bridge";
-import { Entry } from "./entry/entry";
+import * as Bindings from "../src/bindings";
+import * as Bridge from "../src/bridge/bridge";
+import { Entry } from "../src/entry/entry";
+import * as Runtime from "../src/runtime/runtime";
+import * as Bundle from "../src/utils/bundle";
 import { layers, run } from "./layers";
-import * as Runtime from "./runtime/runtime";
-import * as Bundle from "./utils/bundle";
 
 const program = Effect.gen(function* () {
   const bridge = yield* Bridge.Bridge;
   const runtime = yield* Runtime.Runtime;
-  const sessionProvider = yield* Bindings.RemoteSession;
-  const { remoteBindings, workerBindings, additionalServices } = yield* Bindings.buildBindings([
+  const remoteBindingsServices = yield* Bindings.RemoteBindingsServices;
+  const { remoteBindings, workerBindings } = yield* Bindings.buildBindings([
     {
       name: "KV",
       type: "kv_namespace",
@@ -24,19 +24,6 @@ const program = Effect.gen(function* () {
     scriptName: "my-john-worker",
     bindings: remoteBindings,
   };
-  const loopback = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      Bun.serve({
-        async fetch() {
-          console.log("[serve] loopback fetch", options);
-          const config = await Effect.runPromise(sessionProvider.create(options));
-          console.log("[serve] loopback config", config);
-          return Response.json(config);
-        },
-      }),
-    ),
-    (loopback) => Effect.promise(() => loopback.stop()),
-  );
   const remoteBridgeUrl = yield* bridge.deploy("remote-bindings");
   const localBridge = yield* bridge.local(1337);
   const server = yield* runtime.serve({
@@ -59,8 +46,7 @@ const program = Effect.gen(function* () {
         },
       },
       yield* Entry,
-      ...(yield* Bindings.Services(loopback.port!)),
-      ...additionalServices,
+      ...(yield* remoteBindingsServices.services(options)),
     ],
   });
   const port = server[0].port;

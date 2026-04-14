@@ -1,4 +1,4 @@
-import type { Service, ServiceDesignator, Worker_Binding } from "#/runtime/config.types";
+import type { ServiceDesignator, Worker_Binding } from "#/runtime/config.types";
 import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -16,7 +16,6 @@ class UnsupportedBindingError extends Data.TaggedError("UnsupportedBindingError"
 
 export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
   const remoteBindings: Array<RemoteBinding> = [];
-  const additionalServices: Array<Service> = [];
   const workerBindings = yield* Effect.forEach(
     bindings,
     Effect.fn(function* (binding): Effect.fn.Return<Worker_Binding, UnsupportedBindingError> {
@@ -215,7 +214,6 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
   return {
     remoteBindings,
     workerBindings,
-    additionalServices,
   };
 });
 

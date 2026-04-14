@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["sandbox", "src"],
+  "exclude": ["**/*.worker.ts"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/sandbox/tsconfig.tsbuildinfo",
+    "outDir": ".cache/sandbox",
+    "emitDeclarationOnly": true,
+    "types": ["bun"],
+    "paths": {
+      "#/*": ["./src/*"]
+    }
+  }
+}

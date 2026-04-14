@@ -3,6 +3,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Bindings from "./bindings";
 import * as Bridge from "./bridge/bridge";
+import { Entry } from "./entry/entry";
 import { layers, run } from "./layers";
 import * as Runtime from "./runtime/runtime";
 import * as Bundle from "./utils/bundle";
@@ -37,17 +38,13 @@ const program = Effect.gen(function* () {
     (loopback) => Effect.promise(() => loopback.stop()),
   );
   const remoteBridgeUrl = yield* bridge.deploy("remote-bindings");
+  const localBridge = yield* bridge.local(1337);
   const server = yield* runtime.serve({
     sockets: [
       {
-        name: "http",
-        address: "127.0.0.1:1337",
-        service: { name: "user" },
-      },
-      {
         name: "bridge",
-        address: "127.0.0.1:1338",
-        service: { name: "bridge:local" },
+        address: "127.0.0.1:0",
+        service: { name: "entry" },
       },
     ],
     services: [
@@ -61,12 +58,13 @@ const program = Effect.gen(function* () {
           bindings: workerBindings,
         },
       },
-      yield* bridge.local("user"),
+      yield* Entry,
       ...(yield* Bindings.Services(loopback.port!)),
       ...additionalServices,
     ],
   });
-  yield* bridge.configure("http://localhost:1338", remoteBridgeUrl);
+  const port = server[0].port;
+  yield* localBridge.configure(`http://localhost:${port}`, remoteBridgeUrl);
   yield* Effect.log({ server, remoteBridgeUrl });
 });
 

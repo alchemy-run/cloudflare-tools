@@ -1,6 +1,11 @@
 export const LOCAL_CONFIGURE_PATH = "/__distilled/bridge/configure";
 export const REMOTE_WEBSOCKET_PATH = "/__distilled/bridge/websocket";
 
+export interface ConfigureRequest {
+  remote: string;
+  local: string;
+}
+
 export interface WebSocketBridge {
   webSocketMessage(id: string, message: string | ArrayBuffer): Promise<void>;
   webSocketClose(id: string, code: number, reason: string, wasClean: boolean): Promise<void>;
@@ -20,9 +25,4 @@ export interface Bridge extends WebSocketBridge {
         id: string;
       }
   >;
-  dispatchQueue(
-    name: string,
-    messages: Array<ServiceBindingQueueMessage>,
-    metadata?: MessageBatchMetadata,
-  ): Promise<FetcherQueueResult>;
 }

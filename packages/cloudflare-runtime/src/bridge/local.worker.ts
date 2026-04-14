@@ -5,11 +5,11 @@ import {
   LOCAL_CONFIGURE_PATH,
   REMOTE_WEBSOCKET_PATH,
   type Bridge,
+  type ConfigureRequest,
   type WebSocketBridge,
 } from "./api.shared";
 
 interface Env {
-  USER_WORKER: Fetcher;
   BRIDGE: ColoLocalActorNamespace;
 }
 
@@ -21,13 +21,17 @@ export default {
 
 export class LocalBridge extends DurableObject<Env> {
   private remote?: RpcStub<WebSocketBridge>;
+  private local?: string;
 
   async fetch(request: Request) {
     if (request.method === "POST" && request.url.endsWith(LOCAL_CONFIGURE_PATH)) {
       if (this.remote) {
         this.remote[Symbol.dispose]();
+        this.remote = undefined;
+        this.local = undefined;
       }
-      const json = await request.json<{ remote: string }>();
+      const json = await request.json<ConfigureRequest>();
+      this.local = json.local;
       try {
         this.remote = await this.connectToRemote(json.remote);
         return new Response("OK");
@@ -37,7 +41,7 @@ export class LocalBridge extends DurableObject<Env> {
         });
       }
     }
-    return new Response("Not Implemented", { status: 501 });
+    return await this.fetchUserWorker(request);
   }
 
   private async connectToRemote(remote: string) {
@@ -56,10 +60,19 @@ export class LocalBridge extends DurableObject<Env> {
     return newWebSocketRpcSession<WebSocketBridge>(ws, this.localMain);
   }
 
+  private async fetchUserWorker(request: Request) {
+    if (!this.local) {
+      return new Response("Bad Gateway", { status: 502 });
+    }
+    const original = new URL(request.url);
+    const proxied = new URL(original.pathname + original.search, this.local);
+    return fetch(proxied, request);
+  }
+
   private readonly localMain: Bridge = {
     fetch: async (request: Request) => {
       console.log("[local] fetching", request.url);
-      const response = await this.env.USER_WORKER.fetch(request);
+      const response = await this.fetchUserWorker(request);
       if (response.webSocket) {
         const ws = response.webSocket;
         const id = crypto.randomUUID();
@@ -91,13 +104,9 @@ export class LocalBridge extends DurableObject<Env> {
       } else {
         return {
           kind: "response",
-          response: response,
+          response,
         };
       }
-    },
-    dispatchQueue: async (name, messages, metadata) => {
-      console.log("[local] dispatch queue", JSON.stringify({ name, messages, metadata }, null, 2));
-      return await this.env.USER_WORKER.queue(name, messages, metadata);
     },
     webSocketMessage: async (id: string, message: string | ArrayBuffer) => {
       console.log("[local] websocket message", id, message);

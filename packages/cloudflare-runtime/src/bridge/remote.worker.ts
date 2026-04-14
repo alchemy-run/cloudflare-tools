@@ -1,5 +1,6 @@
 import { RpcSession, type RpcStub, type RpcTransport } from "capnweb";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import type { EntryQueuePayload } from "../entry/entry.worker";
 import { REMOTE_WEBSOCKET_PATH, type Bridge, type WebSocketBridge } from "./api.shared";
 
 interface Env {
@@ -17,16 +18,21 @@ export default class extends WorkerEntrypoint<Env> {
   }
 
   async queue(batch: MessageBatch<unknown>) {
-    const result = await this.bridge.dispatchQueue(
-      batch.queue,
-      batch.messages.map((message) => ({
-        id: message.id,
-        timestamp: message.timestamp,
-        attempts: message.attempts,
-        body: message.body,
-      })),
-      batch.metadata,
-    );
+    const result = await this.bridge
+      .fetch("http://fake-host/cdn-cgi/handler/queue", {
+        method: "POST",
+        body: JSON.stringify({
+          queue: batch.queue,
+          messages: batch.messages.map((message) => ({
+            id: message.id,
+            timestamp: message.timestamp,
+            attempts: message.attempts,
+            body: message.body,
+          })),
+          metadata: batch.metadata,
+        } satisfies EntryQueuePayload),
+      })
+      .then((response) => response.json<FetcherQueueResult>());
     if (result.ackAll) {
       batch.ackAll();
     }
@@ -117,14 +123,6 @@ export class RemoteBridge extends DurableObject {
           webSocket: client,
         });
     }
-  }
-
-  async dispatchQueue(
-    name: string,
-    messages: Array<ServiceBindingQueueMessage>,
-    metadata?: MessageBatchMetadata,
-  ): Promise<FetcherQueueResult> {
-    return await this.remoteMain!.dispatchQueue(name, messages, metadata);
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {

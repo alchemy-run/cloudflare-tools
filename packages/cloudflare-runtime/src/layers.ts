@@ -9,10 +9,9 @@ import * as Runtime from "./runtime/runtime";
 import * as Tail from "./utils/tail";
 
 export const layers = Layer.provideMerge(
-  Layer.mergeAll(
+  Layer.merge(
     Layer.provide(Bindings.RemoteSessionLive, Bindings.AccessLive),
-    Layer.provide(Bridge.BridgeLive, Tail.TailLive),
-    Runtime.RuntimeLive,
+    Layer.provide(Layer.provideMerge(Bridge.BridgeLive, Runtime.RuntimeLive), Tail.TailLive),
   ),
   Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, Auth.fromEnv()),
 );

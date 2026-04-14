@@ -1,22 +1,24 @@
-import { createMiniflare, type MiniflareInstance } from "@distilled.cloud/test-utils/miniflare";
-import { miniflareModulesFromDirectory } from "@distilled.cloud/test-utils/miniflare-module";
+import type { MiniflareInstance } from "@distilled.cloud/test-utils/miniflare";
+import { createMiniflare } from "@distilled.cloud/test-utils/miniflare";
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
-const server = path.resolve(root, "dist/server");
-const client = path.resolve(root, "dist/client");
+const client = path.resolve(root, "dist");
 
 let miniflare: MiniflareInstance;
 
 test.beforeAll(async () => {
-  const modules = await miniflareModulesFromDirectory(server);
   miniflare = await createMiniflare({
-    modules,
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: ["nodejs_compat"],
+    modules: [
+      {
+        type: "ESModule",
+        path: "index.js",
+        contents: `export default { fetch: (request) => new Response("Not Found", { status: 404 }) }`,
+      },
+    ],
     assets: {
       directory: client,
       routerConfig: {
@@ -46,9 +48,7 @@ test("renders the homepage", async ({ page }) => {
   const index = await page.content();
   expect(index).toMatchSnapshot("index.html");
 
-  page.click("a[href='/about']");
-  await page.waitForURL("**/about");
-
-  const about = await page.content();
-  expect(about).toMatchSnapshot("about.html");
+  expect(await page.textContent("button.counter")).toBe("Count is 0");
+  await page.click("button.counter");
+  expect(await page.textContent("button.counter")).toBe("Count is 1");
 });

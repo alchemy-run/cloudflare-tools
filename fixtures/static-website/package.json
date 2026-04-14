@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "pretest": "playwright install chromium"
   },
   "devDependencies": {
     "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
     "@distilled.cloud/test-utils": "workspace:*",
+    "@playwright/test": "catalog:",
     "vite": "catalog:"
   }
 }

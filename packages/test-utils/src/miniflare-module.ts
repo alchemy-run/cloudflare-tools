@@ -71,7 +71,6 @@ export function moduleTypeFromExtension(ext: string): MiniflareModule["type"] | 
       return "CompiledWasm";
     case ".txt":
     case ".html":
-    case ".css":
     case ".sql":
     case ".custom":
       return "Text";
@@ -85,6 +84,6 @@ export function moduleTypeFromExtension(ext: string): MiniflareModule["type"] | 
     case ".map":
       return "SourceMap";
     default:
-      throw new Error(`Unknown extension: ${ext}`);
+      return "Text";
   }
 }

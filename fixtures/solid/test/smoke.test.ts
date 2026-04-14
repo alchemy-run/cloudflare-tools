@@ -1,4 +1,5 @@
-import { createMiniflare, type MiniflareInstance } from "@distilled.cloud/test-utils/miniflare";
+import type { MiniflareInstance } from "@distilled.cloud/test-utils/miniflare";
+import { createMiniflare } from "@distilled.cloud/test-utils/miniflare";
 import { miniflareModulesFromDirectory } from "@distilled.cloud/test-utils/miniflare-module";
 import { expect, test } from "@playwright/test";
 import path from "node:path";
@@ -45,6 +46,10 @@ test("renders the homepage", async ({ page }) => {
 
   const index = await page.content();
   expect(index).toMatchSnapshot("index.html");
+
+  expect(await page.textContent("button.increment")).toBe("Clicks: 0");
+  await page.click("button.increment");
+  expect(await page.textContent("button.increment")).toBe("Clicks: 1");
 
   page.click("a[href='/about']");
   await page.waitForURL("**/about");

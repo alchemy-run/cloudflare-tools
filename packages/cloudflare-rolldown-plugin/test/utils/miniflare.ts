@@ -9,9 +9,11 @@ interface MiniflareInstance {
   [Symbol.asyncDispose]: () => Promise<void>;
 }
 
+type Options = Extract<MiniflareOptions, { modules: Array<any> }>;
+
 export async function createMiniflare(
   output: RolldownOutput,
-  options: MiniflareOptions = {},
+  options: Partial<Options> = {},
 ): Promise<MiniflareInstance> {
   const miniflare = new Miniflare({
     modules: formatModules(output.output),

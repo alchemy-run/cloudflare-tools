@@ -2,7 +2,7 @@ import { Miniflare, type MiniflareOptions, type Response } from "miniflare";
 import type { RolldownOutput } from "rolldown";
 import { miniflareModulesFromRolldownOutput } from "./miniflare-module";
 
-interface MiniflareInstance {
+export interface MiniflareInstance {
   url: URL;
   fetch(path: string): Promise<Response>;
   fetchText(path: string): Promise<string>;

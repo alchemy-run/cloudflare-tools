@@ -10,4 +10,5 @@ dist-ssr
 .output
 .vinxi
 __unconfig*
+test-results
 todos.json

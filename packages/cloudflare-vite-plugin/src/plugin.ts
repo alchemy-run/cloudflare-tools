@@ -92,9 +92,10 @@ export default async function cloudflareVitePlugin(
                 target: TARGET,
                 emitAssets: true,
                 copyPublicDir: false,
-                rollupOptions: { preserveEntrySignatures: "strict" },
-                // @ts-expect-error rolldown-vite reads this key instead of rollupOptions
-                rolldownOptions: { preserveEntrySignatures: "strict" },
+                // This is aliased to `rolldownOptions` in Vite 8.
+                rollupOptions: {
+                  preserveEntrySignatures: "strict",
+                },
               },
               optimizeDeps: {
                 noDiscovery: false,

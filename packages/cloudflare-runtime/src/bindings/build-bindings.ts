@@ -74,8 +74,18 @@ export const buildBindings = Effect.fn(function* (bindings: Array<Binding>) {
           }
           case "dispatch_namespace":
             return yield* makeUnsupportedBindingError(binding);
-          case "durable_object_namespace":
-            return yield* makeUnsupportedBindingError(binding);
+          case "durable_object_namespace": {
+            if (binding.scriptName) {
+              return yield* new UnsupportedBindingError({
+                message: "Durable object namespace bindings must be linked to the current script.",
+                binding,
+              });
+            }
+            return {
+              name: binding.name,
+              durableObjectNamespace: { className: binding.className },
+            };
+          }
           case "hyperdrive":
             return yield* makeUnsupportedBindingError(binding);
           case "images": {

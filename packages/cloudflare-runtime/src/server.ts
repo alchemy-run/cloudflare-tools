@@ -1,7 +1,9 @@
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import type { Binding } from "./bindings/index.ts";
 import * as Bindings from "./bindings/index.ts";
@@ -17,6 +19,7 @@ export interface ServerInstance {
     compatibilityFlags?: Array<string>;
     bindings: Array<Binding>;
     modules: Array<Worker_Module>;
+    durableObjectNamespaces?: Array<{ className: string; sql?: boolean; uniqueKey: string }>;
   }) => Effect.Effect<void, unknown, Scope.Scope>;
 }
 
@@ -73,6 +76,22 @@ export const ServerLive = Layer.effect(
                     compatibilityFlags: worker.compatibilityFlags,
                     modules: worker.modules,
                     bindings: workerBindings,
+                    durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
+                      className: namespace.className,
+                      enableSql: namespace.sql,
+                      uniqueKey: namespace.uniqueKey,
+                    })),
+                    durableObjectStorage: {
+                      localDisk: "storage",
+                    },
+                  },
+                },
+                {
+                  name: "storage",
+                  disk: {
+                    path: storageDir,
+                    writable: true,
+                    allowDotfiles: true,
                   },
                 },
                 ...remoteBindingsServices,

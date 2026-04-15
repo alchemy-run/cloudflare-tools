@@ -6,9 +6,6 @@
     "tsBuildInfoFile": ".cache/sandbox/tsconfig.tsbuildinfo",
     "outDir": ".cache/sandbox",
     "emitDeclarationOnly": true,
-    "types": ["bun"],
-    "paths": {
-      "#/*": ["./src/*"]
-    }
+    "types": ["bun"]
   }
 }

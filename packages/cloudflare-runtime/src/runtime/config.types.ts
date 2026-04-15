@@ -2,7 +2,7 @@ import type {
   HttpOptions_Style,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
-} from "./config.capnp";
+} from "./config.capnp.ts";
 
 // TODO: auto-generate this file
 
@@ -10,7 +10,7 @@ export {
   HttpOptions_Style,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
-} from "./config.capnp";
+} from "./config.capnp.ts";
 
 export const kVoid = Symbol("kVoid");
 export type Void = typeof kVoid;

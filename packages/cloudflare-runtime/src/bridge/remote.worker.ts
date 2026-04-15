@@ -1,7 +1,7 @@
 import { RpcSession, type RpcStub, type RpcTransport } from "capnweb";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import type { EntryQueuePayload } from "../entry/entry.worker";
-import { REMOTE_WEBSOCKET_PATH, type Bridge, type WebSocketBridge } from "./api.shared";
+import type { EntryQueuePayload } from "../entry/entry.worker.ts";
+import { REMOTE_WEBSOCKET_PATH, type Bridge, type WebSocketBridge } from "./api.shared.ts";
 
 interface Env {
   BRIDGE: DurableObjectNamespace<RemoteBridge>;

@@ -1,12 +1,12 @@
-import { kVoid, type Service } from "#/runtime/config.types";
-import * as Bundle from "#/utils/bundle";
-import type { ServerError } from "#/utils/http-server";
-import { HttpServer } from "#/utils/http-server";
 import type { Scope } from "effect";
 import { Context, Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { RemoteSession, type RemoteSessionOptions } from "./remote-session";
+import { kVoid, type Service } from "../runtime/config.types.ts";
+import * as Bundle from "../utils/bundle.ts";
+import type { ServerError } from "../utils/http-server.ts";
+import { HttpServer } from "../utils/http-server.ts";
+import { RemoteSession, type RemoteSessionOptions } from "./remote-session.ts";
 
 export class RemoteBindingsServices extends Context.Service<
   RemoteBindingsServices,
@@ -26,6 +26,7 @@ export const RemoteBindingsServicesLive = Layer.effect(
       services: Effect.fn(function* (options) {
         const address = yield* httpServer.serve(
           remoteSession.create(options).pipe(Effect.flatMap(HttpServerResponse.json), Effect.orDie),
+          { port: 0 },
         );
         const config = {
           name: "remote-bindings:config",

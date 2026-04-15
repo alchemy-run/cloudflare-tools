@@ -1,7 +1,3 @@
-import { kVoid } from "#/runtime/config.types";
-import * as Runtime from "#/runtime/runtime";
-import * as Bundle from "#/utils/bundle";
-import * as Tail from "#/utils/tail";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -10,7 +6,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
-import { LOCAL_CONFIGURE_PATH, type ProxyControllerMessage } from "./api.shared";
+import { kVoid } from "../runtime/config.types.ts";
+import * as Runtime from "../runtime/runtime.ts";
+import * as Bundle from "../utils/bundle.ts";
+import * as Tail from "../utils/tail.ts";
+import { LOCAL_CONFIGURE_PATH, type ProxyControllerMessage } from "./api.shared.ts";
 
 const TAG = "distilled:remote-bridge:2026.04.13-17:02";
 

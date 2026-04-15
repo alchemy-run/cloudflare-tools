@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
-import * as LogSync from "./log-sync";
+import * as LogSync from "./log-sync.ts";
 
 export class TailError extends Data.TaggedError("TailError")<{
   message: string;

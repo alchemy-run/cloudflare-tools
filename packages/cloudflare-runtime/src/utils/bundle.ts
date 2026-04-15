@@ -1,12 +1,15 @@
-import type { Worker_Module } from "#/runtime/config.types";
 import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as Effect from "effect/Effect";
 import path from "node:path";
-import type { BundleOutput } from "./bundle.vendor";
-import { build } from "./bundle.vendor";
+import type { Worker_Module } from "../runtime/config.types.ts";
+import type { BundleOutput } from "./bundle.vendor.ts";
+import { build } from "./bundle.vendor.ts";
 
 export function bundle(entry: string): Effect.Effect<BundleOutput> {
-  return build({ input: entry, plugins: [cloudflare()] }).pipe(Effect.orDie);
+  return build({
+    input: import.meta.resolve(`../../${entry}`, import.meta.url),
+    plugins: [cloudflare()],
+  }).pipe(Effect.orDie);
 }
 
 export function bundleOutputToWorkerd(bundle: BundleOutput): Effect.Effect<Array<Worker_Module>> {

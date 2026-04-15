@@ -1,11 +1,11 @@
-import * as Bundle from "#/utils/bundle";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Access from "./access";
+import * as Bundle from "../utils/bundle.ts";
+import * as Access from "./access.ts";
 import type { RemoteProxyConfig } from "./workers/config.shared";
 
 export class SessionError extends Data.TaggedError("SessionError")<{

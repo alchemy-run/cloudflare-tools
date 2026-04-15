@@ -1,4 +1,3 @@
-import { cachedFunction } from "#/utils/cached-function";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -7,6 +6,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import { cachedFunction } from "../utils/cached-function.ts";
 
 export class AccessError extends Schema.TaggedErrorClass<AccessError>(
   "@distilled/cloudflare/AccessError",

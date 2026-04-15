@@ -1,6 +1,6 @@
-import type { Service } from "#/runtime/config.types";
-import * as Bundle from "#/utils/bundle";
 import * as Effect from "effect/Effect";
+import type { Service } from "../runtime/config.types.ts";
+import * as Bundle from "../utils/bundle.ts";
 
 export const Entry = Effect.gen(function* () {
   return {

@@ -98,6 +98,15 @@
       "rules": {
         "eslint/no-console": "error"
       }
+    },
+    {
+      "files": [
+        "packages/cloudflare-runtime/src/**/*.ts",
+        "packages/cloudflare-runtime/sandbox/**/*.ts"
+      ],
+      "rules": {
+        "import/extensions": ["error", "ignorePackages"]
+      }
     }
   ]
 }

@@ -7,7 +7,7 @@ import {
   type Bridge,
   type ProxyControllerMessage,
   type WebSocketBridge,
-} from "./api.shared";
+} from "./api.shared.ts";
 
 interface Env {
   BRIDGE: ColoLocalActorNamespace;

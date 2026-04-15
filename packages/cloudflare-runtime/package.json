@@ -2,8 +2,31 @@
   "name": "@distilled.cloud/cloudflare-runtime",
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./bindings": {
+      "types": "./dist/bindings/index.d.ts",
+      "default": "./dist/bindings.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge/index.d.ts",
+      "default": "./dist/bridge.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime.js"
+    }
+  },
   "scripts": {
     "build": "tsc -b",
+    "dev": "tsc -b --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "bun run build:clean"

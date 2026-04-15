@@ -6,9 +6,6 @@
     "tsBuildInfoFile": ".cache/emit/tsconfig.tsbuildinfo",
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["bun"],
-    "paths": {
-      "#/*": ["./src/*"]
-    }
+    "types": ["bun"]
   }
 }

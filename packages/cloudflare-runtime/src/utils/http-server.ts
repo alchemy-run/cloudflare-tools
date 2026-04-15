@@ -7,7 +7,7 @@ import type * as Scope from "effect/Scope";
 import type { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import * as HttpEffect from "effect/unstable/http/HttpEffect";
 import type net from "node:net";
-import { ServerAddressFromNode, ServiceAddress } from "./service-address";
+import { ServerAddressFromNode, ServiceAddress } from "./service-address.ts";
 
 export type Handler = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
@@ -96,13 +96,17 @@ export function startNodeServer<Server extends net.Server>(
       };
       server.once("error", onError);
       server.listen(port, hostname, () => {
+        console.log("Started server on", server.address());
         resume(Effect.succeed(server));
       });
       return Effect.sync(() => server.off("error", onError));
     }),
     (server) =>
       Effect.callback((resume) => {
-        server.close(() => resume(Effect.void));
+        {
+          console.log("Stopped server on", server.address());
+          server.close(() => resume(Effect.void));
+        }
       }),
   ).pipe(Effect.flatMap((server) => decodeServerAddress(ServerAddressFromNode, server.address())));
 }

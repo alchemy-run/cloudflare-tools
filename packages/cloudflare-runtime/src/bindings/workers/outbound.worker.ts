@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import type { RemoteProxyConfig } from "./config.shared";
+import type { RemoteProxyConfig } from "./config.shared.ts";
 
 declare abstract class ColoLocalActorNamespace<
   T extends Rpc.DurableObjectBranded | undefined = undefined,

@@ -8,8 +8,8 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { serializeConfig } from "./config.serialize";
-import type { Config } from "./config.types";
+import { serializeConfig } from "./config.serialize.ts";
+import type { Config } from "./config.types.ts";
 
 export class RuntimeError extends Schema.TaggedErrorClass<RuntimeError>()("RuntimeError", {
   message: Schema.String,

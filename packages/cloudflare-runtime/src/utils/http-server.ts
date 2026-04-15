@@ -103,10 +103,7 @@ export function startNodeServer<Server extends net.Server>(
     }),
     (server) =>
       Effect.callback((resume) => {
-        {
-          console.log("Stopped server on", server.address());
-          server.close(() => resume(Effect.void));
-        }
+        server.close(() => resume(Effect.void));
       }),
   ).pipe(Effect.flatMap((server) => decodeServerAddress(ServerAddressFromNode, server.address())));
 }

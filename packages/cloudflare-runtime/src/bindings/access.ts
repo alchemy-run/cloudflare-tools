@@ -8,9 +8,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { cachedFunction } from "../utils/cached-function.ts";
 
-export class AccessError extends Schema.TaggedErrorClass<AccessError>(
-  "@distilled/cloudflare/AccessError",
-)("AccessError", {
+export class AccessError extends Schema.TaggedErrorClass<AccessError>()("AccessError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect),
 }) {}

@@ -4,7 +4,9 @@ import * as Bundle from "../src/utils/bundle.ts";
 import { layers, run } from "./layers.ts";
 
 const program = Effect.gen(function* () {
-  const server = yield* Server.Server.use((s) => s.serve({ name: "main", port: 1337 }));
+  const server = yield* Server.Server.use((s) =>
+    s.serve({ name: "main", port: 1337, storage: ".cache/local" }),
+  );
   yield* server.update({
     compatibilityDate: "2026-03-10",
     bindings: [

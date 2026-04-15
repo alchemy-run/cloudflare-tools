@@ -10,11 +10,6 @@ import { Entry } from "./entry/entry.ts";
 import type { Worker_Module } from "./runtime/config.types.ts";
 import * as Runtime from "./runtime/runtime.ts";
 
-export interface ServeOptions {
-  name: string;
-  port: number;
-}
-
 export interface ServerInstance {
   readonly address: string;
   readonly update: (worker: {
@@ -31,6 +26,7 @@ export class Server extends Context.Service<
     readonly serve: (options: {
       name: string;
       port: number;
+      storage: string;
     }) => Effect.Effect<ServerInstance, Runtime.RuntimeError, Scope.Scope>;
   }
 >()("Server") {}
@@ -41,14 +37,17 @@ export const ServerLive = Layer.effect(
     const runtime = yield* Runtime.Runtime;
     const services = yield* Bindings.RemoteBindingsServices;
     const bridge = yield* Bridge.Bridge;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
     return Server.of({
-      serve: Effect.fn(function* ({ name, port }) {
+      serve: Effect.fn(function* ({ name, port, storage }) {
         const local = yield* bridge.local(port);
+        const storageDir = path.resolve(storage);
+        yield* fs.makeDirectory(storageDir).pipe(Effect.ignore);
         return {
           address: `http://localhost:${port}`,
           update: Effect.fn(function* (worker) {
-            console.log("Updating server", worker);
             const { remoteBindings, workerBindings } = yield* Bindings.buildBindings(
               worker.bindings,
             );
@@ -60,12 +59,13 @@ export const ServerLive = Layer.effect(
             const server = yield* runtime.serve({
               sockets: [
                 {
-                  name: "bridge",
+                  name: "entry",
                   address: "127.0.0.1:0",
                   service: { name: "entry" },
                 },
               ],
               services: [
+                yield* Entry,
                 {
                   name: "user",
                   worker: {
@@ -75,7 +75,6 @@ export const ServerLive = Layer.effect(
                     bindings: workerBindings,
                   },
                 },
-                yield* Entry,
                 ...remoteBindingsServices,
               ],
             });

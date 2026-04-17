@@ -1,5 +1,4 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -26,7 +25,10 @@ export interface LocalBridge {
 export class Bridge extends Context.Service<
   Bridge,
   {
-    readonly deploy: (scriptName: string) => Effect.Effect<string, BridgeError, Scope.Scope>;
+    readonly deploy: (
+      scriptName: string,
+      accountId: string,
+    ) => Effect.Effect<string, BridgeError, Scope.Scope>;
     readonly local: (port: number) => Effect.Effect<LocalBridge, Runtime.RuntimeError, Scope.Scope>;
   }
 >()("RemoteBridge") {}
@@ -34,7 +36,6 @@ export class Bridge extends Context.Service<
 export const BridgeLive = Layer.effect(
   Bridge,
   Effect.gen(function* () {
-    const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
     const runtime = yield* Runtime.Runtime;
     const tail = yield* Tail.Tail;
     const putScript = yield* workers.putScript;
@@ -44,15 +45,8 @@ export const BridgeLive = Layer.effect(
     const deleteScript = yield* workers.deleteScript;
     const scope = yield* Effect.scope;
 
-    const subdomain = yield* getSubdomain({ accountId }).pipe(
-      Effect.mapError((cause) => new BridgeError({ message: "Failed to get subdomain", cause })),
-      Effect.cached,
-    );
-
-    yield* Effect.forkDetach(subdomain);
-
     const deploy = Effect.fn(
-      function* (scriptName: string) {
+      function* (scriptName: string, accountId: string) {
         const existing = yield* getScript({ accountId, scriptName }).pipe(
           Effect.orElseSucceed(() => undefined),
         );
@@ -99,9 +93,13 @@ export const BridgeLive = Layer.effect(
         );
         return;
       },
-      (effect, scriptName) =>
+      (effect, scriptName, accountId) =>
         Effect.zipWith(
-          subdomain,
+          getSubdomain({ accountId }).pipe(
+            Effect.mapError(
+              (cause) => new BridgeError({ message: "Failed to get subdomain", cause }),
+            ),
+          ),
           effect,
           ({ subdomain }) => `https://${scriptName}.${subdomain}.workers.dev`,
           { concurrent: true },

@@ -6,7 +6,6 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Bindings from "../src/bindings/index.ts";
 import * as Bridge from "../src/bridge/bridge.ts";
 import * as Runtime from "../src/runtime/runtime.ts";
-import * as Server from "../src/server.ts";
 import * as HttpServer from "../src/utils/http-server.ts";
 import * as Tail from "../src/utils/tail.ts";
 
@@ -26,8 +25,8 @@ const coreServices = Layer.provideMerge(
 );
 
 export const layers = Layer.provideMerge(
-  Server.ServerLive,
-  Layer.provideMerge(Layer.merge(remoteBindingsServices, bridgeServices), coreServices),
+  Layer.merge(remoteBindingsServices, bridgeServices),
+  coreServices,
 );
 
 export function run<A, E>(program: Effect.Effect<A, E>) {

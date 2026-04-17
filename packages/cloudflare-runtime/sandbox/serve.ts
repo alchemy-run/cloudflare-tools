@@ -1,13 +1,14 @@
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Server from "../src/server.ts";
 import * as Bundle from "../src/utils/bundle.ts";
 import { layers, run } from "./layers.ts";
 
 const program = Effect.gen(function* () {
-  const server = yield* Server.Server.use((s) =>
-    s.serve({ name: "main", port: 1337, storage: ".cache/local" }),
-  );
-  yield* server.update({
+  const server = yield* Server.make({ port: 1337, storage: ".cache/local" });
+  yield* server.serve({
+    name: "main",
+    accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
     compatibilityDate: "2026-03-10",
     bindings: [
       {

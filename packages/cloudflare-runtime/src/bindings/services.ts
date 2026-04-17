@@ -1,6 +1,7 @@
 import type { Scope } from "effect";
 import { Context, Layer } from "effect";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { kVoid, type Service } from "../runtime/config.types.ts";
 import * as Bundle from "../utils/bundle.ts";
@@ -22,12 +23,17 @@ export const RemoteBindingsServicesLive = Layer.effect(
   Effect.gen(function* () {
     const httpServer = yield* HttpServer;
     const remoteSession = yield* RemoteSession;
+    const address = yield* httpServer.serve(
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const json = (yield* request.json) as unknown as RemoteSessionOptions;
+        const session = yield* remoteSession.create(json);
+        return yield* HttpServerResponse.json(session);
+      }).pipe(Effect.orDie),
+      { port: 0 },
+    );
     return RemoteBindingsServices.of({
       services: Effect.fn(function* (options) {
-        const address = yield* httpServer.serve(
-          remoteSession.create(options).pipe(Effect.flatMap(HttpServerResponse.json), Effect.orDie),
-          { port: 0 },
-        );
         const config = {
           name: "remote-bindings:config",
           external: {
@@ -50,6 +56,10 @@ export const RemoteBindingsServicesLive = Layer.effect(
               {
                 name: "LOOPBACK",
                 service: { name: config.name },
+              },
+              {
+                name: "OPTIONS",
+                json: JSON.stringify(options),
               },
             ],
             durableObjectNamespaces: [

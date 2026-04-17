@@ -3,10 +3,12 @@ export const REMOTE_WEBSOCKET_PATH = "/__distilled/bridge/websocket";
 
 export type ProxyControllerMessage =
   | {
+      name: string;
       type: `${"local" | "remote"}.set`;
       value: string;
     }
   | {
+      name: string;
       type: `${"local" | "remote"}.unset`;
     };
 

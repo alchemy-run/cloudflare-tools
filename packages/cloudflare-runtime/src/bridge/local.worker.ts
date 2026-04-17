@@ -20,8 +20,14 @@ export default {
 };
 
 export class LocalBridge extends DurableObject<Env> {
-  private remote?: RpcStub<WebSocketBridge>;
-  private local?: string;
+  private workers: Record<
+    string,
+    {
+      local?: string;
+      remote?: RpcStub<WebSocketBridge>;
+    }
+  > = {};
+
   private queue = new Map<Request, PromiseWithResolvers<Response>>();
   private retryQueue = new Map<Request, PromiseWithResolvers<Response>>();
 
@@ -40,42 +46,31 @@ export class LocalBridge extends DurableObject<Env> {
 
   private async handleProxyControllerRequest(request: Request) {
     const message = await request.json<ProxyControllerMessage>();
+    this.workers[message.name] ??= {};
     switch (message.type) {
       case "local.set": {
-        this.local = message.value;
+        this.workers[message.name].local = message.value;
         break;
       }
       case "local.unset": {
-        this.local = undefined;
+        this.workers[message.name].local = undefined;
         break;
       }
       case "remote.set": {
-        this.remote = await this.connectToRemote(message.value);
+        if (this.workers[message.name].remote) {
+          this.workers[message.name].remote?.[Symbol.dispose]();
+          this.workers[message.name].remote = undefined;
+        }
+        this.workers[message.name].remote = await this.connectToRemote(message.value);
         break;
       }
       case "remote.unset": {
-        this.remote?.[Symbol.dispose]();
-        this.remote = undefined;
+        this.workers[message.name].remote?.[Symbol.dispose]();
+        this.workers[message.name].remote = undefined;
         break;
       }
     }
     return new Response("OK");
-  }
-
-  private async connectToRemote(remote: string) {
-    const url = new URL(remote);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.pathname = REMOTE_WEBSOCKET_PATH;
-    const ws = new WebSocket(url.toString());
-    await new Promise<void>((resolve, reject) => {
-      ws.addEventListener("open", () => {
-        resolve();
-      });
-      ws.addEventListener("error", (event) => {
-        reject(event.error);
-      });
-    });
-    return newWebSocketRpcSession<WebSocketBridge>(ws, this.localMain);
   }
 
   private handleUserWorkerRequest(request: Request) {
@@ -92,19 +87,31 @@ export class LocalBridge extends DurableObject<Env> {
 
   private processQueue() {
     for (const [request, promise] of this.getOrderedQueue()) {
-      const local = this.local;
+      const original = new URL(request.url);
+      const segments = original.hostname.split(".");
+      const name = segments[0];
+      console.log("[local] processing queue", {
+        name,
+        original: original.toString(),
+        local: this.workers[name]?.local,
+      });
+      if (segments.length < 2 || !name) {
+        this.queue.delete(request);
+        this.retryQueue.delete(request);
+        return promise.resolve(new Response("Invalid request", { status: 400 }));
+      }
+      const local = this.workers[name]?.local;
       if (!local) {
-        break;
+        continue;
       }
       this.queue.delete(request);
       this.retryQueue.delete(request);
-      const original = new URL(request.url);
       const proxied = new URL(original.pathname + original.search, local);
       this.ctx.waitUntil(
         fetch(proxied, request)
           .then(promise.resolve)
           .catch((error) => {
-            if (this.local === local) {
+            if (this.workers[name]?.local === local) {
               promise.reject(error);
               return;
             }
@@ -126,63 +133,85 @@ export class LocalBridge extends DurableObject<Env> {
     }
   }
 
-  private readonly localMain: Bridge = {
-    fetch: async (request: Request) => {
-      console.log("[local] fetching", request.url);
-      const response = await this.handleUserWorkerRequest(request);
-      if (response.webSocket) {
-        const ws = response.webSocket;
-        const id = crypto.randomUUID();
-        ws.accept({ allowHalfOpen: true });
-        ws.addEventListener("message", (event) => {
-          console.log("[local] upstream websocket message", id, event.data);
-          this.remote?.webSocketMessage(id, event.data);
-        });
-        ws.addEventListener("close", (event) => {
-          console.log(
-            "[local] upstream websocket close",
+  private async connectToRemote(remote: string) {
+    const url = new URL(remote);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = REMOTE_WEBSOCKET_PATH;
+    const ws = new WebSocket(url.toString());
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener("open", () => {
+        resolve();
+      });
+      ws.addEventListener("error", (event) => {
+        reject(event.error);
+      });
+    });
+    const remoteMain: RpcStub<WebSocketBridge> = newWebSocketRpcSession<WebSocketBridge>(
+      ws,
+      this.makeLocalMain(() => remoteMain),
+    );
+    return remoteMain;
+  }
+
+  private makeLocalMain(remote: () => RpcStub<WebSocketBridge>): Bridge {
+    return {
+      fetch: async (request: Request) => {
+        console.log("[local] fetching", request.url);
+        const response = await this.handleUserWorkerRequest(request);
+        if (response.webSocket) {
+          const ws = response.webSocket;
+          const id = crypto.randomUUID();
+          ws.accept({ allowHalfOpen: true });
+          ws.addEventListener("message", (event) => {
+            console.log("[local] upstream websocket message", id, event.data);
+            remote().webSocketMessage(id, event.data);
+          });
+          ws.addEventListener("close", (event) => {
+            console.log(
+              "[local] upstream websocket close",
+              id,
+              event.code,
+              event.reason,
+              event.wasClean,
+            );
+            remote().webSocketClose(id, event.code, event.reason, event.wasClean);
+          });
+          ws.addEventListener("error", (event) => {
+            console.log("[local] upstream websocket error", id, event.error);
+            remote().webSocketError(id, event.error);
+          });
+          return {
+            kind: "upgrade",
+            status: response.status,
+            headers: response.headers,
             id,
-            event.code,
-            event.reason,
-            event.wasClean,
-          );
-          this.remote?.webSocketClose(id, event.code, event.reason, event.wasClean);
-        });
-        ws.addEventListener("error", (event) => {
-          console.log("[local] upstream websocket error", id, event.error);
-          this.remote?.webSocketError(id, event.error);
-        });
-        return {
-          kind: "upgrade",
-          status: response.status,
-          headers: response.headers,
-          id,
-        };
-      } else {
-        return {
-          kind: "response",
-          response,
-        };
-      }
-    },
-    webSocketMessage: async (id: string, message: string | ArrayBuffer) => {
-      console.log("[local] websocket message", id, message);
-      const [target] = this.ctx.getWebSockets(id);
-      if (!target) {
-        return;
-      }
-      target.send(message);
-    },
-    webSocketClose: async (id: string, code: number, reason: string, wasClean: boolean) => {
-      console.log("[local] websocket close", id, code, reason, wasClean);
-      const [target] = this.ctx.getWebSockets(id);
-      if (!target) {
-        return;
-      }
-      target.close(code, reason);
-    },
-    webSocketError: async (id: string, error: unknown) => {
-      console.log("[local] websocket error", id, error);
-    },
-  };
+          };
+        } else {
+          return {
+            kind: "response",
+            response,
+          };
+        }
+      },
+      webSocketMessage: async (id: string, message: string | ArrayBuffer) => {
+        console.log("[local] websocket message", id, message);
+        const [target] = this.ctx.getWebSockets(id);
+        if (!target) {
+          return;
+        }
+        target.send(message);
+      },
+      webSocketClose: async (id: string, code: number, reason: string, wasClean: boolean) => {
+        console.log("[local] websocket close", id, code, reason, wasClean);
+        const [target] = this.ctx.getWebSockets(id);
+        if (!target) {
+          return;
+        }
+        target.close(code, reason);
+      },
+      webSocketError: async (id: string, error: unknown) => {
+        console.log("[local] websocket error", id, error);
+      },
+    };
+  }
 }

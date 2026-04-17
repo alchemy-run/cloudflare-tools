@@ -10,6 +10,7 @@ declare abstract class ColoLocalActorNamespace<
 interface Env {
   PROXY: ColoLocalActorNamespace<RemoteBindingProxy>;
   LOOPBACK: Fetcher;
+  OPTIONS: unknown;
 }
 
 export default {
@@ -42,7 +43,11 @@ export class RemoteBindingProxy extends DurableObject<Env> {
     }
     return this.ctx.blockConcurrencyWhile(async () => {
       this.config = undefined;
-      const response = await this.env.LOOPBACK.fetch("http://stub");
+      const response = await this.env.LOOPBACK.fetch("http://stub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this.env.OPTIONS),
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch config: ${response.statusText}`);
       }

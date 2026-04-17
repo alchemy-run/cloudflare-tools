@@ -12,7 +12,7 @@ import { ServerAddressFromNode, ServiceAddress } from "./service-address.ts";
 export type Handler = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   HttpServerError.HttpServerError,
-  HttpServerRequest.HttpServerRequest
+  HttpServerRequest.HttpServerRequest | Scope.Scope
 >;
 
 export class HttpServer extends Context.Service<

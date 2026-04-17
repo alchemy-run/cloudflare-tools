@@ -1,9 +1,9 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { kVoid } from "../runtime/config.types.ts";
 import * as Runtime from "../runtime/runtime.ts";
@@ -13,10 +13,10 @@ import { LOCAL_CONFIGURE_PATH, type ProxyControllerMessage } from "./api.shared.
 
 const TAG = "distilled:remote-bridge:2026.04.13-17:02";
 
-export class BridgeError extends Data.TaggedError("BridgeError")<{
-  message: string;
-  cause?: unknown;
-}> {}
+export class BridgeError extends Schema.TaggedErrorClass<BridgeError>()("BridgeError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.DefectWithStack),
+}) {}
 
 export interface LocalBridge {
   readonly configure: (message: ProxyControllerMessage) => Effect.Effect<void, BridgeError>;

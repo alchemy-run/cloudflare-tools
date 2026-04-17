@@ -14,7 +14,7 @@ import type { Config } from "./config.types.ts";
 export class RuntimeError extends Schema.TaggedErrorClass<RuntimeError>()("RuntimeError", {
   message: Schema.String,
   stderr: Schema.optional(Schema.String),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.DefectWithStack),
 }) {}
 
 export const ControlMessage = Schema.Union([

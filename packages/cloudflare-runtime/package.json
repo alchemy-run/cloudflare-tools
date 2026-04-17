@@ -13,6 +13,11 @@
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
     },
+    "./rpc-server": {
+      "bun": "./src/rpc-server.ts",
+      "types": "./dist/rpc-server.d.ts",
+      "default": "./dist/rpc-server.js"
+    },
     "./bindings": {
       "bun": "./src/bindings/index.ts",
       "types": "./dist/bindings/index.d.ts",

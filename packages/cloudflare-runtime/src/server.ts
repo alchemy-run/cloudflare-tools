@@ -2,25 +2,67 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import type { Binding } from "./bindings/index.ts";
 import * as Bindings from "./bindings/index.ts";
 import * as Bridge from "./bridge/bridge.ts";
 import { Entry } from "./entry/entry.ts";
-import type { Worker_Module } from "./runtime/config.types.ts";
 import * as Runtime from "./runtime/runtime.ts";
 
-export interface WorkerInput {
-  name: string;
-  accountId: string;
-  compatibilityDate: string;
-  compatibilityFlags?: Array<string>;
-  bindings: Array<Binding>;
-  modules: Array<Worker_Module>;
-  durableObjectNamespaces?: Array<{ className: string; sql?: boolean; uniqueKey: string }>;
-}
+export const WorkerModule = Schema.Union([
+  Schema.Struct({
+    name: Schema.String,
+    esModule: Schema.String,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    commonJsModule: Schema.String,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    text: Schema.String,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    data: Schema.Uint8Array,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    wasm: Schema.Uint8Array,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    json: Schema.String,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    pythonModule: Schema.String,
+  }),
+  Schema.Struct({
+    name: Schema.String,
+    pythonRequirement: Schema.String,
+  }),
+]);
+export type WorkerModule = typeof WorkerModule.Type;
 
-export type Server = Effect.Success<ReturnType<typeof make>>;
+export const WorkerInput = Schema.Struct({
+  name: Schema.String,
+  accountId: Schema.String,
+  compatibilityDate: Schema.String,
+  compatibilityFlags: Schema.optional(Schema.Array(Schema.String)),
+  bindings: Schema.Array(Bindings.Binding),
+  modules: Schema.Array(WorkerModule),
+  durableObjectNamespaces: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        className: Schema.String,
+        sql: Schema.optional(Schema.Boolean),
+        uniqueKey: Schema.String,
+      }),
+    ),
+  ),
+});
+export type WorkerInput = typeof WorkerInput.Type;
 
 export const make = Effect.fn(function* (options: { port: number; storage: string }) {
   console.log("Making server", options);
@@ -71,8 +113,8 @@ export const make = Effect.fn(function* (options: { port: number; storage: strin
               name: "user",
               worker: {
                 compatibilityDate: worker.compatibilityDate,
-                compatibilityFlags: worker.compatibilityFlags,
-                modules: worker.modules,
+                compatibilityFlags: worker.compatibilityFlags as Array<string>,
+                modules: worker.modules as Array<WorkerModule>,
                 bindings: workerBindings,
                 durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
                   className: namespace.className,
@@ -100,6 +142,8 @@ export const make = Effect.fn(function* (options: { port: number; storage: strin
       const address = `http://localhost:${server[0].port}`;
       yield* local.configure({ name: worker.name, type: "local.set", value: address });
       console.log("Updated server", address);
+      return { name: worker.name, address };
     }),
+    close,
   };
 });

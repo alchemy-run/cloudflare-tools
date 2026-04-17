@@ -1,20 +1,16 @@
-import type { Scope } from "effect";
 import { Context, Layer } from "effect";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { kVoid, type Service } from "../runtime/config.types.ts";
 import * as Bundle from "../utils/bundle.ts";
-import type { ServerError } from "../utils/http-server.ts";
 import { HttpServer } from "../utils/http-server.ts";
 import { RemoteSession, type RemoteSessionOptions } from "./remote-session.ts";
 
 export class RemoteBindingsServices extends Context.Service<
   RemoteBindingsServices,
   {
-    readonly services: (
-      options: RemoteSessionOptions,
-    ) => Effect.Effect<Array<Service>, ServerError, Scope.Scope>;
+    readonly services: (options: RemoteSessionOptions) => Effect.Effect<Array<Service>>;
   }
 >()("RemoteBindingsServices") {}
 

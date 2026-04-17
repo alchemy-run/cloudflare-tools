@@ -20,6 +20,7 @@
     "catalog": {
       "@cloudflare/workers-types": "^4.20260310.1",
       "@distilled.cloud/cloudflare": "https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4",
+      "@effect/platform-bun": "^4.0.0-beta.48",
       "@effect/platform-node": "^4.0.0-beta.48",
       "@effect/vitest": "^4.0.0-beta.48",
       "effect": "^4.0.0-beta.48",

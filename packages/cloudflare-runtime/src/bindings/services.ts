@@ -24,8 +24,12 @@ export const RemoteBindingsServicesLive = Layer.effect(
         const request = yield* HttpServerRequest.HttpServerRequest;
         const json = (yield* request.json) as unknown as RemoteSessionOptions;
         const session = yield* remoteSession.create(json);
-        return yield* HttpServerResponse.json(session);
-      }).pipe(Effect.orDie),
+        return yield* HttpServerResponse.json({ success: true, session });
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(HttpServerResponse.jsonUnsafe({ success: false, error }, { status: 500 })),
+        ),
+      ),
       { port: 0 },
     );
     return RemoteBindingsServices.of({

@@ -83,8 +83,25 @@ export const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Bindin
             durableObjectNamespace: { className: binding.className },
           };
         }
-        case "hyperdrive":
+        case "hyperdrive": {
+          // TODO: implement custom websocket transport
+          // remoteBindings.push({
+          //   name: binding.name,
+          //   type: "hyperdrive",
+          //   id: binding.id,
+          // });
+          // return {
+          //   name: binding.name,
+          //   hyperdrive: {
+          //     designator: makeRemoteBindingServiceDesignator(binding.name),
+          //     database: "",
+          //     user: "",
+          //     password: "",
+          //     scheme: "",
+          //   },
+          // };
           return yield* makeUnsupportedBindingError(binding);
+        }
         case "images": {
           remoteBindings.push({
             name: binding.name,

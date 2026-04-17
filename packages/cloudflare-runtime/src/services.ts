@@ -8,14 +8,12 @@ import * as Tail from "./utils/tail.ts";
 const remoteBindingsServices = Layer.provide(
   Bindings.RemoteBindingsServicesLive,
   Layer.merge(
-    Layer.provide(Bindings.RemoteSessionLive, Bindings.AccessLive),
     HttpServer.HttpServerNode,
+    Layer.provide(Bindings.RemoteSessionLive, Bindings.AccessLive),
   ),
 );
 
-const bridgeServices = Layer.provide(Bridge.BridgeLive, Tail.TailLive);
-
 export const layer = Layer.provideMerge(
-  Layer.merge(remoteBindingsServices, bridgeServices),
-  Runtime.RuntimeLive,
+  Layer.merge(remoteBindingsServices, Bridge.BridgeLive),
+  Layer.merge(Runtime.RuntimeLive, Tail.TailLive),
 );

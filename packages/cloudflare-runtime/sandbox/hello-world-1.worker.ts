@@ -3,6 +3,7 @@
 interface Env {
   KV: KVNamespace;
   QUEUE: Queue;
+  HYPERDRIVE: Hyperdrive;
 }
 
 export default {

@@ -142,7 +142,7 @@ export const make = Effect.fn(function* (options: { port: number; storage: strin
       const address = `http://localhost:${server[0].port}`;
       yield* local.configure({ name: worker.name, type: "local.set", value: address });
       console.log("Updated server", address);
-      return { name: worker.name, address };
+      return { name: worker.name, address: `http://${worker.name}.localhost:${options.port}` };
     }),
     close,
   };

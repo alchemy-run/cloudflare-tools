@@ -21,6 +21,22 @@ const program = Effect.gen(function* () {
       Effect.flatMap(Bundle.bundleOutputToWorkerd),
     ),
   });
+  yield* Effect.sleep(1000);
+  yield* server.serve({
+    name: "main",
+    accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
+    compatibilityDate: "2026-03-10",
+    bindings: [
+      {
+        name: "KV",
+        type: "kv_namespace",
+        namespaceId: "c2399b3754ea4199a765e8c388eb2603",
+      },
+    ],
+    modules: yield* Bundle.bundle("sandbox/hello-world-1.worker.ts").pipe(
+      Effect.flatMap(Bundle.bundleOutputToWorkerd),
+    ),
+  });
   // const bridge = yield* Bridge.Bridge;
   // const runtime = yield* Runtime.Runtime;
   // const remoteBindingsServices = yield* Bindings.RemoteBindingsServices;

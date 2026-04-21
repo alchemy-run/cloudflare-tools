@@ -4,6 +4,7 @@
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/workers/tsconfig.tsbuildinfo",
     "outDir": ".cache/workers",
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "types": ["@cloudflare/workers-types/experimental"]
   }
 }

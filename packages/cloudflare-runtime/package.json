@@ -9,14 +9,9 @@
       "default": "./dist/index.js"
     },
     "./server": {
-      "bun": "./src/server.ts",
-      "types": "./dist/server.d.ts",
-      "default": "./dist/server.js"
-    },
-    "./rpc-server": {
-      "bun": "./src/rpc-server.ts",
-      "types": "./dist/rpc-server.d.ts",
-      "default": "./dist/rpc-server.js"
+      "bun": "./src/server/index.ts",
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
     },
     "./bindings": {
       "bun": "./src/bindings/index.ts",

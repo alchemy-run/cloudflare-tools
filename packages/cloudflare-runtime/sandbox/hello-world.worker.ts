@@ -7,6 +7,11 @@ interface Env {
 
 export default {
   async fetch(request, env) {
+    console.log("fetch", request.url, request.method);
+    const url = new URL(request.url);
+    if (url.pathname === "/") {
+      return new Response("Hello, world!");
+    }
     if (request.url.includes("/queue")) {
       const message = await env.QUEUE.send({
         message: "Hello, world!",

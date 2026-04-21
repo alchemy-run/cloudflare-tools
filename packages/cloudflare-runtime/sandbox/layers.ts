@@ -3,10 +3,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Services from "../src/services.ts";
+import * as Services from "../src/server/services.ts";
 
 export const layers = Layer.provideMerge(
-  Services.layer,
+  Services.layer({ port: 1337, storage: ".cache/local" }),
   Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, Auth.fromEnv()),
 );
 

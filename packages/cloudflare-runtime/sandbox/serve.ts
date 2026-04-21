@@ -1,29 +1,13 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Server from "../src/server.ts";
-import * as Bundle from "../src/utils/bundle.ts";
+import { rpc } from "../src/dev/rpc.ts";
 import { layers } from "./layers.ts";
 
 const program = Effect.gen(function* () {
-  const server = yield* Server.make({ port: 1337, storage: ".cache/local" });
-  // yield* server.serve({
-  //   name: "main",
-  //   accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
-  //   compatibilityDate: "2026-03-10",
-  //   bindings: [
-  //     {
-  //       name: "KV",
-  //       type: "kv_namespace",
-  //       namespaceId: "c2399b3754ea4199a765e8c388eb2603",
-  //     },
-  //   ],
-  //   modules: yield* Bundle.bundle("sandbox/hello-world.worker.ts").pipe(
-  //     Effect.flatMap(Bundle.bundleOutputToWorkerd),
-  //   ),
-  // });
-  // yield* Effect.sleep(1000);
-  yield* server.serve({
+  const server = yield* rpc;
+  console.time("serve");
+  const result = yield* server.serve({
     name: "main",
     accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
     compatibilityDate: "2026-03-10",
@@ -35,54 +19,11 @@ const program = Effect.gen(function* () {
         namespaceId: "c2399b3754ea4199a765e8c388eb2603",
       },
     ],
-    modules: yield* Bundle.bundle("sandbox/hello-world-1.worker.ts").pipe(
-      Effect.flatMap(Bundle.bundleOutputToWorkerd),
-    ),
+    main: "sandbox/hello-world.worker.ts",
+    durableObjectNamespaces: [],
   });
-  // const bridge = yield* Bridge.Bridge;
-  // const runtime = yield* Runtime.Runtime;
-  // const remoteBindingsServices = yield* Bindings.RemoteBindingsServices;
-  // const { remoteBindings, workerBindings } = yield* Bindings.buildBindings([
-  //   {
-  //     name: "KV",
-  //     type: "kv_namespace",
-  //     namespaceId: "c2399b3754ea4199a765e8c388eb2603",
-  //   },
-  // ]);
-  // const options: Bindings.RemoteSessionOptions = {
-  //   accountId: yield* Config.string("CLOUDFLARE_ACCOUNT_ID"),
-  //   scriptName: "my-john-worker",
-  //   bindings: remoteBindings,
-  // };
-  // const remoteBridgeUrl = yield* bridge.deploy("remote-bindings");
-  // const localBridge = yield* bridge.local(1337);
-  // const server = yield* runtime.serve({
-  //   sockets: [
-  //     {
-  //       name: "bridge",
-  //       address: "127.0.0.1:0",
-  //       service: { name: "entry" },
-  //     },
-  //   ],
-  //   services: [
-  //     {
-  //       name: "user",
-  //       worker: {
-  //         compatibilityDate: "2026-03-10",
-  // modules: yield* Bundle.bundle("sandbox/hello-world.worker.ts").pipe(
-  //   Effect.flatMap(Bundle.bundleOutputToWorkerd),
-  // ),
-  //         bindings: workerBindings,
-  //       },
-  //     },
-  //     yield* Entry,
-  //     ...(yield* remoteBindingsServices.services(options)),
-  //   ],
-  // });
-  // const port = server[0].port;
-  // yield* localBridge.configure({ type: "local.set", value: `http://localhost:${port}` });
-  // yield* localBridge.configure({ type: "remote.set", value: remoteBridgeUrl });
-  // yield* Effect.log({ server, remoteBridgeUrl });
+  console.timeEnd("serve");
+  console.log(result);
 });
 
 Effect.all([program, Effect.never]).pipe(

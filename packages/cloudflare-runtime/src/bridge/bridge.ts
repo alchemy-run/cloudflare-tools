@@ -2,9 +2,10 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import { HttpBody, HttpClientResponse } from "effect/unstable/http";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { kVoid } from "../runtime/config.types.ts";
 import * as Runtime from "../runtime/runtime.ts";
 import * as Bundle from "../utils/bundle.ts";
@@ -18,25 +19,88 @@ export class BridgeError extends Schema.TaggedErrorClass<BridgeError>()("BridgeE
   cause: Schema.optional(Schema.DefectWithStack),
 }) {}
 
-export interface LocalBridge {
-  readonly configure: (message: ProxyControllerMessage) => Effect.Effect<void, BridgeError>;
-}
+export class LocalBridge extends Context.Service<
+  LocalBridge,
+  {
+    readonly port: number;
+    readonly send: (message: ProxyControllerMessage) => Effect.Effect<void, BridgeError>;
+  }
+>()("LocalBridge") {}
 
-export class Bridge extends Context.Service<
-  Bridge,
+export const LocalBridgeLive = (port: number) =>
+  Layer.effect(
+    LocalBridge,
+    Effect.gen(function* () {
+      const runtime = yield* Runtime.Runtime;
+      const httpClient = yield* HttpClient.HttpClient;
+      yield* runtime.serve({
+        sockets: [
+          {
+            name: "http",
+            address: `localhost:${port}`,
+            service: { name: "bridge:local" },
+          },
+        ],
+        services: [
+          {
+            name: "bridge:local",
+            worker: {
+              compatibilityDate: "2026-03-10",
+              modules: yield* Bundle.bundle("src/bridge/local.worker.ts").pipe(
+                Effect.flatMap(Bundle.bundleOutputToWorkerd),
+              ),
+              bindings: [{ name: "BRIDGE", durableObjectNamespace: { className: "LocalBridge" } }],
+              durableObjectNamespaces: [
+                { className: "LocalBridge", ephemeralLocal: kVoid, preventEviction: true },
+              ],
+            },
+          },
+          {
+            name: "internet",
+            network: {
+              // Allow access to private/public addresses:
+              // https://github.com/cloudflare/miniflare/issues/412
+              allow: ["public", "private", "240.0.0.0/4"],
+              deny: [],
+              tlsOptions: {
+                trustBrowserCas: true,
+              },
+            },
+          },
+        ],
+      });
+      return LocalBridge.of({
+        port,
+        send: Effect.fn((message) =>
+          httpClient
+            .post(new URL(LOCAL_CONFIGURE_PATH, `http://localhost:${port}`), {
+              body: HttpBody.jsonUnsafe(message),
+            })
+            .pipe(
+              Effect.flatMap(HttpClientResponse.filterStatusOk),
+              Effect.mapError(
+                (e) =>
+                  new BridgeError({ message: "Failed to send message to local bridge", cause: e }),
+              ),
+            ),
+        ),
+      });
+    }),
+  );
+
+export class RemoteBridge extends Context.Service<
+  RemoteBridge,
   {
     readonly deploy: (
       scriptName: string,
       accountId: string,
     ) => Effect.Effect<string, BridgeError, Scope.Scope>;
-    readonly local: (port: number) => Effect.Effect<LocalBridge, Runtime.RuntimeError, Scope.Scope>;
   }
 >()("RemoteBridge") {}
 
-export const BridgeLive = Layer.effect(
-  Bridge,
+export const RemoteBridgeLive = Layer.effect(
+  RemoteBridge,
   Effect.gen(function* () {
-    const runtime = yield* Runtime.Runtime;
     const tail = yield* Tail.Tail;
     const putScript = yield* workers.putScript;
     const getScript = yield* workers.getScriptSetting;
@@ -117,88 +181,8 @@ export const BridgeLive = Layer.effect(
         ),
     );
 
-    const local = Effect.fn(function* (port: number) {
-      yield* runtime.serve({
-        sockets: [
-          {
-            name: "http",
-            address: `localhost:${port}`,
-            service: { name: "bridge:local" },
-          },
-        ],
-        services: [
-          {
-            name: "bridge:local",
-            worker: {
-              compatibilityDate: "2026-03-10",
-              modules: yield* Bundle.bundle("src/bridge/local.worker.ts").pipe(
-                Effect.flatMap(Bundle.bundleOutputToWorkerd),
-              ),
-              bindings: [{ name: "BRIDGE", durableObjectNamespace: { className: "LocalBridge" } }],
-              durableObjectNamespaces: [
-                { className: "LocalBridge", ephemeralLocal: kVoid, preventEviction: true },
-              ],
-            },
-          },
-          {
-            name: "internet",
-            network: {
-              // Allow access to private/public addresses:
-              // https://github.com/cloudflare/miniflare/issues/412
-              allow: ["public", "private", "240.0.0.0/4"],
-              deny: [],
-              tlsOptions: {
-                trustBrowserCas: true,
-              },
-            },
-          },
-        ],
-      });
-      return {
-        configure: Effect.fn((message: ProxyControllerMessage) =>
-          Effect.tryPromise({
-            try: async () => {
-              console.log("[local] configuring", message);
-              const response = await fetch(
-                new URL(LOCAL_CONFIGURE_PATH, `http://localhost:${port}`),
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(message),
-                },
-              );
-              return response.ok
-                ? ({ ok: true } as const)
-                : ({ ok: false, error: await response.text() } as const);
-            },
-            catch: (error) =>
-              new BridgeError({ message: "Failed to configure local bridge", cause: error }),
-          }).pipe(
-            Effect.flatMap((response) =>
-              response.ok
-                ? Effect.void
-                : Effect.fail(
-                    new BridgeError({
-                      message: `Failed to configure local bridge: ${response.error}`,
-                    }),
-                  ),
-            ),
-            // This indicates an eventual consistency issue, i.e. that the remote worker is not yet ready.
-            // Retry aggressively.
-            Effect.retry({
-              while: (error) =>
-                error.message.includes("Failed to establish the WebSocket connection"),
-              schedule: Schedule.exponential("500 millis"),
-              times: 20,
-            }),
-          ),
-        ),
-      } satisfies LocalBridge;
-    });
-
-    return Bridge.of({
+    return RemoteBridge.of({
       deploy,
-      local,
     });
   }),
 );

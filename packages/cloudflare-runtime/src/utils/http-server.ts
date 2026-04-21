@@ -83,7 +83,7 @@ export function startNodeServer<Server extends net.Server>(
   hostname: string = "127.0.0.1",
 ) {
   return Effect.acquireRelease(
-    Effect.callback<Server, ServerError>((resume) => {
+    Effect.callback<ServiceAddress, ServerError>((resume) => {
       const onError = (cause: Error) => {
         resume(
           Effect.fail(
@@ -96,14 +96,13 @@ export function startNodeServer<Server extends net.Server>(
       };
       server.once("error", onError);
       server.listen(port, hostname, () => {
-        console.log("Started server on", server.address());
-        resume(Effect.succeed(server));
+        resume(decodeServerAddress(ServerAddressFromNode, server.address()));
       });
       return Effect.sync(() => server.off("error", onError));
     }),
-    (server) =>
+    () =>
       Effect.callback((resume) => {
         server.close(() => resume(Effect.void));
       }),
-  ).pipe(Effect.flatMap((server) => decodeServerAddress(ServerAddressFromNode, server.address())));
+  );
 }

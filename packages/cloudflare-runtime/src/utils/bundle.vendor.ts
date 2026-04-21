@@ -1,8 +1,8 @@
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import crypto from "node:crypto";
@@ -26,10 +26,10 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Data.TaggedError("BundleError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
+export class BundleError extends Schema.TaggedErrorClass<BundleError>()("BundleError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.DefectWithStack),
+}) {}
 
 /**
  * Build a bundle using rolldown from the given input options and output options.
@@ -83,6 +83,7 @@ export const watch = (
             {
               name: "alchemy:watch-bundle",
               generateBundle(_outputOptions, bundle) {
+                console.log("generateBundle");
                 Queue.offerUnsafe(queue, Result.succeed(bundle));
               },
             },
@@ -99,7 +100,11 @@ export const watch = (
         });
         return watcher;
       }),
-      (watcher) => Effect.promise(() => watcher.close()),
+      (watcher) =>
+        Effect.promise(() => {
+          console.log("closing");
+          return watcher.close();
+        }),
     ),
   ).pipe(
     Stream.mapEffect((result) =>

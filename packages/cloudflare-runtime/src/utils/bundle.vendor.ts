@@ -100,11 +100,7 @@ export const watch = (
         });
         return watcher;
       }),
-      (watcher) =>
-        Effect.promise(() => {
-          console.log("closing");
-          return watcher.close();
-        }),
+      (watcher) => Effect.promise(() => watcher.close()),
     ),
   ).pipe(
     Stream.mapEffect((result) =>

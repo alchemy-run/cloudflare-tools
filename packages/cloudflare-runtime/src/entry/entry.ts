@@ -1,5 +1,5 @@
+import type { Service } from "@distilled.cloud/workerd/Config";
 import * as Effect from "effect/Effect";
-import type { Service } from "../runtime/config.types.ts";
 import * as Bundle from "../utils/bundle.ts";
 
 export const Entry = Effect.gen(function* () {

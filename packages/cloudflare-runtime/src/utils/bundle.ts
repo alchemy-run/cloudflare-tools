@@ -1,7 +1,7 @@
 import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
+import type { Worker_Module } from "@distilled.cloud/workerd/Config";
 import * as Effect from "effect/Effect";
 import path from "node:path";
-import type { Worker_Module } from "../runtime/config.types.ts";
 import type { BundleOutput } from "./bundle.vendor.ts";
 import { build } from "./bundle.vendor.ts";
 

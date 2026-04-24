@@ -1,6 +1,6 @@
+import type { ServiceDesignator, Worker_Binding } from "@distilled.cloud/workerd/Config";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { ServiceDesignator, Worker_Binding } from "../runtime/config.types.ts";
 import { Binding } from "./binding.ts";
 import type { RemoteBinding } from "./remote-session.ts";
 

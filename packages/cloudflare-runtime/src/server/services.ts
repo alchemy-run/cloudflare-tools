@@ -1,7 +1,7 @@
+import * as Runtime from "@distilled.cloud/workerd/Runtime";
 import * as Layer from "effect/Layer";
 import * as Bindings from "../bindings/index.ts";
 import * as Bridge from "../bridge/bridge.ts";
-import * as Runtime from "../runtime/runtime.ts";
 import * as Storage from "../storage.ts";
 import * as HttpServer from "../utils/http-server.ts";
 import * as Tail from "../utils/tail.ts";

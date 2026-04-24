@@ -1,8 +1,8 @@
-import { Layer } from "effect";
+import type { Service } from "@distilled.cloud/workerd/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type { Service } from "./runtime/config.types";
+import * as Layer from "effect/Layer";
 
 export class Storage extends Context.Service<Storage, Service>()("Storage") {}
 

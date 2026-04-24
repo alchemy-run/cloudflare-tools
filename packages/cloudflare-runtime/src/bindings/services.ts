@@ -1,8 +1,8 @@
+import { kVoid, type Service } from "@distilled.cloud/workerd/Config";
 import { Context, Layer } from "effect";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { kVoid, type Service } from "../runtime/config.types.ts";
 import * as Bundle from "../utils/bundle.ts";
 import { HttpServer } from "../utils/http-server.ts";
 import { RemoteSession, type RemoteSessionOptions } from "./remote-session.ts";

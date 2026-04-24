@@ -20,7 +20,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "miniflare": "^4.20260329.0"
+    "miniflare": "catalog:workers"
   },
   "devDependencies": {
     "rolldown": "catalog:"

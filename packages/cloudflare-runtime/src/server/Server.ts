@@ -1,3 +1,6 @@
+import type { Worker_Module } from "@distilled.cloud/workerd/Config";
+import * as Runtime from "@distilled.cloud/workerd/Runtime";
+import { RuntimeError } from "@distilled.cloud/workerd/RuntimeError";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
@@ -5,8 +8,6 @@ import * as Scope from "effect/Scope";
 import * as Bindings from "../bindings/index.ts";
 import * as Bridge from "../bridge/bridge.ts";
 import { Entry } from "../entry/entry.ts";
-import type { Worker_Module } from "../runtime/config.types.ts";
-import * as Runtime from "../runtime/runtime.ts";
 import * as Storage from "../storage.ts";
 
 export interface ServeInput {
@@ -36,14 +37,11 @@ export const ServeResult = Schema.Struct({
 export type ServeResult = typeof ServeResult.Type;
 
 export const ServeError = Schema.Union([
-  Runtime.RuntimeError,
+  RuntimeError,
   Bridge.BridgeError,
   Bindings.UnsupportedBindingError,
 ]);
-export type ServeError =
-  | Runtime.RuntimeError
-  | Bridge.BridgeError
-  | Bindings.UnsupportedBindingError;
+export type ServeError = RuntimeError | Bridge.BridgeError | Bindings.UnsupportedBindingError;
 
 export const Server = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
@@ -110,7 +108,6 @@ export const Server = Effect.gen(function* () {
 
   const start = Effect.fn(function* (worker: WorkerInput) {
     yield* stop(worker.name);
-    console.log("start", worker.name);
     const child = yield* Scope.fork(parent);
     scopes.set(worker.name, child);
     const { address } = yield* make(worker).pipe(Scope.provide(child));

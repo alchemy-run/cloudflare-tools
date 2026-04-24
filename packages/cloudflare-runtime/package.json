@@ -42,20 +42,21 @@
     "prepublishOnly": "bun run build:clean"
   },
   "dependencies": {
+    "@distilled.cloud/workerd": "workspace:",
     "capnp-es": "^0.0.14",
-    "workerd": "^1.20260414.1"
+    "workerd": "catalog:workers"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/workers-types": "catalog:workers",
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:",
-    "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
+    "@effect/platform-node": "catalog:effect",
+    "@effect/vitest": "catalog:effect",
     "capnweb": "^0.6.1",
     "rolldown": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:effect"
   }
 }

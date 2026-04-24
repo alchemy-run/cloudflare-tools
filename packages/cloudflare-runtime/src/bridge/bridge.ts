@@ -1,4 +1,6 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import { kVoid } from "@distilled.cloud/workerd/Config";
+import * as Runtime from "@distilled.cloud/workerd/Runtime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -6,9 +8,8 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { HttpBody, HttpClientResponse } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { kVoid } from "../runtime/config.types.ts";
-import * as Runtime from "../runtime/runtime.ts";
 import * as Bundle from "../utils/bundle.ts";
+import { findAvailablePort } from "../utils/is-port-available.ts";
 import * as Tail from "../utils/tail.ts";
 import { LOCAL_CONFIGURE_PATH, type ProxyControllerMessage } from "./api.shared.ts";
 
@@ -27,12 +28,13 @@ export class LocalBridge extends Context.Service<
   }
 >()("LocalBridge") {}
 
-export const LocalBridgeLive = (port: number) =>
+export const LocalBridgeLive = (userPort: number) =>
   Layer.effect(
     LocalBridge,
     Effect.gen(function* () {
       const runtime = yield* Runtime.Runtime;
       const httpClient = yield* HttpClient.HttpClient;
+      const port = yield* findAvailablePort(userPort, "localhost");
       yield* runtime.serve({
         sockets: [
           {

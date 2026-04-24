@@ -78,7 +78,7 @@
         "unenv": "^2.0.0-rc.24",
       },
       "devDependencies": {
-        "@cloudflare/workers-types": "catalog:",
+        "@cloudflare/workers-types": "catalog:workers",
         "@distilled.cloud/test-utils": "workspace:*",
         "vitest": "catalog:",
       },
@@ -90,21 +90,22 @@
       "name": "@distilled.cloud/cloudflare-runtime",
       "version": "0.0.0",
       "dependencies": {
+        "@distilled.cloud/workerd": "workspace:",
         "capnp-es": "^0.0.14",
-        "workerd": "^1.20260414.1",
+        "workerd": "catalog:workers",
       },
       "devDependencies": {
-        "@cloudflare/workers-types": "catalog:",
+        "@cloudflare/workers-types": "catalog:workers",
         "@distilled.cloud/cloudflare": "catalog:",
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:",
-        "@effect/platform-node": "catalog:",
-        "@effect/vitest": "catalog:",
+        "@effect/platform-node": "catalog:effect",
+        "@effect/vitest": "catalog:effect",
         "capnweb": "^0.6.1",
         "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "catalog:",
+        "effect": "catalog:effect",
       },
     },
     "packages/cloudflare-vite-plugin": {
@@ -157,15 +158,35 @@
       "name": "@distilled.cloud/test-utils",
       "version": "0.0.0",
       "dependencies": {
-        "miniflare": "^4.20260329.0",
+        "miniflare": "catalog:workers",
       },
       "devDependencies": {
         "rolldown": "catalog:",
       },
     },
+    "packages/workerd": {
+      "name": "@distilled.cloud/workerd",
+      "dependencies": {
+        "capnp-es": "^0.0.14",
+        "workerd": "catalog:workers",
+      },
+      "devDependencies": {
+        "@effect/platform-node": "catalog:effect",
+        "@effect/vitest": "catalog:effect",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "@effect/platform-bun": "catalog:effect",
+        "@effect/platform-node": "catalog:effect",
+        "effect": "catalog:effect",
+      },
+      "optionalPeers": [
+        "@effect/platform-bun",
+        "@effect/platform-node",
+      ],
+    },
   },
   "catalog": {
-    "@cloudflare/workers-types": "^4.20260310.1",
     "@distilled.cloud/cloudflare": "https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4",
     "@effect/platform-bun": "^4.0.0-beta.48",
     "@effect/platform-node": "^4.0.0-beta.48",
@@ -176,6 +197,19 @@
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
     "vitest": "^4.1.1",
+  },
+  "catalogs": {
+    "effect": {
+      "@effect/platform-bun": "^4.0.0-beta.48",
+      "@effect/platform-node": "^4.0.0-beta.48",
+      "@effect/vitest": "^4.0.0-beta.48",
+      "effect": "^4.0.0-beta.48",
+    },
+    "workers": {
+      "@cloudflare/workers-types": "^4.20260310.1",
+      "miniflare": "^4.20260329.0",
+      "workerd": "^1.20260414.1",
+    },
   },
   "packages": {
     "@acemir/cssom": ["@acemir/cssom@0.9.31", "", {}, "sha512-ZnR3GSaH+/vJ0YlHau21FjfLYjMpYVIzTD8M8vIEQvIGxeOXyXdzCI140rrCY862p/C/BbzWsjc1dgnM9mkoTA=="],
@@ -293,6 +327,8 @@
     "@distilled.cloud/supervisor": ["@distilled.cloud/supervisor@workspace:packages/supervisor"],
 
     "@distilled.cloud/test-utils": ["@distilled.cloud/test-utils@workspace:packages/test-utils"],
+
+    "@distilled.cloud/workerd": ["@distilled.cloud/workerd@workspace:packages/workerd"],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.43", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.43" }, "peerDependencies": { "effect": "^4.0.0-beta.43" } }, "sha512-nMZ9JsD6CzJNQ+5pDUFbPw7PSZdQdTQ092MbYrocVtvlf6qEFU/hji3ITvRIOX7eabyQ8AUyp55qFPQUeq+GIA=="],
 

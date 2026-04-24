@@ -1,0 +1,55 @@
+{
+  "name": "@distilled.cloud/workerd",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./Config": {
+      "bun": "./src/Config.ts",
+      "types": "./dist/Config.d.ts",
+      "default": "./dist/Config.js"
+    },
+    "./Runtime": {
+      "bun": "./src/runtime.ts",
+      "types": "./dist/runtime.d.ts",
+      "default": "./dist/runtime.js"
+    },
+    "./RuntimeError": {
+      "bun": "./src/RuntimeError.ts",
+      "types": "./dist/RuntimeError.d.ts",
+      "default": "./dist/RuntimeError.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "capnp-es": "^0.0.14",
+    "workerd": "catalog:workers"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:effect",
+    "@effect/vitest": "catalog:effect",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-bun": "catalog:effect",
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    }
+  }
+}

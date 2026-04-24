@@ -54,7 +54,7 @@
     "unenv": "^2.0.0-rc.24"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/workers-types": "catalog:workers",
     "@distilled.cloud/test-utils": "workspace:*",
     "vitest": "catalog:"
   },

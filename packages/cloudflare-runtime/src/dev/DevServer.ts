@@ -7,7 +7,6 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Bridge from "../bridge/bridge.ts";
-import type { Bindings, Runtime } from "../index.ts";
 import * as Server from "../server/Server.ts";
 import { bundleOutputToWorkerd } from "../utils/bundle.ts";
 import * as Bundle from "../utils/bundle.vendor.ts";
@@ -43,10 +42,7 @@ export const DevServer = Effect.gen(function* () {
     heartbeat: () => lock.touch,
     serve: Effect.fn(function* (worker: WorkerInputWithMain) {
       yield* stop(worker.name);
-      const deferred = yield* Deferred.make<
-        Server.ServeResult,
-        Runtime.RuntimeError | Bridge.BridgeError | Bindings.UnsupportedBindingError
-      >();
+      const deferred = yield* Deferred.make<Server.ServeResult, Server.ServeError>();
       const fiber = yield* Bundle.watch({
         input: import.meta.resolve(`../../${worker.main}`, import.meta.url),
         plugins: [

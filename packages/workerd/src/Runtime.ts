@@ -7,8 +7,8 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
-import type { Config } from "./internal/config.types.ts";
 import * as Workerd from "./internal/workerd.ts";
 import { RuntimeError } from "./RuntimeError.ts";
 

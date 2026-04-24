@@ -42,9 +42,7 @@
     "prepublishOnly": "bun run build:clean"
   },
   "dependencies": {
-    "@distilled.cloud/workerd": "workspace:",
-    "capnp-es": "^0.0.14",
-    "workerd": "catalog:workers"
+    "@distilled.cloud/workerd": "workspace:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",

@@ -123,37 +123,6 @@
         "vite": "^7.0.0 || ^8.0.0",
       },
     },
-    "packages/hoisted-layer": {
-      "name": "@distilled.cloud/hoisted-layer",
-      "version": "0.3.0",
-      "dependencies": {
-        "@effect/platform-node": "catalog:",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/supervisor": {
-      "name": "@distilled.cloud/supervisor",
-      "version": "0.3.0",
-      "dependencies": {
-        "@effect/platform-node": "catalog:",
-        "capnweb": "^0.6.1",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
     "packages/test-utils": {
       "name": "@distilled.cloud/test-utils",
       "version": "0.0.0",
@@ -321,10 +290,6 @@
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:packages/cloudflare-vite-plugin"],
 
     "@distilled.cloud/core": ["@distilled.cloud/core@0.10.1", "", { "dependencies": { "effect": "4.0.0-beta.48" } }, "sha512-RAilOgmIDHn1KJ6pdNDPK4uCzZtM9ywdelcSKnvPWSEhnztR6ye9EOwbz2U8ELHaXF91g5EPDwyLc5s2PJjeYA=="],
-
-    "@distilled.cloud/hoisted-layer": ["@distilled.cloud/hoisted-layer@workspace:packages/hoisted-layer"],
-
-    "@distilled.cloud/supervisor": ["@distilled.cloud/supervisor@workspace:packages/supervisor"],
 
     "@distilled.cloud/test-utils": ["@distilled.cloud/test-utils@workspace:packages/test-utils"],
 

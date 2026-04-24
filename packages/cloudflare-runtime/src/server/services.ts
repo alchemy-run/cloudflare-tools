@@ -1,16 +1,20 @@
 import * as Runtime from "@distilled.cloud/workerd/Runtime";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Layer from "effect/Layer";
+import * as http from "node:http";
 import * as Bindings from "../bindings/index.ts";
 import * as Bridge from "../bridge/bridge.ts";
 import * as Storage from "../storage.ts";
-import * as HttpServer from "../utils/http-server.ts";
 import * as Tail from "../utils/tail.ts";
 
 const remoteBindingsServices = Layer.provide(
   Bindings.RemoteBindingsServicesLive,
-  Layer.merge(
-    HttpServer.HttpServerNode,
-    Layer.provide(Bindings.RemoteSessionLive, Bindings.AccessLive),
+  Layer.provideMerge(
+    Bindings.RemoteSessionLive,
+    Layer.mergeAll(
+      Bindings.AccessLive,
+      NodeHttpServer.layerServer(http.createServer, { host: "127.0.0.1", port: 0 }),
+    ),
   ),
 );
 

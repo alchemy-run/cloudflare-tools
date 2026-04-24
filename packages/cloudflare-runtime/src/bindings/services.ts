@@ -1,10 +1,11 @@
 import { kVoid, type Service } from "@distilled.cloud/workerd/Config";
-import { Context, Layer } from "effect";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import * as Layer from "effect/Layer";
+import * as HttpServer from "effect/unstable/http/HttpServer";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Bundle from "../utils/bundle.ts";
-import { HttpServer } from "../utils/http-server.ts";
 import { RemoteSession, type RemoteSessionOptions } from "./remote-session.ts";
 
 export class RemoteBindingsServices extends Context.Service<
@@ -17,9 +18,9 @@ export class RemoteBindingsServices extends Context.Service<
 export const RemoteBindingsServicesLive = Layer.effect(
   RemoteBindingsServices,
   Effect.gen(function* () {
-    const httpServer = yield* HttpServer;
     const remoteSession = yield* RemoteSession;
-    const address = yield* httpServer.serve(
+    const httpServer = yield* HttpServer.HttpServer;
+    yield* httpServer.serve(
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const json = (yield* request.json) as unknown as RemoteSessionOptions;
@@ -30,14 +31,14 @@ export const RemoteBindingsServicesLive = Layer.effect(
           Effect.succeed(HttpServerResponse.jsonUnsafe({ success: false, error }, { status: 500 })),
         ),
       ),
-      { port: 0 },
     );
+    const address = httpServer.address as HttpServer.TcpAddress;
     return RemoteBindingsServices.of({
       services: Effect.fn(function* (options) {
         const config = {
           name: "remote-bindings:config",
           external: {
-            address: address.toString(),
+            address: `${address.hostname}:${address.port}`,
             http: {},
           },
         } satisfies Service;

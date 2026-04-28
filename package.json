@@ -31,7 +31,7 @@
       }
     },
     "catalog": {
-      "@distilled.cloud/cloudflare": "^0.12.5",
+      "@distilled.cloud/cloudflare": "^0.13.1",
       "@playwright/test": "^1.52.0",
       "rolldown": "^1.0.0-rc.9",
       "typescript": "^6.0.2",

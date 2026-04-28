@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["tsdown.config.ts"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
+    "composite": false,
+    "noEmit": true
+  },
+  "references": [{ "path": "./tsconfig.workers.json" }, { "path": "./tsconfig.bundle.json" }]
+}

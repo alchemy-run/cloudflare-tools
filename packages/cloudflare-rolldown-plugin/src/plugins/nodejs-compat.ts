@@ -138,16 +138,23 @@ function makeNodeJsImportWarningPlugin(): Plugin {
       imports.clear();
     },
     buildEnd() {
-      if (imports.size > 0) {
-        let message =
-          `Unexpected Node.js imports. ` +
-          `Do you need to enable the "nodejs_compat" compatibility flag? ` +
-          "Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n";
-        for (const [id, importers] of imports.entries()) {
-          for (const importer of importers) {
-            message += ` - "${id}" imported from "${path.relative(root, importer)}"\n`;
+      const filteredImports: Array<{ id: string; importer: string }> = [];
+      for (const [id, importers] of imports.entries()) {
+        for (const importer of importers) {
+          if (this.getModuleInfo(importer)) {
+            filteredImports.push({ id, importer });
           }
         }
+      }
+      if (filteredImports.length > 0) {
+        const message = [
+          "Unexpected Node.js imports. ",
+          'Do you need to enable the "nodejs_compat" compatibility flag? ',
+          "Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n",
+          ...filteredImports.map(
+            ({ id, importer }) => ` - "${id}" imported from "${path.relative(root, importer)}"\n`,
+          ),
+        ].join("");
         this.warn(message);
       }
     },

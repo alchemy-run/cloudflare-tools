@@ -5,9 +5,5 @@
     "tsBuildInfoFile": ".cache/root/tsconfig.tsbuildinfo",
     "outDir": ".cache/root"
   },
-  "references": [
-    { "path": "./tsconfig.workers.json" },
-    { "path": "./tsconfig.sandbox.json" },
-    { "path": "./tsconfig.emit.json" }
-  ]
+  "references": [{ "path": "./tsconfig.workers.json" }, { "path": "./tsconfig.emit.json" }]
 }

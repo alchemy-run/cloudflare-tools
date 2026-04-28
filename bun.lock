@@ -154,7 +154,7 @@
     },
   },
   "catalog": {
-    "@distilled.cloud/cloudflare": "https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4",
+    "@distilled.cloud/cloudflare": "^0.12.5",
     "@effect/platform-bun": "^4.0.0-beta.48",
     "@effect/platform-node": "^4.0.0-beta.48",
     "@effect/vitest": "^4.0.0-beta.48",
@@ -279,7 +279,7 @@
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@4.0.0", "", {}, "sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA=="],
 
-    "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@https://pkg.pr.new/@distilled.cloud/cloudflare@d5d9ec4", { "dependencies": { "@distilled.cloud/core": "0.10.1", "effect": "4.0.0-beta.48" }, "peerDependencies": { "effect": "4.0.0-beta.48" } }, "sha512-j0MaEL2Xw5oZeyexuWJboF11sRXwDJOI/r+buA56phdGoc43hrgrakiOOCmV3wZi7PbhdSjXhjnTfTLz53miGQ=="],
+    "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@0.12.7", "", { "dependencies": { "@distilled.cloud/core": "0.12.7", "effect": "4.0.0-beta.48" } }, "sha512-y1W5S1nVoQNDwzbWRk/9jLAOFvRKb+WQIiYgCwRic16itcN8JIl60HDFJ7Kolp2Cme7VLvlr4kfp7bgxyHyhHQ=="],
 
     "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@workspace:packages/cloudflare-rolldown-plugin"],
 
@@ -287,7 +287,7 @@
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:packages/cloudflare-vite-plugin"],
 
-    "@distilled.cloud/core": ["@distilled.cloud/core@0.10.1", "", { "dependencies": { "effect": "4.0.0-beta.48" } }, "sha512-RAilOgmIDHn1KJ6pdNDPK4uCzZtM9ywdelcSKnvPWSEhnztR6ye9EOwbz2U8ELHaXF91g5EPDwyLc5s2PJjeYA=="],
+    "@distilled.cloud/core": ["@distilled.cloud/core@0.12.7", "", { "dependencies": { "effect": "4.0.0-beta.48" } }, "sha512-Zd2+QQ1iEFOEt/W/2xj1tiWK6j4bm9/SzgXYMinzyZg51Aq9Ifgd9GrmuFD6cspNjBaGqINrhUyC73RJDRlpUg=="],
 
     "@distilled.cloud/test-utils": ["@distilled.cloud/test-utils@workspace:packages/test-utils"],
 

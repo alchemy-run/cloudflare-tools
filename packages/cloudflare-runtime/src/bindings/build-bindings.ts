@@ -1,16 +1,19 @@
+import type * as workers from "@distilled.cloud/cloudflare/workers";
 import type { ServiceDesignator, Worker_Binding } from "@distilled.cloud/workerd/Config";
 import * as Effect from "effect/Effect";
+import { absurd } from "effect/Function";
 import * as Schema from "effect/Schema";
-import { Binding } from "./binding.ts";
 import type { RemoteBinding } from "./remote-session.ts";
 
 export class UnsupportedBindingError extends Schema.TaggedErrorClass<UnsupportedBindingError>()(
   "UnsupportedBindingError",
   {
     message: Schema.String,
-    binding: Binding,
+    binding: Schema.Any,
   },
 ) {}
+
+export type Binding = Exclude<workers.PutScriptRequest["metadata"]["bindings"], undefined>[number];
 
 export const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Binding>) {
   const remoteBindings: Array<RemoteBinding> = [];
@@ -39,6 +42,18 @@ export const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Bindin
         }
         case "analytics_engine":
           return yield* makeUnsupportedBindingError(binding);
+        case "artifacts": {
+          remoteBindings.push({
+            name: binding.name,
+            // @ts-expect-error - TODO: add artifacts binding type to distilled.cloud/cloudflare/workers
+            type: "artifacts",
+            namespace: binding.namespace,
+          });
+          return {
+            name: binding.name,
+            service: makeRemoteBindingServiceDesignator(binding.name),
+          };
+        }
         case "assets":
           return yield* makeUnsupportedBindingError(binding);
         case "browser":
@@ -232,8 +247,19 @@ export const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Bindin
             workerLoader: {},
           };
         }
-        case "workflow":
+        case "workflow": {
+          // remoteBindings.push({
+          //   name: binding.name,
+          //   type: "workflow",
+          //   className: binding.className!,
+          //   workflowName: binding.workflowName,
+          //   scriptName: binding.scriptName,
+          //   raw: true,
+          // });
           return yield* makeUnsupportedBindingError(binding);
+        }
+        default:
+          return absurd(binding);
       }
     }),
     { concurrency: "unbounded" },

@@ -13,7 +13,7 @@ export default defineConfig([
     plugins: [cloudflare({ compatibilityDate: "2026-03-10" }), workerExportsPlugin()],
   },
   {
-    entry: ["src/**/*.ts", "!src/**/*.worker.ts"],
+    entry: ["src/**/*.ts", "!src/**/*.worker.ts", "!src/global.d.ts"],
     exports: {
       exclude: ["**/internal/**"],
     },
@@ -25,6 +25,9 @@ export default defineConfig([
     target: "esnext",
     format: "esm",
     inputOptions: { makeAbsoluteExternalsRelative: true },
+    outputOptions: {
+      exports: "named",
+    },
     plugins: [
       {
         name: "workers",

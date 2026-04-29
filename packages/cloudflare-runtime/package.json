@@ -1,5 +1,30 @@
 {
   "name": "@distilled.cloud/cloudflare-runtime",
+  "description": "Runtime for Cloudflare Workers.",
+  "keywords": [
+    "cloudflare",
+    "runtime",
+    "workers"
+  ],
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/cloudflare-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "John Royal",
+    "email": "john@alchemy.run",
+    "url": "https://distilled.cloud"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
+    "directory": "packages/cloudflare-runtime"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -25,6 +50,9 @@
     "./workerd/RuntimeError": "./dist/workerd/RuntimeError.mjs",
     "./WorkerModule": "./dist/WorkerModule.mjs",
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",

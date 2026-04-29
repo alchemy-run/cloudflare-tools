@@ -6,7 +6,6 @@
     "tsBuildInfoFile": ".cache/tsconfig.bundle.tsbuildinfo",
     "outDir": ".cache/bundle",
     "rootDir": "src",
-    "emitDeclarationOnly": true,
-    "skipLibCheck": false
+    "emitDeclarationOnly": true
   }
 }

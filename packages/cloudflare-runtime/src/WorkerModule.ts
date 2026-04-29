@@ -1,11 +1,18 @@
-import type * as Worker from "../Worker.ts";
-import type { Worker_Module } from "../workerd/Config.ts";
+import type * as Config from "./workerd/Config.ts";
 
-export function convertWorkerModules(modules: Array<Worker.Module>): Array<Worker_Module> {
-  return modules.map(convertWorkerModule);
-}
+export type WorkerModule =
+  | {
+      name: string;
+      type: "ESModule" | "CommonJsModule" | "Text" | "Json" | "PythonModule" | "PythonRequirement";
+      content: string;
+    }
+  | {
+      name: string;
+      type: "Data" | "Wasm";
+      content: Uint8Array;
+    };
 
-function convertWorkerModule(module: Worker.Module): Worker_Module {
+export const toWorkerd = (module: WorkerModule): Config.Worker_Module => {
   switch (module.type) {
     case "ESModule":
       return { name: module.name, esModule: module.content };
@@ -24,4 +31,4 @@ function convertWorkerModule(module: Worker.Module): Worker_Module {
     case "PythonRequirement":
       return { name: module.name, pythonRequirement: module.content };
   }
-}
+};

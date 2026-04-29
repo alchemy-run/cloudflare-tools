@@ -1,16 +1,11 @@
 import { RpcSession, type RpcStub, type RpcTransport } from "capnweb";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import type { EntryQueuePayload } from "../../entry/entry.worker.ts";
 import { REMOTE_WEBSOCKET_PATH, type WebSocketProxy, type WorkerProxy } from "../ProxyApi.ts";
 
 interface Env {
   BRIDGE: DurableObjectNamespace<RemoteBridge>;
   BRIDGE_SECRET: string;
-}
-
-interface EntryQueuePayload {
-  queue: string;
-  messages: Array<ServiceBindingQueueMessage>;
-  metadata?: MessageBatchMetadata;
 }
 
 export default class extends WorkerEntrypoint<Env> {
@@ -23,32 +18,35 @@ export default class extends WorkerEntrypoint<Env> {
   }
 
   async queue(batch: MessageBatch<unknown>) {
-    const result = await this.bridge
-      .fetch("http://fake-host/cdn-cgi/handler/queue", {
-        method: "POST",
-        body: JSON.stringify({
-          queue: batch.queue,
-          messages: batch.messages.map((message) => ({
-            id: message.id,
-            timestamp: message.timestamp,
-            attempts: message.attempts,
-            body: message.body,
-          })),
-          metadata: batch.metadata,
-        } satisfies EntryQueuePayload),
-      })
-      .then((response) => response.json<FetcherQueueResult>());
-    if (result.ackAll) {
+    const response = await this.bridge.fetch("http://stub/cdn-cgi/handler/queue", {
+      method: "POST",
+      body: JSON.stringify({
+        queue: batch.queue,
+        messages: batch.messages.map((message) => ({
+          id: message.id,
+          timestamp: message.timestamp,
+          attempts: message.attempts,
+          body: message.body,
+        })),
+        metadata: batch.metadata,
+      } satisfies EntryQueuePayload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to send queue messages (${response.status}): ${text}`);
+    }
+    const json = await response.json<FetcherQueueResult>();
+    if (json.ackAll) {
       batch.ackAll();
     }
-    if (result.retryBatch.retry) {
-      batch.retryAll({ delaySeconds: result.retryBatch.delaySeconds });
+    if (json.retryBatch.retry) {
+      batch.retryAll({ delaySeconds: json.retryBatch.delaySeconds });
     }
     const messages = Object.groupBy(batch.messages, (message) => message.id);
-    for (const id of result.explicitAcks) {
+    for (const id of json.explicitAcks) {
       messages[id]?.forEach((message) => message.ack());
     }
-    for (const retryMessage of result.retryMessages) {
+    for (const retryMessage of json.retryMessages) {
       messages[retryMessage.msgId]?.forEach((message) =>
         message.retry({ delaySeconds: retryMessage.delaySeconds }),
       );

@@ -1,6 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/internal/workers.d.ts", "src/**/*.worker.ts", "src/proxy/ProxyApi.ts"],
+  "include": [
+    "src/internal/workers.d.ts",
+    "src/**/*.worker.ts",
+    "src/proxy/ProxyApi.ts",
+    "src/bindings/RemoteConfig.ts"
+  ],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.workers.tsbuildinfo",
     "outDir": ".cache/workers",

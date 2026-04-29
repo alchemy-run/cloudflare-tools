@@ -4,11 +4,18 @@
   "sideEffects": false,
   "exports": {
     ".": "./dist/index.mjs",
+    "./bindings": "./dist/bindings/index.mjs",
+    "./bindings/Bindings": "./dist/bindings/Bindings.mjs",
+    "./bindings/RemoteConfig": "./dist/bindings/RemoteConfig.mjs",
+    "./bindings/RemoteSession": "./dist/bindings/RemoteSession.mjs",
+    "./entry/Entry": "./dist/entry/Entry.mjs",
+    "./Plugin": "./dist/Plugin.mjs",
     "./proxy": "./dist/proxy/index.mjs",
     "./proxy/LocalProxy": "./dist/proxy/LocalProxy.mjs",
     "./proxy/ProxyApi": "./dist/proxy/ProxyApi.mjs",
     "./proxy/ProxyError": "./dist/proxy/ProxyError.mjs",
     "./proxy/RemoteProxy": "./dist/proxy/RemoteProxy.mjs",
+    "./RuntimeServices": "./dist/RuntimeServices.mjs",
     "./Server": "./dist/Server.mjs",
     "./Storage": "./dist/Storage.mjs",
     "./Worker": "./dist/Worker.mjs",
@@ -16,6 +23,7 @@
     "./workerd/Config": "./dist/workerd/Config.mjs",
     "./workerd/Runtime": "./dist/workerd/Runtime.mjs",
     "./workerd/RuntimeError": "./dist/workerd/RuntimeError.mjs",
+    "./WorkerModule": "./dist/WorkerModule.mjs",
     "./package.json": "./package.json"
   },
   "scripts": {

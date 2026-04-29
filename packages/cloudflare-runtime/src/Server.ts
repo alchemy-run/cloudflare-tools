@@ -1,26 +1,35 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import { convertWorkerModules } from "./internal/convert-worker-modules.ts";
+import * as Bindings from "./bindings/Bindings.ts";
+import * as Entry from "./entry/Entry.ts";
+import * as Plugin from "./Plugin.ts";
 import * as LocalProxy from "./proxy/LocalProxy.ts";
-import type { ProxyError } from "./proxy/ProxyError.ts";
+import { ProxyError } from "./proxy/ProxyError.ts";
 import * as Storage from "./Storage.ts";
 import type { Worker } from "./Worker.ts";
 import * as Runtime from "./workerd/Runtime.ts";
-import type { RuntimeError } from "./workerd/RuntimeError.ts";
+import { RuntimeError } from "./workerd/RuntimeError.ts";
+import * as WorkerModule from "./WorkerModule.ts";
 
 export interface ServeResult {
   readonly name: string;
   readonly address: string;
 }
 
+export const ServeError = Schema.Union([
+  RuntimeError,
+  ProxyError,
+  Bindings.UnsupportedBindingError,
+]);
+export type ServeError = RuntimeError | ProxyError | Bindings.UnsupportedBindingError;
+
 export class Server extends Context.Service<
   Server,
   {
-    readonly serve: (
-      worker: Worker,
-    ) => Effect.Effect<ServeResult, RuntimeError | ProxyError, Scope.Scope>;
+    readonly serve: (worker: Worker) => Effect.Effect<ServeResult, ServeError, Scope.Scope>;
   }
 >()("cloudflare-runtime/Server") {}
 
@@ -30,14 +39,19 @@ export const layer = Layer.effect(
     const runtime = yield* Runtime.Runtime;
     const localProxy = yield* LocalProxy.LocalProxy;
     const storage = yield* Storage.Storage;
+    const bindingsService = yield* Bindings.Bindings;
     return Server.of({
       serve: Effect.fn(function* (worker) {
+        const { entry, bindings, services, extensions } = yield* Plugin.build(worker, [
+          Entry.EntryPlugin,
+          bindingsService,
+        ]);
         const result = yield* runtime.serve({
           sockets: [
             {
               name: "http",
               address: "127.0.0.1:0",
-              service: { name: "user" },
+              service: { name: entry },
             },
           ],
           services: [
@@ -46,19 +60,22 @@ export const layer = Layer.effect(
               worker: {
                 compatibilityDate: worker.compatibilityDate,
                 compatibilityFlags: worker.compatibilityFlags,
-                modules: convertWorkerModules(worker.modules),
+                modules: worker.modules.map(WorkerModule.toWorkerd),
                 durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
                   className: namespace.className,
                   enableSql: namespace.sql,
                   uniqueKey: namespace.uniqueKey,
                 })),
+                bindings,
                 durableObjectStorage: {
                   localDisk: storage.name,
                 },
               },
             },
+            ...services,
             storage,
           ],
+          extensions,
         });
         yield* localProxy.send({
           _tag: "Local.Set",

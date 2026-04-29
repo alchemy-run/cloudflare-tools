@@ -14,5 +14,5 @@ declare module "workerd" {
 
 declare module "worker:*" {
   // oxlint-disable-next-line typescript/consistent-type-imports
-  export const modules: Array<import("../Worker.ts").Module>;
+  export const modules: Array<import("./WorkerModule.ts").WorkerModule>;
 }

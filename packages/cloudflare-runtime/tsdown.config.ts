@@ -1,4 +1,5 @@
 import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { RolldownMagicString, type OutputBundle, type OutputChunk, type Plugin } from "rolldown";
 import { defineConfig } from "tsdown";
@@ -29,13 +30,15 @@ export default defineConfig([
         name: "workers",
         resolveId: {
           filter: { id: /^worker:.*$/ },
-          handler(id, _importer) {
-            id = id.slice(7);
-            id = path.basename(id);
-            id = id.replace(/\.ts$/, ".mjs");
-            id = path.resolve("./dist/workers", id);
+          async handler(id, importer) {
+            const require = createRequire(importer ?? import.meta.url);
+            const specifier = id.slice(7);
+            const absolutePath = require.resolve(specifier);
+            const relativePathTs = path.relative(path.resolve("./src"), absolutePath);
+            const relativePathMjs = relativePathTs.replace(/\.ts$/, ".mjs");
+            const resolvedId = path.resolve("./dist/workers", relativePathMjs);
             return {
-              id,
+              id: resolvedId,
               external: "relative",
             };
           },
@@ -131,7 +134,7 @@ function workerExportsPlugin(): Plugin {
       for (const [fileName, chunk] of Object.entries(bundle)) {
         const code =
           chunk.type === "chunk" && chunk.isEntry
-            ? `import type * as Worker from "../Worker.mjs";\n\nexport const modules: [Worker.Module, ...Worker.Module[]];`
+            ? `import type { WorkerModule } from "../WorkerModule.mjs";\n\nexport const modules: [WorkerModule, ...WorkerModule[]];`
             : `declare const code: string;\nexport default code;\n`;
         await this.fs.writeFile(
           path.resolve(options.dir!, fileName.replace(/\.mjs$/, ".d.mts")),

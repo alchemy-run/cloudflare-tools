@@ -5,8 +5,8 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as LocalProxyWorker from "worker:./internal/local-proxy.worker.ts";
-import { convertWorkerModules } from "../internal/convert-worker-modules.ts";
-import { kVoid } from "../workerd/Config.ts";
+import * as WorkerModule from "../WorkerModule.ts";
+import * as Config from "../workerd/Config.ts";
 import * as Runtime from "../workerd/Runtime.ts";
 import { LOCAL_CONFIGURE_PATH, type ControllerMessage } from "./ProxyApi.ts";
 import { ProxyError } from "./ProxyError.ts";
@@ -44,10 +44,10 @@ export const layerLive = (config: LocalProxyConfig) =>
             name: "proxy:local",
             worker: {
               compatibilityDate: "2026-03-10",
-              modules: convertWorkerModules(LocalProxyWorker.modules),
+              modules: LocalProxyWorker.modules.map(WorkerModule.toWorkerd),
               bindings: [{ name: "PROXY", durableObjectNamespace: { className: "LocalProxy" } }],
               durableObjectNamespaces: [
-                { className: "LocalProxy", ephemeralLocal: kVoid, preventEviction: true },
+                { className: "LocalProxy", ephemeralLocal: Config.kVoid, preventEviction: true },
               ],
             },
           },

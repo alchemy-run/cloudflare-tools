@@ -87,6 +87,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
+      "version": "0.0.0",
       "dependencies": {
         "capnp-es": "^0.0.14",
         "workerd": "catalog:workers",
@@ -112,26 +113,6 @@
         "@effect/platform-node",
       ],
     },
-    "packages/cloudflare-runtime-v1": {
-      "name": "@distilled.cloud/cloudflare-runtime-v1",
-      "version": "0.0.0",
-      "dependencies": {
-        "@distilled.cloud/workerd": "workspace:",
-      },
-      "devDependencies": {
-        "@cloudflare/workers-types": "catalog:workers",
-        "@distilled.cloud/cloudflare": "catalog:",
-        "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:",
-        "@effect/platform-node": "catalog:effect",
-        "@effect/vitest": "catalog:effect",
-        "capnweb": "^0.6.1",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:effect",
-      },
-    },
     "packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
       "version": "0.2.0",
@@ -156,27 +137,6 @@
       "devDependencies": {
         "rolldown": "catalog:",
       },
-    },
-    "packages/workerd": {
-      "name": "@distilled.cloud/workerd",
-      "dependencies": {
-        "capnp-es": "^0.0.14",
-        "workerd": "catalog:workers",
-      },
-      "devDependencies": {
-        "@effect/platform-node": "catalog:effect",
-        "@effect/vitest": "catalog:effect",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "@effect/platform-bun": "catalog:effect",
-        "@effect/platform-node": "catalog:effect",
-        "effect": "catalog:effect",
-      },
-      "optionalPeers": [
-        "@effect/platform-bun",
-        "@effect/platform-node",
-      ],
     },
   },
   "catalog": {
@@ -285,15 +245,11 @@
 
     "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@workspace:packages/cloudflare-runtime"],
 
-    "@distilled.cloud/cloudflare-runtime-v1": ["@distilled.cloud/cloudflare-runtime-v1@workspace:packages/cloudflare-runtime-v1"],
-
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:packages/cloudflare-vite-plugin"],
 
     "@distilled.cloud/core": ["@distilled.cloud/core@0.13.1", "", { "dependencies": { "effect": "4.0.0-beta.58" } }, "sha512-CncOtnwY3A8KNwp60C18ws2rKrNgC8GrMSNgiO84KilzAVpiCIoeoGW8xF58u/OVviXKfmQcxUBiNB15WFAZBA=="],
 
     "@distilled.cloud/test-utils": ["@distilled.cloud/test-utils@workspace:packages/test-utils"],
-
-    "@distilled.cloud/workerd": ["@distilled.cloud/workerd@workspace:packages/workerd"],
 
     "@effect/platform-node": ["@effect/platform-node@4.0.0-beta.58", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.58", "mime": "^4.1.0", "undici": "^8.0.2" }, "peerDependencies": { "effect": "^4.0.0-beta.58", "ioredis": "^5.7.0" } }, "sha512-lDgj/RXQTbZQAWg/Mkpy04sB6wlWyuC9SGxdqjgKj2tBZFihrSjf90CfRhlbsy2BMk2WNNgZsebEHSqSWgUifQ=="],
 
@@ -1806,8 +1762,6 @@
     "@babel/helper-module-transforms/@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.28.5", "", {}, "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="],
 
     "@babel/types/@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.28.5", "", {}, "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="],
-
-    "@distilled.cloud/cloudflare-runtime-v1/capnweb": ["capnweb@0.6.1", "", {}, "sha512-fmhV26QPd1ewf5R74h55oVZnGwIcSaRMzbfLQUy8+zOBjuTmT3KXoT8wxHvnp1m9Ht9BoUUS5ZwNLoVLfQTyBg=="],
 
     "@effect/platform-node-shared/effect": ["effect@4.0.0-beta.48", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "fast-check": "^4.6.0", "find-my-way-ts": "^0.1.6", "ini": "^6.0.0", "kubernetes-types": "^1.30.0", "msgpackr": "^1.11.9", "multipasta": "^0.2.7", "toml": "^4.1.1", "uuid": "^13.0.0", "yaml": "^2.8.3" } }, "sha512-MMAM/ZabuNdNmgXiin+BAanQXK7qM8mlt7nfXDoJ/Gn9V8i89JlCq+2N0AiWmqFLXjGLA0u3FjiOjSOYQk5uMw=="],
 

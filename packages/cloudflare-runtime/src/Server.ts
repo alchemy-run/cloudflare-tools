@@ -5,6 +5,7 @@ import type * as Scope from "effect/Scope";
 import { convertWorkerModules } from "./internal/convert-worker-modules.ts";
 import * as LocalProxy from "./proxy/LocalProxy.ts";
 import type { ProxyError } from "./proxy/ProxyError.ts";
+import * as Storage from "./Storage.ts";
 import type { Worker } from "./Worker.ts";
 import * as Runtime from "./workerd/Runtime.ts";
 import type { RuntimeError } from "./workerd/RuntimeError.ts";
@@ -23,11 +24,12 @@ export class Server extends Context.Service<
   }
 >()("cloudflare-runtime/Server") {}
 
-export const ServerLive = Layer.effect(
+export const layer = Layer.effect(
   Server,
   Effect.gen(function* () {
     const runtime = yield* Runtime.Runtime;
     const localProxy = yield* LocalProxy.LocalProxy;
+    const storage = yield* Storage.Storage;
     return Server.of({
       serve: Effect.fn(function* (worker) {
         const result = yield* runtime.serve({
@@ -50,8 +52,12 @@ export const ServerLive = Layer.effect(
                   enableSql: namespace.sql,
                   uniqueKey: namespace.uniqueKey,
                 })),
+                durableObjectStorage: {
+                  localDisk: storage.name,
+                },
               },
             },
+            storage,
           ],
         });
         yield* localProxy.send({

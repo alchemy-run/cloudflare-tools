@@ -34,7 +34,7 @@ export class Runtime extends Context.Service<
   }
 >()("cloudflare-runtime/workerd/Runtime") {}
 
-export const RuntimeLive = Layer.effect(
+export const layer = Layer.effect(
   Runtime,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;

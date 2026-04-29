@@ -10,6 +10,7 @@
     "./proxy/ProxyError": "./dist/proxy/ProxyError.mjs",
     "./proxy/RemoteProxy": "./dist/proxy/RemoteProxy.mjs",
     "./Server": "./dist/Server.mjs",
+    "./Storage": "./dist/Storage.mjs",
     "./Worker": "./dist/Worker.mjs",
     "./workerd": "./dist/workerd/index.mjs",
     "./workerd/Config": "./dist/workerd/Config.mjs",
@@ -19,7 +20,7 @@
   },
   "scripts": {
     "build": "tsdown",
-    "dev": "tsc -b --watch",
+    "dev": "tsdown --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b"

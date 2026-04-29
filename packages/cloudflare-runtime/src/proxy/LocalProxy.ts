@@ -25,7 +25,7 @@ export interface LocalProxyConfig {
   readonly port: number;
 }
 
-export const LocalProxyLive = (config: LocalProxyConfig) =>
+export const layerLive = (config: LocalProxyConfig) =>
   Layer.effect(
     LocalProxy,
     Effect.gen(function* () {

@@ -3,14 +3,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Server from "../dist/Server.mjs";
+import * as Storage from "../dist/Storage.mjs";
 import * as LocalProxy from "../dist/proxy/LocalProxy.mjs";
 import * as Runtime from "../dist/workerd/Runtime.mjs";
 
-const services = Server.ServerLive.pipe(
-  Layer.provideMerge(LocalProxy.LocalProxyLive({ host: "localhost", port: 0 })),
-  Layer.provide(Runtime.RuntimeLive),
-  Layer.provide(NodeServices.layer),
-  Layer.provide(FetchHttpClient.layer),
+const services = Server.layer.pipe(
+  Layer.provideMerge(LocalProxy.layerLive({ host: "localhost", port: 0 })),
+  Layer.provide(Layer.merge(Runtime.layer, Storage.layerTemp())),
+  Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 );
 
 const program = Effect.gen(function* () {

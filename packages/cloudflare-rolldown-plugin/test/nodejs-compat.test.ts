@@ -81,6 +81,9 @@ describe("nodejs_compat", () => {
       warn(message: string) {
         warnings.push(message);
       },
+      getModuleInfo() {
+        return {};
+      },
     });
 
     expect(warnings).toHaveLength(1);

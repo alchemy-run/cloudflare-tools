@@ -2,7 +2,7 @@ import type {
   HttpOptions_Style,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
-} from "./config.capnp";
+} from "./internal/config.capnp.ts";
 
 // TODO: auto-generate this file
 
@@ -10,7 +10,7 @@ export {
   HttpOptions_Style,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
-} from "./config.capnp";
+} from "./internal/config.capnp.ts";
 
 export const kVoid = Symbol("kVoid");
 export type Void = typeof kVoid;
@@ -35,10 +35,14 @@ export type Socket = {
   name?: string;
   address?: string;
   service?: ServiceDesignator;
-} & ({ http?: HttpOptions } | { https?: Socket_Https });
+} & ({ http?: HttpOptions } | { https?: Socket_Https } | { tcp?: Socket_Tcp });
 
 export interface Socket_Https {
   options?: HttpOptions;
+  tlsOptions?: TlsOptions;
+}
+
+export interface Socket_Tcp {
   tlsOptions?: TlsOptions;
 }
 

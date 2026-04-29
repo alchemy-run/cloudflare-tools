@@ -1,13 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*", "test.ts"],
-  "exclude": ["dist"],
+  "include": ["tsdown.config.ts", "scripts"],
   "compilerOptions": {
-    "outDir": "dist",
-    "types": ["bun"],
-    "paths": {
-      "#/*": ["./src/*"]
-    }
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
+    "composite": false,
+    "noEmit": true
   },
-  "references": [{ "path": "./tsconfig.workers.json" }]
+  "references": [{ "path": "./tsconfig.workers.json" }, { "path": "./tsconfig.bundle.json" }]
 }

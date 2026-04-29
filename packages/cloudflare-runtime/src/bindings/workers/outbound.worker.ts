@@ -1,15 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
-import type { RemoteProxyConfig } from "./config.shared";
-
-declare abstract class ColoLocalActorNamespace<
-  T extends Rpc.DurableObjectBranded | undefined = undefined,
-> {
-  get(actorId: string): Fetcher<T>;
-}
+import type { OutboundConfig, SessionOptions } from "../RemoteConfig.ts";
 
 interface Env {
-  PROXY: ColoLocalActorNamespace<RemoteBindingProxy>;
+  PROXY: ColoLocalActorNamespace;
   LOOPBACK: Fetcher;
+  OPTIONS: SessionOptions;
 }
 
 export default {
@@ -20,7 +15,7 @@ export default {
 };
 
 export class RemoteBindingProxy extends DurableObject<Env> {
-  private config: RemoteProxyConfig | undefined;
+  private config: OutboundConfig | undefined;
 
   async fetch(request: Request): Promise<Response> {
     const config = await this.configure();
@@ -42,17 +37,23 @@ export class RemoteBindingProxy extends DurableObject<Env> {
     }
     return this.ctx.blockConcurrencyWhile(async () => {
       this.config = undefined;
-      const response = await this.env.LOOPBACK.fetch("http://stub");
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config: ${response.statusText}`);
+      const response = await this.env.LOOPBACK.fetch("http://stub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this.env.OPTIONS),
+      });
+      const json = await response.json<
+        { success: true; session: OutboundConfig } | { success: false; error: { message: string } }
+      >();
+      if (!json.success) {
+        throw new Error(`Failed to fetch config: ${response.statusText}`, { cause: json.error });
       }
-      const config = await response.json<RemoteProxyConfig>();
-      this.config = config;
-      return config;
+      this.config = json.session;
+      return json.session;
     });
   }
 
-  private async proxy(request: Request, config: RemoteProxyConfig): Promise<Response> {
+  private async proxy(request: Request, config: OutboundConfig): Promise<Response> {
     const origin = new URL(request.url);
     const target = new URL(origin.pathname + origin.search, config.url);
     const proxiedHeaders = new Headers(request.headers);

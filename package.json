@@ -17,11 +17,21 @@
       "packages/*",
       "fixtures/*"
     ],
+    "catalogs": {
+      "effect": {
+        "@effect/platform-bun": "4.0.0-beta.58",
+        "@effect/platform-node": "4.0.0-beta.58",
+        "@effect/vitest": "4.0.0-beta.58",
+        "effect": "4.0.0-beta.58"
+      },
+      "workers": {
+        "@cloudflare/workers-types": "^4.20260310.1",
+        "miniflare": "^4.20260329.0",
+        "workerd": "^1.20260414.1"
+      }
+    },
     "catalog": {
-      "@cloudflare/workers-types": "^4.20260310.1",
-      "@effect/platform-node": "^4.0.0-beta.43",
-      "@effect/vitest": "^4.0.0-beta.43",
-      "effect": "^4.0.0-beta.43",
+      "@distilled.cloud/cloudflare": "^0.13.1",
       "@playwright/test": "^1.52.0",
       "rolldown": "^1.0.0-rc.9",
       "typescript": "^6.0.2",
@@ -36,8 +46,8 @@
     "check:write": "bun run format:write && bun run lint:write && turbo run typecheck",
     "format": "oxfmt format --check .",
     "format:write": "oxfmt format .",
-    "lint": "oxlint lint --ignore-pattern 'workers-sdk'",
-    "lint:write": "oxlint lint --ignore-pattern 'workers-sdk' --fix",
+    "lint": "oxlint lint . --ignore-pattern 'workers-sdk'",
+    "lint:write": "oxlint lint . --ignore-pattern 'workers-sdk' --fix",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "submodules:init": "git submodule update --init --recursive",
@@ -46,10 +56,11 @@
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "@types/node": "^24.12.0",
-    "effect-solutions": "^0.5.2",
+    "drizzle-orm": "^0.45.2",
     "oxfmt": "^0.42.0",
-    "oxlint": "^1.57.0",
-    "turbo": "^2.9.0",
+    "oxlint": "^1.60.0",
+    "postgres": "^3.4.9",
+    "turbo": "^2.9.6",
     "typescript": "catalog:"
   },
   "packageManager": "bun@1.3.11"

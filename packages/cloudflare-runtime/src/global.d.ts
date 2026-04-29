@@ -11,3 +11,8 @@ declare module "workerd" {
   export const compatibilityDate: string;
   export const version: string;
 }
+
+declare module "worker:*" {
+  // oxlint-disable-next-line typescript/consistent-type-imports
+  export const modules: Array<import("./WorkerModule.ts").WorkerModule>;
+}

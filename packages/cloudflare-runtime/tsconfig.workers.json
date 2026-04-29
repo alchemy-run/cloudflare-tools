@@ -1,9 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.worker.ts", "src/**/*.shared.ts"],
+  "include": [
+    "src/internal/workers.d.ts",
+    "src/**/*.worker.ts",
+    "src/proxy/ProxyApi.ts",
+    "src/bindings/RemoteConfig.ts"
+  ],
   "compilerOptions": {
-    "outDir": "out",
+    "tsBuildInfoFile": ".cache/tsconfig.workers.tsbuildinfo",
+    "outDir": ".cache/workers",
+    "rootDir": "src",
     "emitDeclarationOnly": true,
-    "types": ["@cloudflare/workers-types/experimental"]
+    "types": ["@cloudflare/workers-types/experimental", "node"]
   }
 }

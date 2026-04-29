@@ -1,28 +1,96 @@
 {
   "name": "@distilled.cloud/cloudflare-runtime",
   "version": "0.0.0",
-  "private": true,
+  "description": "Runtime for Cloudflare Workers.",
+  "keywords": [
+    "cloudflare",
+    "runtime",
+    "workers"
+  ],
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/cloudflare-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "John Royal",
+    "email": "john@alchemy.run",
+    "url": "https://distilled.cloud"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
+    "directory": "packages/cloudflare-runtime"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./bindings": "./dist/bindings/index.mjs",
+    "./bindings/Bindings": "./dist/bindings/Bindings.mjs",
+    "./bindings/RemoteConfig": "./dist/bindings/RemoteConfig.mjs",
+    "./bindings/RemoteSession": "./dist/bindings/RemoteSession.mjs",
+    "./entry/Entry": "./dist/entry/Entry.mjs",
+    "./Plugin": "./dist/Plugin.mjs",
+    "./proxy": "./dist/proxy/index.mjs",
+    "./proxy/LocalProxy": "./dist/proxy/LocalProxy.mjs",
+    "./proxy/ProxyApi": "./dist/proxy/ProxyApi.mjs",
+    "./proxy/ProxyError": "./dist/proxy/ProxyError.mjs",
+    "./proxy/RemoteProxy": "./dist/proxy/RemoteProxy.mjs",
+    "./RuntimeServices": "./dist/RuntimeServices.mjs",
+    "./Server": "./dist/Server.mjs",
+    "./Storage": "./dist/Storage.mjs",
+    "./Worker": "./dist/Worker.mjs",
+    "./workerd": "./dist/workerd/index.mjs",
+    "./workerd/Config": "./dist/workerd/Config.mjs",
+    "./workerd/Runtime": "./dist/workerd/Runtime.mjs",
+    "./workerd/RuntimeError": "./dist/workerd/RuntimeError.mjs",
+    "./WorkerModule": "./dist/WorkerModule.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest --passWithNoTests",
-    "prepublishOnly": "bun run build:clean"
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "capnp-es": "^0.0.14",
-    "workerd": "^1.20260317.1"
+    "workerd": "catalog:workers"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@distilled.cloud/cloudflare": "^0.7.12",
-    "@distilled.cloud/cloudflare-rolldown-plugin": "^0.1.2",
-    "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
-    "capnweb": "^0.6.1",
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@effect/vitest": "catalog:effect",
+    "capnweb": "^0.7.0",
     "rolldown": "catalog:",
+    "tsdown": "^0.21.10",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:"
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@effect/platform-bun": "catalog:effect",
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    }
+  },
+  "inlinedDependencies": {
+    "capnweb": "0.7.0"
   }
 }

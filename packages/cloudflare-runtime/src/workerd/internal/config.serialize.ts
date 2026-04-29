@@ -1,6 +1,6 @@
 import { type Data, type List, Message, type Struct } from "capnp-es";
-import { Config as CapnpConfig } from "./config.capnp";
-import { type Config, kVoid } from "./config.types";
+import { type Config, kVoid } from "../Config.ts";
+import { Config as CapnpConfig } from "./config.capnp.ts";
 
 function capitalize<S extends string>(str: S): Capitalize<S> {
   return (str[0] ? str[0].toUpperCase() + str.substring(1) : str) as Capitalize<S>;

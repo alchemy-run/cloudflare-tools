@@ -91,9 +91,21 @@
   "ignorePatterns": ["workers-sdk", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"],
   "overrides": [
     {
-      "files": ["**/src/**/*.ts"],
+      "files": [
+        "packages/cloudflare-rolldown-plugin/src/**/*.ts",
+        "packages/cloudflare-vite-plugin/src/**/*.ts"
+      ],
       "rules": {
         "eslint/no-console": "error"
+      }
+    },
+    {
+      "files": [
+        "packages/cloudflare-runtime/src/**/*.ts",
+        "packages/cloudflare-runtime/sandbox/**/*.ts"
+      ],
+      "rules": {
+        "import/extensions": ["error", "ignorePackages"]
       }
     }
   ]

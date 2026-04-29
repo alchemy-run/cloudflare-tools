@@ -15,6 +15,7 @@ export declare namespace ControllerMessage {
   interface Unset {
     readonly _tag: `${WorkerKind}.Unset`;
     readonly worker: string;
+    readonly address: string;
   }
 }
 

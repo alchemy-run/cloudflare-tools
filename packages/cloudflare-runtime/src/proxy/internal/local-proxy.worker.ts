@@ -53,7 +53,9 @@ export class LocalProxy extends DurableObject<Env> {
         break;
       }
       case "Local.Unset": {
-        this.workers[message.worker].local = undefined;
+        if (!message.address || message.address === this.workers[message.worker].local) {
+          this.workers[message.worker].local = undefined;
+        }
         break;
       }
       case "Remote.Set": {

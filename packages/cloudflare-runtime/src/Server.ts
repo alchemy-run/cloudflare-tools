@@ -77,16 +77,18 @@ export const layer = Layer.effect(
           ],
           extensions,
         });
+        const address = `http://localhost:${result[0].port}`;
         yield* localProxy.send({
           _tag: "Local.Set",
           worker: worker.name,
-          address: `http://localhost:${result[0].port}`,
+          address,
         });
         yield* Effect.addFinalizer(() =>
           localProxy
             .send({
               _tag: "Local.Unset",
               worker: worker.name,
+              address,
             })
             .pipe(Effect.ignore),
         );

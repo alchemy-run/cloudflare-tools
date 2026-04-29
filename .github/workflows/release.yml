@@ -8,8 +8,8 @@ on:
         required: true
         type: choice
         options:
-          - "cloudflare-bundler"
           - "cloudflare-rolldown-plugin"
+          - "cloudflare-runtime"
           - "cloudflare-vite-plugin"
       release-type:
         description: "Release type"

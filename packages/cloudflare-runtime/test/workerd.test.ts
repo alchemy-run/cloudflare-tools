@@ -2,9 +2,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Runtime from "../src/Runtime.ts";
+import * as Runtime from "../src/workerd/Runtime.ts";
 
-const services = Layer.provide(Runtime.RuntimeLive, NodeServices.layer);
+const services = Layer.provide(Runtime.layer, NodeServices.layer);
 
 layer(services)((it) => {
   it.effect("spawns a workerd process", () =>

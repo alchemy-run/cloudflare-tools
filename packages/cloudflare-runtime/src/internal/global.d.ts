@@ -13,6 +13,6 @@ declare module "workerd" {
 }
 
 declare module "worker:*" {
-  export const name: string;
-  export const code: string;
+  // oxlint-disable-next-line typescript/consistent-type-imports
+  export const modules: Array<import("../Worker.ts").Module>;
 }

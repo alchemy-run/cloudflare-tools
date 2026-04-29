@@ -90,11 +90,6 @@ export class LocalProxy extends DurableObject<Env> {
       const original = new URL(request.url);
       const segments = original.hostname.split(".");
       const name = segments[0];
-      console.log("[local] processing queue", {
-        name,
-        original: original.toString(),
-        local: this.workers[name]?.local,
-      });
       if (segments.length < 2 || !name) {
         this.queue.delete(request);
         this.retryQueue.delete(request);
@@ -156,28 +151,18 @@ export class LocalProxy extends DurableObject<Env> {
   private makeLocalMain(remote: () => RpcStub<WebSocketProxy>): WorkerProxy {
     return {
       fetch: async (request: Request): Promise<WorkerProxy.FetchResult> => {
-        console.log("[local] fetching", request.url);
         const response = await this.handleUserWorkerRequest(request);
         if (response.webSocket) {
           const ws = response.webSocket;
           const id = crypto.randomUUID();
           ws.accept({ allowHalfOpen: true });
           ws.addEventListener("message", (event) => {
-            console.log("[local] upstream websocket message", id, event.data);
             remote().webSocketMessage(id, event.data);
           });
           ws.addEventListener("close", (event) => {
-            console.log(
-              "[local] upstream websocket close",
-              id,
-              event.code,
-              event.reason,
-              event.wasClean,
-            );
             remote().webSocketClose(id, event.code, event.reason, event.wasClean);
           });
           ws.addEventListener("error", (event) => {
-            console.log("[local] upstream websocket error", id, event.error);
             remote().webSocketError(id, event.error);
           });
           return {
@@ -194,15 +179,13 @@ export class LocalProxy extends DurableObject<Env> {
         }
       },
       webSocketMessage: async (id: string, message: string | ArrayBuffer) => {
-        console.log("[local] websocket message", id, message);
         const [target] = this.ctx.getWebSockets(id);
         if (!target) {
           return;
         }
         target.send(message);
       },
-      webSocketClose: async (id: string, code: number, reason: string, wasClean: boolean) => {
-        console.log("[local] websocket close", id, code, reason, wasClean);
+      webSocketClose: async (id: string, code: number, reason: string) => {
         const [target] = this.ctx.getWebSockets(id);
         if (!target) {
           return;
@@ -210,7 +193,7 @@ export class LocalProxy extends DurableObject<Env> {
         target.close(code, reason);
       },
       webSocketError: async (id: string, error: unknown) => {
-        console.log("[local] websocket error", id, error);
+        console.error("[local] websocket error", id, error);
       },
     };
   }

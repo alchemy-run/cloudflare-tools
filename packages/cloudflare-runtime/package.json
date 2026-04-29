@@ -3,11 +3,14 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    ".": "./dist/index.mjs",
     "./proxy": "./dist/proxy/index.mjs",
     "./proxy/LocalProxy": "./dist/proxy/LocalProxy.mjs",
     "./proxy/ProxyApi": "./dist/proxy/ProxyApi.mjs",
     "./proxy/ProxyError": "./dist/proxy/ProxyError.mjs",
     "./proxy/RemoteProxy": "./dist/proxy/RemoteProxy.mjs",
+    "./Server": "./dist/Server.mjs",
+    "./Worker": "./dist/Worker.mjs",
     "./workerd": "./dist/workerd/index.mjs",
     "./workerd/Config": "./dist/workerd/Config.mjs",
     "./workerd/Runtime": "./dist/workerd/Runtime.mjs",
@@ -36,6 +39,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "@distilled.cloud/cloudflare": "catalog:",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect"
@@ -47,5 +51,8 @@
     "@effect/platform-node": {
       "optional": true
     }
+  },
+  "inlinedDependencies": {
+    "capnweb": "0.7.0"
   }
 }

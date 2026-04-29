@@ -32,7 +32,7 @@ export class Runtime extends Context.Service<
       args?: Record<string, string | number | boolean>,
     ) => Effect.Effect<Array<ControlMessage>, RuntimeError, Scope.Scope>;
   }
->()("Runtime") {}
+>()("cloudflare-runtime/workerd/Runtime") {}
 
 export const RuntimeLive = Layer.effect(
   Runtime,

@@ -102,6 +102,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
+        "@distilled.cloud/cloudflare": "catalog:",
         "@effect/platform-bun": "catalog:effect",
         "@effect/platform-node": "catalog:effect",
         "effect": "catalog:effect",

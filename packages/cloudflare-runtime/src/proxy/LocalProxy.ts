@@ -6,6 +6,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as LocalProxyWorker from "worker:./internal/local-proxy.worker.ts";
 import { convertWorkerModules } from "../internal/convert-worker-modules.ts";
+import { kVoid } from "../workerd/Config.ts";
 import * as Runtime from "../workerd/Runtime.ts";
 import { LOCAL_CONFIGURE_PATH, type ControllerMessage } from "./ProxyApi.ts";
 import { ProxyError } from "./ProxyError.ts";
@@ -44,6 +45,22 @@ export const LocalProxyLive = (config: LocalProxyConfig) =>
             worker: {
               compatibilityDate: "2026-03-10",
               modules: convertWorkerModules(LocalProxyWorker.modules),
+              bindings: [{ name: "PROXY", durableObjectNamespace: { className: "LocalProxy" } }],
+              durableObjectNamespaces: [
+                { className: "LocalProxy", ephemeralLocal: kVoid, preventEviction: true },
+              ],
+            },
+          },
+          {
+            name: "internet",
+            network: {
+              // Allow access to private/public addresses:
+              // https://github.com/cloudflare/miniflare/issues/412
+              allow: ["public", "private", "240.0.0.0/4"],
+              deny: [],
+              tlsOptions: {
+                trustBrowserCas: true,
+              },
             },
           },
         ],

@@ -10,12 +10,12 @@ import {
 } from "../ProxyApi.ts";
 
 interface Env {
-  BRIDGE: ColoLocalActorNamespace;
+  PROXY: ColoLocalActorNamespace;
 }
 
 export default {
   fetch: async (request: Request, env: Env) => {
-    return env.BRIDGE.get("global").fetch(request);
+    return env.PROXY.get("global").fetch(request);
   },
 };
 

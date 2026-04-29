@@ -110,10 +110,10 @@ function workerExportsPlugin(): Plugin {
               ...imports,
               imports.length > 0 ? "" : undefined,
               "export const modules = [",
-              ...moduleEntries,
               `  { name: ${JSON.stringify(chunk.fileName)}, type: "ESModule", content: ${JSON.stringify(
                 code,
               )} },`,
+              ...moduleEntries,
               "];",
               "",
             ]

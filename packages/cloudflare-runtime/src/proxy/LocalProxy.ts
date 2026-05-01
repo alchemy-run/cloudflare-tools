@@ -49,6 +49,13 @@ export const layerLive = (config: LocalProxyConfig) =>
               durableObjectNamespaces: [
                 { className: "LocalProxy", ephemeralLocal: Config.kVoid, preventEviction: true },
               ],
+              // Route the proxy worker's `fetch()` calls (which forward
+              // to user-registered local addresses on 127.0.0.1) through
+              // the `internet` network service so workerd's default
+              // outbound filter doesn't drop loopback connections — the
+              // default policy denies them and on Windows that surfaces
+              // as `WSARecv #64`.
+              globalOutbound: { name: "internet" },
             },
           },
           {

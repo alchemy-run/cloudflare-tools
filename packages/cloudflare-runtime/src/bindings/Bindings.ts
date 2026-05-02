@@ -23,11 +23,11 @@ export class UnsupportedBindingError extends Schema.TaggedErrorClass<Unsupported
     message: Schema.String,
     binding: Schema.Any,
   },
-) {}
+) { }
 
 export class Bindings extends Context.Service<Bindings, Plugin.Plugin<UnsupportedBindingError>>()(
   "cloudflare-runtime/bindings/Bindings",
-) {}
+) { }
 
 export const layer = Layer.effect(
   Bindings,
@@ -55,9 +55,9 @@ export const layer = Layer.effect(
             return exit._tag === "Success"
               ? HttpServerResponse.json({ success: true, session: exit.value })
               : HttpServerResponse.json(
-                  { success: false, error: { message: Cause.pretty(exit.cause) } },
-                  { status: 500 },
-                );
+                { success: false, error: { message: Cause.pretty(exit.cause) } },
+                { status: 500 },
+              );
           }),
         ),
     );
@@ -121,7 +121,10 @@ export const layer = Layer.effect(
     return Bindings.of({
       name: "bindings",
       make: Effect.fn(function* (worker) {
-        const { workerBindings, remoteBindings } = yield* buildBindings(worker.bindings);
+        const { workerBindings, remoteBindings, extraServices } = yield* buildBindings(
+          worker.bindings,
+          worker.hyperdrives ?? {},
+        );
         let services: Array<Config.Service> | undefined;
         if (remoteBindings.length > 0) {
           const options = {
@@ -130,6 +133,9 @@ export const layer = Layer.effect(
           };
           prewarms.set(worker.name, yield* Effect.forkDetach(remoteSession.create(options)));
           services = makeServices(options);
+        }
+        if (extraServices.length > 0) {
+          services = [...(services ?? []), ...extraServices];
         }
         return {
           bindings: workerBindings,
@@ -140,8 +146,12 @@ export const layer = Layer.effect(
   }),
 );
 
-const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Binding>) {
+const buildBindings = Effect.fn(function* (
+  bindings: ReadonlyArray<Worker.Binding>,
+  hyperdrives: Record<string, Worker.HyperdriveOrigin>,
+) {
   const remoteBindings: Array<RemoteBinding> = [];
+  const extraServices: Array<Config.Service> = [];
   const workerBindings = yield* Effect.forEach(
     bindings,
     Effect.fn(function* (binding): Effect.fn.Return<
@@ -227,6 +237,27 @@ const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Bindin
           };
         }
         case "hyperdrive": {
+          const origin = hyperdrives[binding.name];
+          if (origin) {
+            const serviceName = `hyperdrive:${binding.name}`;
+            extraServices.push({
+              name: serviceName,
+              external: {
+                address: `${origin.host}:${origin.port}`,
+                tcp: {},
+              },
+            });
+            return {
+              name: binding.name,
+              hyperdrive: {
+                designator: { name: serviceName },
+                database: origin.database,
+                user: origin.user,
+                password: origin.password,
+                scheme: origin.scheme,
+              },
+            };
+          }
           // TODO: implement custom websocket transport
           // remoteBindings.push({
           //   name: binding.name,
@@ -394,6 +425,7 @@ const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Bindin
   );
   return {
     remoteBindings,
+    extraServices,
     workerBindings: workerBindings.filter((b) => b !== undefined),
   };
 });

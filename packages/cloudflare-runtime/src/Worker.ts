@@ -6,6 +6,12 @@ export interface Worker {
   compatibilityDate: string;
   compatibilityFlags: Array<string>;
   bindings: Array<Binding>;
+  /**
+   * Local-mode connection details for hyperdrive bindings, keyed by
+   * binding name. When set, the runtime wires the matching hyperdrive
+   * binding to the given database via a workerd `external` TCP service
+   */
+  hyperdrives?: Record<string, HyperdriveOrigin>;
   durableObjectNamespaces?: Array<DurableObjectNamespace>;
   modules: Array<WorkerModule>;
   assets?: Assets;
@@ -15,6 +21,18 @@ export interface DurableObjectNamespace {
   className: string;
   sql: boolean;
   uniqueKey: string;
+}
+
+/**
+ * Connection details for a hyperdrive binding running in local mode.
+ */
+export interface HyperdriveOrigin {
+  scheme: string;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
 }
 
 type WorkerMetadata = workers.PutScriptRequest["metadata"];

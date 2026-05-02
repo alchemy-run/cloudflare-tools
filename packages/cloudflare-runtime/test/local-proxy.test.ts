@@ -1,8 +1,8 @@
-import * as http from "node:http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as http from "node:http";
 import * as Runtime from "../src/workerd/Runtime.ts";
 
 const services = Layer.provide(Runtime.layer, NodeServices.layer);
@@ -11,9 +11,7 @@ const services = Layer.provide(Runtime.layer, NodeServices.layer);
  * Spin up a tiny loopback HTTP server that workerd workers can target.
  * Returns the bound port and a cleanup function.
  */
-const startLoopbackTarget = (
-  body: string,
-): Promise<{ port: number; close: () => Promise<void> }> =>
+const startLoopbackTarget = (body: string): Promise<{ port: number; close: () => Promise<void> }> =>
   new Promise((resolve, reject) => {
     const server = http.createServer((_req, res) => {
       res.writeHead(200, { "content-type": "text/plain" });
@@ -61,51 +59,99 @@ const fetchWorker = async (port: number): Promise<string> => {
 
 layer(services)((it) => {
   /**
-   * Without `globalOutbound`, workerd applies its default outbound
-   * policy which denies loopback fetches. This test pins the failure
-   * mode so a regression that "removes the globalOutbound, things
-   * still seem to work" gets caught — without the binding the worker's
+   * Without a matching outbound service, workerd applies its default
+   * outbound policy which denies loopback fetches. This test pins the
+   * failure mode so a regression that removes outbound configuration
+   * gets caught — without the binding the worker's
    * `fetch("http://127.0.0.1:…")` returns a network error.
    */
-  it.effect(
-    "without globalOutbound, a worker cannot fetch a loopback target",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* Effect.promise(() =>
-          startLoopbackTarget("loopback-payload"),
-        );
-        try {
-          const runtime = yield* Runtime.Runtime;
-          const result = yield* runtime.serve({
-            sockets: [
-              {
-                name: "http",
-                address: "127.0.0.1:0",
-                service: { name: "proxy" },
+  it.effect("without globalOutbound, a worker cannot fetch a loopback target", () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => startLoopbackTarget("loopback-payload"));
+      try {
+        const runtime = yield* Runtime.Runtime;
+        const result = yield* runtime.serve({
+          sockets: [
+            {
+              name: "http",
+              address: "127.0.0.1:0",
+              service: { name: "proxy" },
+            },
+          ],
+          services: [
+            {
+              name: "proxy",
+              worker: {
+                compatibilityDate: "2026-03-10",
+                modules: [
+                  {
+                    name: "main.js",
+                    esModule: proxyWorkerScript(target.port),
+                  },
+                ],
               },
-            ],
-            services: [
-              {
-                name: "proxy",
-                worker: {
-                  compatibilityDate: "2026-03-10",
-                  modules: [
-                    {
-                      name: "main.js",
-                      esModule: proxyWorkerScript(target.port),
-                    },
-                  ],
-                },
+            },
+          ],
+        });
+        const port = result[0].port;
+        const body = yield* Effect.promise(() => fetchWorker(port));
+        expect(body.startsWith("err:")).toBe(true);
+      } finally {
+        yield* Effect.promise(() => target.close());
+      }
+    }),
+  );
+
+  /**
+   * If a service named `internet` exists, workerd treats it as the
+   * implicit `globalOutbound` unless the worker explicitly says
+   * otherwise. This documents why adding only the network service can
+   * make outbound fetches work even when `worker.globalOutbound` is
+   * absent.
+   */
+  it.effect("with internet service but no globalOutbound, workerd uses internet implicitly", () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => startLoopbackTarget("loopback-payload"));
+      try {
+        const runtime = yield* Runtime.Runtime;
+        const result = yield* runtime.serve({
+          sockets: [
+            {
+              name: "http",
+              address: "127.0.0.1:0",
+              service: { name: "proxy" },
+            },
+          ],
+          services: [
+            {
+              name: "proxy",
+              worker: {
+                compatibilityDate: "2026-03-10",
+                modules: [
+                  {
+                    name: "main.js",
+                    esModule: proxyWorkerScript(target.port),
+                  },
+                ],
               },
-            ],
-          });
-          const port = result[0].port;
-          const body = yield* Effect.promise(() => fetchWorker(port));
-          expect(body.startsWith("err:")).toBe(true);
-        } finally {
-          yield* Effect.promise(() => target.close());
-        }
-      }),
+            },
+            {
+              name: "internet",
+              network: {
+                allow: ["public", "private", "240.0.0.0/4"],
+                deny: [],
+                tlsOptions: { trustBrowserCas: true },
+              },
+            },
+          ],
+        });
+        const port = result[0].port;
+        const body = yield* Effect.promise(() => fetchWorker(port));
+        expect(body).toBe("ok:200:loopback-payload");
+      } finally {
+        yield* Effect.promise(() => target.close());
+      }
+    }),
   );
 
   /**
@@ -117,53 +163,49 @@ layer(services)((it) => {
    * reach user-registered front-proxies on `127.0.0.1`, surfacing on
    * Windows as workerd `WSARecv #64` and 500s on the friendly URL.
    */
-  it.effect(
-    "with globalOutbound -> internet, a worker can fetch a loopback target",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* Effect.promise(() =>
-          startLoopbackTarget("loopback-payload"),
-        );
-        try {
-          const runtime = yield* Runtime.Runtime;
-          const result = yield* runtime.serve({
-            sockets: [
-              {
-                name: "http",
-                address: "127.0.0.1:0",
-                service: { name: "proxy" },
+  it.effect("with globalOutbound -> internet, a worker can fetch a loopback target", () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => startLoopbackTarget("loopback-payload"));
+      try {
+        const runtime = yield* Runtime.Runtime;
+        const result = yield* runtime.serve({
+          sockets: [
+            {
+              name: "http",
+              address: "127.0.0.1:0",
+              service: { name: "proxy" },
+            },
+          ],
+          services: [
+            {
+              name: "proxy",
+              worker: {
+                compatibilityDate: "2026-03-10",
+                modules: [
+                  {
+                    name: "main.js",
+                    esModule: proxyWorkerScript(target.port),
+                  },
+                ],
+                globalOutbound: { name: "internet" },
               },
-            ],
-            services: [
-              {
-                name: "proxy",
-                worker: {
-                  compatibilityDate: "2026-03-10",
-                  modules: [
-                    {
-                      name: "main.js",
-                      esModule: proxyWorkerScript(target.port),
-                    },
-                  ],
-                  globalOutbound: { name: "internet" },
-                },
+            },
+            {
+              name: "internet",
+              network: {
+                allow: ["public", "private", "240.0.0.0/4"],
+                deny: [],
+                tlsOptions: { trustBrowserCas: true },
               },
-              {
-                name: "internet",
-                network: {
-                  allow: ["public", "private", "240.0.0.0/4"],
-                  deny: [],
-                  tlsOptions: { trustBrowserCas: true },
-                },
-              },
-            ],
-          });
-          const port = result[0].port;
-          const body = yield* Effect.promise(() => fetchWorker(port));
-          expect(body).toBe("ok:200:loopback-payload");
-        } finally {
-          yield* Effect.promise(() => target.close());
-        }
-      }),
+            },
+          ],
+        });
+        const port = result[0].port;
+        const body = yield* Effect.promise(() => fetchWorker(port));
+        expect(body).toBe("ok:200:loopback-payload");
+      } finally {
+        yield* Effect.promise(() => target.close());
+      }
+    }),
   );
 });

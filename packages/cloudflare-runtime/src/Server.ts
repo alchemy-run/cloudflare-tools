@@ -42,10 +42,10 @@ export const layer = Layer.effect(
     const bindingsService = yield* Bindings.Bindings;
     return Server.of({
       serve: Effect.fn(function* (worker) {
-        const { entry, bindings, services, extensions } = yield* Plugin.build(worker, [
-          Entry.EntryPlugin,
-          bindingsService,
-        ]);
+        const { entry, bindings, services, sockets, extensions, ready } = yield* Plugin.build(
+          worker,
+          [Entry.EntryPlugin, bindingsService],
+        );
         const result = yield* runtime.serve({
           sockets: [
             {
@@ -53,6 +53,7 @@ export const layer = Layer.effect(
               address: "127.0.0.1:0",
               service: { name: entry },
             },
+            ...sockets,
           ],
           services: [
             {
@@ -92,6 +93,7 @@ export const layer = Layer.effect(
             })
             .pipe(Effect.ignore),
         );
+        yield* ready(result);
         return {
           name: worker.name,
           address: `http://${worker.name}.${localProxy.address}`,

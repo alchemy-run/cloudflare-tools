@@ -1,5 +1,6 @@
 import { newWorkersRpcResponse } from "capnweb";
 import { EmailMessage } from "cloudflare:email";
+import type { HyperdriveAdapter } from "../../hyperdrive/HyperdriveAdapter.ts";
 
 interface Env extends Record<string, unknown> {}
 
@@ -59,26 +60,28 @@ function getExposedJSRPCBinding(request: Request, env: Env) {
   if (targetBinding.constructor.name === "Hyperdrive") {
     const binding = targetBinding as Hyperdrive;
     return {
-      async hyperdriveInfo() {
-        return {
-          connectionString: binding.connectionString,
-          database: binding.database,
-          user: binding.user,
-          password: binding.password,
-          host: binding.host,
-          port: binding.port,
-        };
+      hyperdrive: {
+        info: async () => {
+          return {
+            connectionString: binding.connectionString,
+            database: binding.database,
+            user: binding.user,
+            password: binding.password,
+            host: binding.host,
+            port: binding.port,
+          };
+        },
+        connect: async () => {
+          const socket = binding.connect();
+          return {
+            readable: socket.readable,
+            writable: socket.writable,
+            secureTransport: socket.secureTransport,
+            close: () => socket.close(),
+          };
+        },
       },
-      async hyperdriveConnect() {
-        const socket = binding.connect();
-        return {
-          readable: socket.readable,
-          writable: socket.writable,
-          secureTransport: socket.secureTransport,
-          close: () => socket.close(),
-        };
-      },
-    };
+    } as HyperdriveAdapter;
   }
 
   if (url.searchParams.has("MF-Dispatch-Namespace-Options")) {

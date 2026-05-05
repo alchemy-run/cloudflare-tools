@@ -4,7 +4,8 @@
     "src/internal/workers.d.ts",
     "src/**/*.worker.ts",
     "src/proxy/ProxyApi.ts",
-    "src/bindings/RemoteConfig.ts"
+    "src/bindings/RemoteConfig.ts",
+    "src/hyperdrive/HyperdriveAdapter.ts"
   ],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.workers.tsbuildinfo",

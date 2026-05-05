@@ -1,7 +1,9 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import type { Worker } from "./Worker.ts";
 import type * as Config from "./workerd/Config.ts";
+import type { ControlMessage } from "./workerd/Runtime.ts";
 
 export const Service = <Self, P extends Plugin<any>>() => Context.Service<Self, P>();
 
@@ -11,10 +13,12 @@ export interface Plugin<out E = never> {
 }
 
 export interface PluginOutput {
+  sockets?: Array<Config.Socket>;
   middlewares?: Array<Middleware>;
   bindings?: Array<Config.Worker_Binding>;
   services?: Array<Config.Service>;
   extensions?: Array<Config.Extension>;
+  ready?: (messages: Array<ControlMessage>) => Effect.Effect<void, never, Scope.Scope>;
 }
 
 export interface Middleware {
@@ -25,11 +29,14 @@ export interface Middleware {
 
 export const build = Effect.fn(function* <E = never>(worker: Worker, plugins: Array<Plugin<E>>) {
   const outputs = yield* Effect.all(plugins.map((plugin) => plugin.make(worker)));
+  const sockets = outputs.flatMap((output) => output.sockets ?? []);
   const services = outputs.flatMap((output) => output.services ?? []);
   const bindings = outputs.flatMap((output) => output.bindings ?? []);
   const extensions = outputs.flatMap((output) => output.extensions ?? []);
   const middlewares = outputs.flatMap((output) => output.middlewares ?? []);
+  const ready = outputs.flatMap((output) => output.ready ?? []);
   return {
+    sockets,
     bindings,
     entry: middlewares[0]?.name ?? "user",
     services: [
@@ -51,5 +58,6 @@ export const build = Effect.fn(function* <E = never>(worker: Worker, plugins: Ar
       })),
     ],
     extensions,
+    ready: (messages: Array<ControlMessage>) => Effect.all(ready.map((ready) => ready(messages))),
   };
 });

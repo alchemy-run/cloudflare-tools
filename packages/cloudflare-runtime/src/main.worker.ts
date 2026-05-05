@@ -1,29 +1,17 @@
-interface HyperdriveAdapter {
-  hyperdriveInfo: () => Promise<{
-    connectionString: string;
-    database: string;
-    user: string;
-    password: string;
-    host: string;
-    port: number;
-  }>;
-  hyperdriveConnect: () => Promise<{
-    readable: ReadableStream;
-    writable: WritableStream;
-    secureTransport: boolean;
-    close: () => void;
-  }>;
+interface Env {
+  HYPERDRIVE: Hyperdrive;
 }
 
 export default {
-  fetch: async (req: Request, env: { HYPERDRIVE: HyperdriveAdapter }) => {
-    const conn = await env.HYPERDRIVE.hyperdriveConnect();
+  fetch: async (req: Request, env: Env) => {
     console.log({
-      readable: conn.readable,
-      writable: conn.writable,
-      secureTransport: conn.secureTransport,
-      close: conn.close,
+      connectionString: env.HYPERDRIVE.connectionString,
+      database: env.HYPERDRIVE.database,
+      user: env.HYPERDRIVE.user,
+      password: env.HYPERDRIVE.password,
+      host: env.HYPERDRIVE.host,
+      port: env.HYPERDRIVE.port,
     });
-    return Response.json({ success: true, data: conn });
+    return Response.json({ success: true });
   },
 };

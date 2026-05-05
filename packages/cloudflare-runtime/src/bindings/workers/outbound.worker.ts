@@ -12,7 +12,7 @@ export default {
     const actor = env.PROXY.get("global");
     return await actor.fetch(request);
   },
-};
+} as ExportedHandler<Env>;
 
 export class RemoteBindingProxy extends DurableObject<Env> {
   private config: OutboundConfig | undefined;

@@ -1,3 +1,4 @@
+import { Deferred } from "effect";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -15,6 +16,7 @@ import * as OutboundWorker from "worker:./workers/outbound.worker.ts";
 import type * as Plugin from "../Plugin.ts";
 import type * as Worker from "../Worker.ts";
 import * as Config from "../workerd/Config.ts";
+import type { ControlMessage } from "../workerd/Runtime.ts";
 import * as WorkerModule from "../WorkerModule.ts";
 import type { RemoteBinding, SessionOptions } from "./RemoteConfig.ts";
 import * as RemoteSession from "./RemoteSession.ts";
@@ -141,6 +143,7 @@ export const layer = Layer.effect(
     return Bindings.of({
       name: "bindings",
       make: Effect.fn(function* (worker) {
+        const deferred = yield* Deferred.make<Array<ControlMessage>>();
         const { workerBindings, remoteBindings, extensions } = yield* buildBindings(
           worker.bindings,
         );
@@ -154,9 +157,17 @@ export const layer = Layer.effect(
           services = makeServices(options);
         }
         return {
+          sockets: [
+            {
+              name: "remote-bindings:outbound",
+              address: "127.0.0.1:0",
+              service: { name: "remote-bindings:outbound" },
+            },
+          ],
           bindings: workerBindings,
           services,
           extensions,
+          ready: (messages) => Deferred.succeed(deferred, messages),
         };
       }),
     });
@@ -251,30 +262,20 @@ const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Bindin
           };
         }
         case "hyperdrive": {
-          // TODO: implement custom websocket transport
-          // remoteBindings.push({
-          //   name: binding.name,
-          //   type: "hyperdrive",
-          //   id: binding.id,
-          // });
           remoteBindings.push({
             name: binding.name,
             type: "hyperdrive",
             id: binding.id,
           });
-          // return {
-          //   name: binding.name,
-          //   hyperdrive: {
-          //     designator: makeRemoteBindingServiceDesignator(binding.name),
-          //     database: "9fabb398dc12413ab0323d5992c85097",
-          //     user: "6e94ce098c22487db6af657ce5e345ec",
-          //     password: "4c1e437b7d6fde011d6f00362033d43d",
-          //     scheme: "postgresql",
-          //   },
-          // };
           return {
             name: binding.name,
-            service: makeRemoteBindingServiceDesignator(binding.name),
+            hyperdrive: {
+              designator: makeRemoteBindingServiceDesignator(binding.name),
+              database: binding.id,
+              user: "<user>",
+              password: "<password>",
+              scheme: "mysql",
+            },
           };
         }
         case "images": {

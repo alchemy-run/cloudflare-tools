@@ -9,6 +9,7 @@ import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ClientWorker from "worker:./workers/client.worker.ts";
+import * as HyperdriveBindingWorker from "worker:./workers/hyperdrive-binding.worker.ts";
 import * as OutboundWorker from "worker:./workers/outbound.worker.ts";
 import type * as Plugin from "../Plugin.ts";
 import type * as Worker from "../Worker.ts";
@@ -23,11 +24,11 @@ export class UnsupportedBindingError extends Schema.TaggedErrorClass<Unsupported
     message: Schema.String,
     binding: Schema.Any,
   },
-) { }
+) {}
 
 export class Bindings extends Context.Service<Bindings, Plugin.Plugin<UnsupportedBindingError>>()(
   "cloudflare-runtime/bindings/Bindings",
-) { }
+) {}
 
 export const layer = Layer.effect(
   Bindings,
@@ -55,9 +56,9 @@ export const layer = Layer.effect(
             return exit._tag === "Success"
               ? HttpServerResponse.json({ success: true, session: exit.value })
               : HttpServerResponse.json(
-                { success: false, error: { message: Cause.pretty(exit.cause) } },
-                { status: 500 },
-              );
+                  { success: false, error: { message: Cause.pretty(exit.cause) } },
+                  { status: 500 },
+                );
           }),
         ),
     );
@@ -121,25 +122,22 @@ export const layer = Layer.effect(
     return Bindings.of({
       name: "bindings",
       make: Effect.fn(function* (worker) {
-        const { workerBindings, remoteBindings, extraServices } = yield* buildBindings(
+        const { workerBindings, remoteBindings, extensions, services } = yield* buildBindings(
           worker.bindings,
           worker.hyperdrives ?? {},
         );
-        let services: Array<Config.Service> | undefined;
         if (remoteBindings.length > 0) {
           const options = {
             name: worker.name,
             bindings: remoteBindings,
           };
           prewarms.set(worker.name, yield* Effect.forkDetach(remoteSession.create(options)));
-          services = makeServices(options);
-        }
-        if (extraServices.length > 0) {
-          services = [...(services ?? []), ...extraServices];
+          services.push(...makeServices(options));
         }
         return {
           bindings: workerBindings,
           services,
+          extensions,
         };
       }),
     });
@@ -151,7 +149,8 @@ const buildBindings = Effect.fn(function* (
   hyperdrives: Record<string, Worker.HyperdriveOrigin>,
 ) {
   const remoteBindings: Array<RemoteBinding> = [];
-  const extraServices: Array<Config.Service> = [];
+  const extensions: Array<Config.Extension> = [];
+  const services: Array<Config.Service> = [];
   const workerBindings = yield* Effect.forEach(
     bindings,
     Effect.fn(function* (binding): Effect.fn.Return<
@@ -237,43 +236,38 @@ const buildBindings = Effect.fn(function* (
           };
         }
         case "hyperdrive": {
-          const origin = hyperdrives[binding.name];
+          const origin = hyperdrives[binding.id];
           if (origin) {
-            const serviceName = `hyperdrive:${binding.name}`;
-            extraServices.push({
-              name: serviceName,
-              external: {
-                address: `${origin.host}:${origin.port}`,
-                tcp: {},
-              },
-            });
+            if (
+              !extensions.some((extension) =>
+                extension.modules?.some(
+                  (module) => module.name === "cloudflare-internal:hyperdrive",
+                ),
+              )
+            ) {
+              extensions.push({
+                modules: [
+                  {
+                    name: "cloudflare-internal:hyperdrive",
+                    internal: true,
+                    esModule: HyperdriveBindingWorker.modules[0].content as string,
+                  },
+                ],
+              });
+            }
             return {
               name: binding.name,
-              hyperdrive: {
-                designator: { name: serviceName },
-                database: origin.database,
-                user: origin.user,
-                password: origin.password,
-                scheme: origin.scheme,
+              wrapped: {
+                moduleName: "cloudflare-internal:hyperdrive",
+                innerBindings: [
+                  {
+                    name: "ORIGIN",
+                    json: JSON.stringify(origin),
+                  },
+                ],
               },
             };
           }
-          // TODO: implement custom websocket transport
-          // remoteBindings.push({
-          //   name: binding.name,
-          //   type: "hyperdrive",
-          //   id: binding.id,
-          // });
-          // return {
-          //   name: binding.name,
-          //   hyperdrive: {
-          //     designator: makeRemoteBindingServiceDesignator(binding.name),
-          //     database: "",
-          //     user: "",
-          //     password: "",
-          //     scheme: "",
-          //   },
-          // };
           return yield* makeUnsupportedBindingError(binding);
         }
         case "images": {
@@ -425,7 +419,8 @@ const buildBindings = Effect.fn(function* (
   );
   return {
     remoteBindings,
-    extraServices,
+    extensions,
+    services,
     workerBindings: workerBindings.filter((b) => b !== undefined),
   };
 });

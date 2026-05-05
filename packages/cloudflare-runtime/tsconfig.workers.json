@@ -3,6 +3,8 @@
   "include": [
     "src/internal/workers.d.ts",
     "src/**/*.worker.ts",
+    "src/Worker.ts",
+    "src/WorkerModule.ts",
     "src/proxy/ProxyApi.ts",
     "src/bindings/RemoteConfig.ts"
   ],

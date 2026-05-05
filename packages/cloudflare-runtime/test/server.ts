@@ -30,17 +30,39 @@ const program = Effect.gen(function* () {
     name: "test",
     compatibilityDate: "2026-03-10",
     compatibilityFlags: [],
-    bindings: [],
+    bindings: [
+      {
+        name: "HYPERDRIVE",
+        type: "hyperdrive",
+        id: "test",
+      },
+    ],
     modules: [
       {
         name: "test.js",
         type: "ESModule",
-        content: "export default { fetch: () => new Response('Hello, world!') };",
+        content: `export default { fetch: async (request, env) => {
+          console.log(env);
+          const socket = await env.HYPERDRIVE.connect();
+          console.log(socket);
+          return new Response('Hello, world!');
+      } }`,
       },
     ],
+    hyperdrives: {
+      test: {
+        scheme: "postgresql",
+        host: "localhost",
+        port: 5432,
+        user: "postgres",
+        password: "postgres",
+        database: "test",
+        sslmode: "disable",
+      },
+    },
   });
   console.log(result);
-  const response = yield* http.get(new URL("/cdn-cgi/handler/queue", result.address));
+  const response = yield* http.get(new URL("/", result.address));
   console.log({
     status: response.status,
     body: yield* response.text,

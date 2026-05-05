@@ -33,6 +33,7 @@ export interface HyperdriveOrigin {
   user: string;
   password: string;
   database: string;
+  sslmode?: string;
 }
 
 type WorkerMetadata = workers.PutScriptRequest["metadata"];

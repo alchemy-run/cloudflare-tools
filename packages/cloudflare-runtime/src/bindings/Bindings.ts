@@ -5,6 +5,8 @@ import * as Fiber from "effect/Fiber";
 import { absurd } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import type { HttpBodyError } from "effect/unstable/http/HttpBody";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -14,9 +16,9 @@ import type * as Plugin from "../Plugin.ts";
 import type * as Worker from "../Worker.ts";
 import * as Config from "../workerd/Config.ts";
 import * as WorkerModule from "../WorkerModule.ts";
-import type * as Access from "./Access.ts";
-import type { OutboundConfig, RemoteBinding, SessionOptions } from "./RemoteConfig.ts";
+import type { RemoteBinding, SessionOptions } from "./RemoteConfig.ts";
 import * as RemoteSession from "./RemoteSession.ts";
+import * as Tail from "./Tail.ts";
 
 export class UnsupportedBindingError extends Schema.TaggedErrorClass<UnsupportedBindingError>()(
   "UnsupportedBindingError",
@@ -37,10 +39,12 @@ export const layer = Layer.effect(
     const remoteSession = yield* RemoteSession.RemoteSession;
     const prewarms = new Map<
       string,
-      Fiber.Fiber<OutboundConfig, RemoteSession.SessionError | Access.AccessError>
+      Fiber.Fiber<HttpServerResponse.HttpServerResponse, HttpBodyError>
     >();
 
     const address = httpServer.address as HttpServer.TcpAddress;
+    const tail = yield* Tail.Tail;
+    const scope = yield* Effect.scope;
 
     const createSession = Effect.fn(
       function* (options: SessionOptions) {
@@ -49,13 +53,25 @@ export const layer = Layer.effect(
           prewarms.delete(options.name);
           return yield* Fiber.join(fiber);
         }
+        yield* Effect.logInfo("[remote-session] creating session", options);
         const session = yield* remoteSession.create(options);
+        console.log("[remote-session] session created", session);
+        yield* tail
+          .connect(session.tailUrl)
+          .pipe(Scope.provide(scope), Effect.forkDetach({ startImmediately: true }));
+        console.log("[remote-session] tail connected");
         return session;
       },
       (effect) =>
         effect.pipe(
           Effect.exit,
           Effect.flatMap((exit) => {
+            console.log(
+              "[remote-session] session created",
+              exit._tag === "Success"
+                ? { success: exit.value }
+                : { failure: Cause.pretty(exit.cause) },
+            );
             return exit._tag === "Success"
               ? HttpServerResponse.json({ success: true, session: exit.value })
               : HttpServerResponse.json(
@@ -125,19 +141,22 @@ export const layer = Layer.effect(
     return Bindings.of({
       name: "bindings",
       make: Effect.fn(function* (worker) {
-        const { workerBindings, remoteBindings } = yield* buildBindings(worker.bindings);
+        const { workerBindings, remoteBindings, extensions } = yield* buildBindings(
+          worker.bindings,
+        );
         let services: Array<Config.Service> | undefined;
         if (remoteBindings.length > 0) {
           const options = {
             name: worker.name,
             bindings: remoteBindings,
           };
-          prewarms.set(worker.name, yield* Effect.forkDetach(remoteSession.create(options)));
+          prewarms.set(worker.name, yield* Effect.forkDetach(createSession(options)));
           services = makeServices(options);
         }
         return {
           bindings: workerBindings,
           services,
+          extensions,
         };
       }),
     });
@@ -146,6 +165,7 @@ export const layer = Layer.effect(
 
 const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Binding>) {
   const remoteBindings: Array<RemoteBinding> = [];
+  const extensions = new Map<string, Config.Extension>();
   const workerBindings = yield* Effect.forEach(
     bindings,
     Effect.fn(function* (binding): Effect.fn.Return<
@@ -237,17 +257,25 @@ const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Bindin
           //   type: "hyperdrive",
           //   id: binding.id,
           // });
+          remoteBindings.push({
+            name: binding.name,
+            type: "hyperdrive",
+            id: binding.id,
+          });
           // return {
           //   name: binding.name,
           //   hyperdrive: {
           //     designator: makeRemoteBindingServiceDesignator(binding.name),
-          //     database: "",
-          //     user: "",
-          //     password: "",
-          //     scheme: "",
+          //     database: "9fabb398dc12413ab0323d5992c85097",
+          //     user: "6e94ce098c22487db6af657ce5e345ec",
+          //     password: "4c1e437b7d6fde011d6f00362033d43d",
+          //     scheme: "postgresql",
           //   },
           // };
-          return yield* makeUnsupportedBindingError(binding);
+          return {
+            name: binding.name,
+            service: makeRemoteBindingServiceDesignator(binding.name),
+          };
         }
         case "images": {
           remoteBindings.push({
@@ -398,6 +426,7 @@ const buildBindings = Effect.fn(function* (bindings: ReadonlyArray<Worker.Bindin
   );
   return {
     remoteBindings,
+    extensions: Array.from(extensions.values()),
     workerBindings: workerBindings.filter((b) => b !== undefined),
   };
 });

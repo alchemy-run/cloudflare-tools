@@ -106,7 +106,7 @@ export const make = Effect.fn(function* (accountId: string) {
 
   return RemoteSession.of({
     create: Effect.fn(function* (options) {
-      const [{ previewToken }, { url, headers }] = yield* Effect.all(
+      const [{ previewToken, tailUrl }, { url, headers }] = yield* Effect.all(
         [
           createPreviewUploadToken().pipe(
             Effect.flatMap((cfPreviewUploadConfigToken) =>
@@ -127,6 +127,7 @@ export const make = Effect.fn(function* (accountId: string) {
       );
       return {
         url,
+        tailUrl,
         headers: { ...headers, "cf-workers-preview-token": previewToken },
       };
     }),

@@ -7,6 +7,7 @@ export interface SessionOptions {
 
 export interface OutboundConfig {
   readonly url: string;
+  readonly tailUrl: string;
   readonly headers: Record<string, string>;
 }
 

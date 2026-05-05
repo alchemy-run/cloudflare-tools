@@ -35,6 +35,7 @@
     "./bindings/Bindings": "./dist/bindings/Bindings.mjs",
     "./bindings/RemoteConfig": "./dist/bindings/RemoteConfig.mjs",
     "./bindings/RemoteSession": "./dist/bindings/RemoteSession.mjs",
+    "./bindings/Tail": "./dist/bindings/Tail.mjs",
     "./entry/Entry": "./dist/entry/Entry.mjs",
     "./Plugin": "./dist/Plugin.mjs",
     "./proxy": "./dist/proxy/index.mjs",

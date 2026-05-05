@@ -56,6 +56,31 @@ function getExposedJSRPCBinding(request: Request, env: Env) {
     };
   }
 
+  if (targetBinding.constructor.name === "Hyperdrive") {
+    const binding = targetBinding as Hyperdrive;
+    return {
+      async hyperdriveInfo() {
+        return {
+          connectionString: binding.connectionString,
+          database: binding.database,
+          user: binding.user,
+          password: binding.password,
+          host: binding.host,
+          port: binding.port,
+        };
+      },
+      async hyperdriveConnect() {
+        const socket = binding.connect();
+        return {
+          readable: socket.readable,
+          writable: socket.writable,
+          secureTransport: socket.secureTransport,
+          close: () => socket.close(),
+        };
+      },
+    };
+  }
+
   if (url.searchParams.has("MF-Dispatch-Namespace-Options")) {
     const { name, args, options } = JSON.parse(
       url.searchParams.get("MF-Dispatch-Namespace-Options")!,

@@ -1,9 +1,17 @@
-import type { HyperdriveOrigin } from "../../Worker.ts";
-
 // For some reason, this only works as a dynamic import; otherwise the module is not found.
 const { connect } = await import("cloudflare:sockets");
 
-export default function makeBinding(env: { ORIGIN: HyperdriveOrigin }) {
+export default function makeBinding(env: {
+  ORIGIN: {
+    scheme: string;
+    user: string;
+    password: string;
+    host: string;
+    port: number;
+    database: string;
+    sslmode?: string;
+  };
+}) {
   let connectionString = `${env.ORIGIN.scheme}://${env.ORIGIN.user}:${env.ORIGIN.password}@${env.ORIGIN.host}:${env.ORIGIN.port}/${env.ORIGIN.database}`;
   if (env.ORIGIN.sslmode) {
     connectionString += `?${env.ORIGIN.scheme === "postgresql" ? "sslmode" : "ssl-mode"}=${env.ORIGIN.sslmode}`;

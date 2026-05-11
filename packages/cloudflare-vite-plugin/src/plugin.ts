@@ -25,5 +25,12 @@ export default function cloudflareVitePlugin(
     virtualModulesPlugin.vite(options),
     wasmInitPlugin.vite(options),
     additionalModulesPlugin.vite(options),
+    {
+      name: "distilled-cloudflare:rsc",
+      enforce: "pre",
+      config() {
+        return { rsc: { serverHandler: false } } as vite.UserConfig;
+      },
+    },
   ];
 }

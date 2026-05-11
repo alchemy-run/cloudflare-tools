@@ -7,6 +7,8 @@ import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
 const DEFAULT_CONDITIONS = ["workerd", "worker", "module", "browser"];
 
+const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "jsnext:main", "jsnext"];
+
 const DEFAULT_RESOLVE_EXTENSIONS = [
   ".mjs",
   ".js",
@@ -30,6 +32,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
       options.platform ??= "neutral";
       options.resolve ??= {};
       options.resolve.conditionNames ??= [...DEFAULT_CONDITIONS, "production"];
+      options.resolve.mainFields ??= DEFAULT_RESOLVE_MAIN_FIELDS;
       options.resolve.extensions ??= DEFAULT_RESOLVE_EXTENSIONS;
       options.transform ??= {};
       options.transform.target ??= TARGET;
@@ -79,6 +82,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                       ...rollupOptions,
                       platform: "neutral",
                       resolve: {
+                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
                         extensions: DEFAULT_RESOLVE_EXTENSIONS,
                       },
                     },
@@ -94,6 +98,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                       platform: "neutral",
                       resolve: {
                         conditionNames: [...DEFAULT_CONDITIONS, "development|production"],
+                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
                         extensions: DEFAULT_RESOLVE_EXTENSIONS,
                       },
                       transform: {
@@ -107,6 +112,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                       platform: "neutral",
                       conditions: [...DEFAULT_CONDITIONS, "development|production"],
                       resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
+                      mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
                       target: TARGET,
                       define,
                     },

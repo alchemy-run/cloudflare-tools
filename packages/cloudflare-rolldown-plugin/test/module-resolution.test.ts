@@ -28,6 +28,16 @@ describe("module resolution", async () => {
     });
   });
 
+  it("resolves packages that rely on mainFields when no exports map is present", async () => {
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
+      compatibilityDate: "2025-07-01",
+    });
+
+    expect(await miniflare.fetchJson<{ legacyMessage: string }>("/package-main-fields")).toEqual({
+      legacyMessage: "browser field",
+    });
+  });
+
   it("supports explicit and extensionless resolution for js and cjs modules", async () => {
     await using miniflare = await createMiniflareFromRolldown(built.output, {
       compatibilityDate: "2025-07-01",

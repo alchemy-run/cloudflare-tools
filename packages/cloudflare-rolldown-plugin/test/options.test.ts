@@ -19,6 +19,7 @@ describe("options plugin", () => {
       "browser",
       "production",
     ]);
+    expect(output.resolve?.mainFields).toEqual(["browser", "module", "jsnext:main", "jsnext"]);
     expect(output.resolve?.extensions).toEqual([
       ".mjs",
       ".js",

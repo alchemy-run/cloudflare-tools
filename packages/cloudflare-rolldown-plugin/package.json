@@ -39,6 +39,10 @@
     "./plugins": {
       "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins/index.js"
+    },
+    "./options": {
+      "types": "./dist/options.d.ts",
+      "import": "./dist/options.js"
     }
   },
   "publishConfig": {

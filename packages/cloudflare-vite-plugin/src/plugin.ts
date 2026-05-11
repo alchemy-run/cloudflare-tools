@@ -1,3 +1,4 @@
+import type { CloudflarePluginOptions } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import {
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
@@ -10,13 +11,10 @@ import {
 } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import type * as vite from "vite";
 
-export interface PluginOptions {
-  compatibilityDate?: string;
-  compatibilityFlags?: Array<string>;
-}
+export type { CloudflarePluginOptions };
 
 export default function cloudflareVitePlugin(
-  options: PluginOptions = {},
+  options: CloudflarePluginOptions = {},
 ): Array<vite.Plugin | null> {
   return [
     optionsPlugin.vite(options),

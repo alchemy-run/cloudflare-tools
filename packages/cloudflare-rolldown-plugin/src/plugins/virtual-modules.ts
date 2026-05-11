@@ -23,9 +23,6 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
     ].join("\n");
   };
   return {
-    vite: {
-      enforce: "pre",
-    },
     shared: {
       buildStart({ plugins }) {
         unenvApi = plugins.find(
@@ -36,14 +33,6 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
       resolveId: {
         filter: { id: VIRTUAL_MODULE_REGEXP },
         handler(id) {
-          // eslint-disable-next-line no-console
-          console.log("resolveId", id, {
-            startsWithWorker: id.startsWith(WORKER_ENTRY_PREFIX),
-            startsWithPear: id.startsWith(PEAR_ENTRY_PREFIX),
-            startsWithInject: id.startsWith(INJECT_PREFIX),
-            startsWithUser: id.startsWith(USER_ENTRY_PREFIX),
-            isExportTypes: id === EXPORT_TYPES_ID,
-          });
           if (
             id.startsWith(WORKER_ENTRY_PREFIX) ||
             id.startsWith(PEAR_ENTRY_PREFIX) ||
@@ -64,17 +53,17 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
         filter: { id: VIRTUAL_MODULE_REGEXP },
         async handler(id) {
           if (id.startsWith(WORKER_ENTRY_PREFIX)) {
-            const userEntry = id.replace(
-              WORKER_ENTRY_PREFIX,
-              options.compatibilityFlags?.includes("pear") ? PEAR_ENTRY_PREFIX : USER_ENTRY_PREFIX,
-            );
-            // eslint-disable-next-line no-console
-            console.log("the worker entry is importing", userEntry);
+            const userEntryId = id.replace(WORKER_ENTRY_PREFIX, USER_ENTRY_PREFIX);
+            const userEntry = options.exports
+              ? `export { ${options.exports.join(", ")} } from "${userEntryId}";`
+              : `
+import * as userEntry from "${userEntryId}";
+export * from "${userEntryId}";
+export default userEntry.default ?? {};`;
             return `
 ${inject()}
 import { getExportTypes } from "${EXPORT_TYPES_ID}";
-import * as userEntry from "${userEntry}";
-export default userEntry.default ?? {};
+${userEntry}
 if (import.meta.hot) {
   import.meta.hot.accept((module) => {
     const exportTypes = getExportTypes(module);
@@ -127,17 +116,6 @@ export function getExportTypes(module) {
 
   return exportTypes;
 }`;
-          }
-          if (id.startsWith(PEAR_ENTRY_PREFIX)) {
-            // eslint-disable-next-line no-console
-            console.log("PEAR from 228???");
-            const resolvedId = id.replace(PEAR_ENTRY_PREFIX, USER_ENTRY_PREFIX);
-            // eslint-disable-next-line no-console
-            console.log("the pear entry is importing", resolvedId);
-            return `
-import userEntry from "${resolvedId}";
-export default userEntry;
-`;
           }
           if (id.startsWith(INJECT_PREFIX)) {
             const injectedName = id.slice(INJECT_PREFIX.length);

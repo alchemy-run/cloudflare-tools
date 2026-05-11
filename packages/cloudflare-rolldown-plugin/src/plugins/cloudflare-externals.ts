@@ -1,6 +1,6 @@
 import { createPlugin } from "../factory.js";
 
-const CLOUDFLARE_BUILTIN_MODULES = [
+const CLOUDFLARE_BUILT_IN_MODULES = [
   "cloudflare:email",
   "cloudflare:node",
   "cloudflare:sockets",
@@ -14,7 +14,7 @@ export const cloudflareExternalsPlugin = createPlugin("cloudflare-externals", ()
       resolveId: {
         filter: { id: /^cloudflare:/ },
         handler(id) {
-          if (!CLOUDFLARE_BUILTIN_MODULES.includes(id)) {
+          if (!CLOUDFLARE_BUILT_IN_MODULES.includes(id)) {
             return;
           }
 
@@ -30,10 +30,10 @@ export const cloudflareExternalsPlugin = createPlugin("cloudflare-externals", ()
         if (name === "client") return;
         return {
           resolve: {
-            builtins: CLOUDFLARE_BUILTIN_MODULES,
+            builtins: CLOUDFLARE_BUILT_IN_MODULES,
           },
           optimizeDeps: {
-            exclude: CLOUDFLARE_BUILTIN_MODULES,
+            exclude: CLOUDFLARE_BUILT_IN_MODULES,
           },
         };
       },

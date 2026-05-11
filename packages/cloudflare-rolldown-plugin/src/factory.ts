@@ -1,6 +1,6 @@
 import type * as rolldown from "rolldown";
 import type * as vite from "vite";
-import type { CloudflarePluginOptions } from "./plugin.js";
+import type { CloudflarePluginOptions } from "./options.js";
 
 export interface PluginInput<A = any> {
   shared?: Omit<rolldown.Plugin<A>, "name">;

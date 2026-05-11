@@ -1,4 +1,5 @@
-import type { Plugin } from "rolldown";
+import type * as rolldown from "rolldown";
+import type { CloudflarePluginOptions } from "./options.js";
 import {
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
@@ -10,12 +11,7 @@ import {
   wasmInitPlugin,
 } from "./plugins/index.js";
 
-export interface CloudflarePluginOptions {
-  compatibilityDate?: string;
-  compatibilityFlags?: Array<string>;
-}
-
-export type CloudflarePlugin = (options?: CloudflarePluginOptions) => Array<Plugin | null>;
+export type CloudflarePlugin = (options?: CloudflarePluginOptions) => Array<rolldown.Plugin | null>;
 
 const cloudflare: CloudflarePlugin = (options = {}) => {
   return [

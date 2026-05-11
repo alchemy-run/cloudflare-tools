@@ -4,7 +4,7 @@ import { hasNodejsCompat } from "../utils.js";
 
 const DEFAULT_RESOLVE_CONDITION_NAMES = ["workerd", "worker", "module", "browser", "production"];
 
-const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "main"];
+const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "jsnext:main", "jsnext"];
 
 const DEFAULT_RESOLVE_EXTENSIONS = [
   ".mjs",

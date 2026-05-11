@@ -70,5 +70,10 @@
   },
   "peerDependencies": {
     "rolldown": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "rolldown": {
+      "optional": true
+    }
   }
 }

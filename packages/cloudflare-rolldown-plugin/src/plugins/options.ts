@@ -1,3 +1,4 @@
+import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
 import type { CloudflarePluginOptions } from "../options.js";
@@ -38,13 +39,16 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
     },
   },
   vite: {
-    config(options) {
+    config(userConfig) {
       const isRolldown = "rolldownVersion" in this.meta;
       const rollupOptions: vite.Rollup.RollupOptions = {
-        input: wrapEntryInput(options.environments?.ssr?.build?.rollupOptions?.input ?? {}),
+        input: wrapEntryInput(userConfig.environments?.ssr?.build?.rollupOptions?.input ?? {}),
         preserveEntrySignatures: "strict",
       };
-      const define = getDefine(pluginOptions, process.env.NODE_ENV || options.mode || "production");
+      const define = getDefine(
+        pluginOptions,
+        process.env.NODE_ENV || userConfig.mode || "production",
+      );
       return {
         ssr: {
           noExternal: true,
@@ -53,6 +57,11 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
           },
         },
         environments: {
+          client: {
+            build: {
+              outDir: getOutputDirectory(userConfig, "client"),
+            },
+          },
           ssr: {
             resolve: {
               noExternal: true,
@@ -63,6 +72,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
               target: TARGET,
               emitAssets: true,
               copyPublicDir: false,
+              outDir: getOutputDirectory(userConfig, "ssr"),
               ...(isRolldown
                 ? {
                     rolldownOptions: {
@@ -142,4 +152,13 @@ function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<st
         }
       : {}),
   };
+}
+
+function getOutputDirectory(userConfig: vite.UserConfig, environmentName: string) {
+  const rootOutputDirectory = userConfig.build?.outDir ?? "dist";
+
+  return (
+    userConfig.environments?.[environmentName]?.build?.outDir ??
+    path.join(rootOutputDirectory, environmentName)
+  );
 }

@@ -1,4 +1,4 @@
-import type { Plugin } from "rolldown";
+import { createPlugin } from "../factory.js";
 
 const CLOUDFLARE_BUILTIN_MODULES = [
   "cloudflare:email",
@@ -8,19 +8,35 @@ const CLOUDFLARE_BUILTIN_MODULES = [
   "cloudflare:workflows",
 ];
 
-export const cloudflareExternalsPlugin: Plugin = {
-  name: "rolldown-plugin-cloudflare:cloudflare-externals",
-  resolveId: {
-    filter: { id: /^cloudflare:/ },
-    handler(id) {
-      if (!CLOUDFLARE_BUILTIN_MODULES.includes(id)) {
-        return;
-      }
+export const cloudflareExternalsPlugin = createPlugin("cloudflare-externals", () => {
+  return {
+    rolldown: {
+      resolveId: {
+        filter: { id: /^cloudflare:/ },
+        handler(id) {
+          if (!CLOUDFLARE_BUILTIN_MODULES.includes(id)) {
+            return;
+          }
 
-      return {
-        id,
-        external: true,
-      };
+          return {
+            id,
+            external: true,
+          };
+        },
+      },
     },
-  },
-};
+    vite: {
+      configEnvironment(name) {
+        if (name === "client") return;
+        return {
+          resolve: {
+            builtins: CLOUDFLARE_BUILTIN_MODULES,
+          },
+          optimizeDeps: {
+            exclude: CLOUDFLARE_BUILTIN_MODULES,
+          },
+        };
+      },
+    },
+  };
+});

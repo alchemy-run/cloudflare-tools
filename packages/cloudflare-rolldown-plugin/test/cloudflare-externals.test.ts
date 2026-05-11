@@ -7,7 +7,9 @@ import { buildFixture } from "./utils/build-fixture";
 describe("cloudflare externals", () => {
   it("marks supported cloudflare:* builtins as external", () => {
     const resolved = (
-      cloudflareExternalsPlugin.resolveId as { handler: (id: string) => ResolveIdResult }
+      cloudflareExternalsPlugin.rolldown({}).resolveId as {
+        handler: (id: string) => ResolveIdResult;
+      }
     ).handler("cloudflare:workers");
 
     expect(resolved).toEqual({
@@ -18,9 +20,11 @@ describe("cloudflare externals", () => {
 
   it("ignores unknown cloudflare:* imports", () => {
     expect(
-      (cloudflareExternalsPlugin.resolveId as { handler: (id: string) => ResolveIdResult }).handler(
-        "cloudflare:unknown",
-      ),
+      (
+        cloudflareExternalsPlugin.rolldown({}).resolveId as {
+          handler: (id: string) => ResolveIdResult;
+        }
+      ).handler("cloudflare:unknown"),
     ).toBeUndefined();
   });
 

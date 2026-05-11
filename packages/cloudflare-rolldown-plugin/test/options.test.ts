@@ -1,12 +1,15 @@
 import type { MinimalPluginContext } from "rolldown";
-import { describe, expect, it } from "vitest";
-import { makeOptionsPlugin } from "../src/plugins/options.js";
+import { assert, describe, expect, it } from "vitest";
+import { optionsPlugin } from "../src/plugins/options.js";
 
 describe("options plugin", () => {
   it("applies the Cloudflare defaults", () => {
-    const plugin = makeOptionsPlugin({});
+    const plugin = optionsPlugin.rolldown({});
     const input = {};
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
     const output = plugin.options.call({} as MinimalPluginContext, input);
+    assert(output, "output is not defined");
+    assert(!(output instanceof Promise), "output is a promise");
 
     expect(output.platform).toBe("neutral");
     expect(output.resolve?.conditionNames).toEqual([
@@ -32,9 +35,12 @@ describe("options plugin", () => {
   });
 
   it("defines production node env values and stubs process.env without nodejs_compat", () => {
-    const plugin = makeOptionsPlugin({});
+    const plugin = optionsPlugin.rolldown({});
     const input = {};
-    const output = plugin.options.call({} as MinimalPluginContext, input);
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
+    const output = plugin.options!.call({} as MinimalPluginContext, input);
+    assert(output, "output is not defined");
+    assert(!(output instanceof Promise), "output is a promise");
 
     expect(output.transform?.define).toMatchObject({
       "process.env.NODE_ENV": '"production"',
@@ -47,11 +53,14 @@ describe("options plugin", () => {
   });
 
   it("does not stub process.env with nodejs_compat enabled", () => {
-    const plugin = makeOptionsPlugin({
+    const plugin = optionsPlugin.rolldown({
       compatibilityFlags: ["nodejs_compat"],
     });
     const input = {};
-    const output = plugin.options.call({} as MinimalPluginContext, input);
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
+    const output = plugin.options!.call({} as MinimalPluginContext, input);
+    assert(output, "output is not defined");
+    assert(!(output instanceof Promise), "output is a promise");
 
     expect(output.transform?.define).toMatchObject({
       "process.env.NODE_ENV": '"production"',
@@ -64,15 +73,26 @@ describe("options plugin", () => {
   });
 
   it("defines navigator.userAgent only when the compatibility date supports it", () => {
-    const withNavigator = makeOptionsPlugin({
+    const withNavigator = optionsPlugin.rolldown({
       compatibilityDate: "2022-03-21",
     });
-    const withoutNavigator = makeOptionsPlugin({
+    const withoutNavigator = optionsPlugin.rolldown({
       compatibilityDate: "2022-03-20",
     });
 
-    const withNavigatorOutput = withNavigator.options.call({} as MinimalPluginContext, {});
+    assert(typeof withNavigator.options === "function", "withNavigator.options is not a function");
+    assert(
+      typeof withoutNavigator.options === "function",
+      "withoutNavigator.options is not a function",
+    );
+
+    const withNavigatorOutput = withNavigator.options!.call({} as MinimalPluginContext, {});
     const withoutNavigatorOutput = withoutNavigator.options.call({} as MinimalPluginContext, {});
+
+    assert(withNavigatorOutput, "withNavigatorOutput is not defined");
+    assert(!(withNavigatorOutput instanceof Promise), "withNavigatorOutput is a promise");
+    assert(withoutNavigatorOutput, "withoutNavigatorOutput is not defined");
+    assert(!(withoutNavigatorOutput instanceof Promise), "withoutNavigatorOutput is a promise");
 
     expect(withNavigatorOutput.transform?.define?.["navigator.userAgent"]).toBe(
       '"Cloudflare-Workers"',

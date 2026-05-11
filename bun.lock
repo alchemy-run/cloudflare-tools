@@ -91,11 +91,13 @@
       "version": "0.3.0",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
+        "magic-string": "^0.30.21",
         "unenv": "^2.0.0-rc.24",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:workers",
         "@distilled.cloud/test-utils": "workspace:*",
+        "vite": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -104,7 +106,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.2.0",
+      "version": "0.3.1",
       "dependencies": {
         "capnp-es": "^0.0.14",
         "workerd": "catalog:workers",

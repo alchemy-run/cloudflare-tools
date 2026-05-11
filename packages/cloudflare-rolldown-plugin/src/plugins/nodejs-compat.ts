@@ -2,181 +2,231 @@ import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-p
 import assert from "node:assert";
 import { createRequire } from "node:module";
 import path from "node:path";
-import type { Plugin } from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
-import type { CloudflarePluginOptions } from "../plugin.js";
+import { createPlugin } from "../factory.js";
 import { hasNodejsAls, hasNodejsCompat } from "../utils.js";
 
+const ASYNC_HOOKS_REGEXP = /^(node:)?async_hooks$/;
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(`^(${nonPrefixedNodeModules.join("|")}|node:.+)$`);
-const VIRTUAL_MODULE_ID_REGEXP = /^virtual:nodejs-global-inject\/.+$/;
 
-export function makeNodejsCompatPlugin(options: CloudflarePluginOptions): Plugin | Array<Plugin> {
-  if (hasNodejsCompat(options.compatibilityFlags)) {
-    return makeUnenvPlugin(options);
-  }
-  if (hasNodejsAls(options.compatibilityFlags)) {
-    return makeNodeJsAlsPlugin();
-  }
-  return makeNodeJsImportWarningPlugin();
-}
-
-function makeUnenvPlugin(options: CloudflarePluginOptions): Array<Plugin> {
-  const { alias, inject, external, polyfill } = defineEnv({
-    presets: [
-      getCloudflarePreset({
-        compatibilityDate: options.compatibilityDate,
-        compatibilityFlags: options.compatibilityFlags,
-      }),
-    ],
-  }).env;
-
-  const injectVirtualModules = makeInjectVirtualModules(inject);
-  const require = createRequire(import.meta.url);
-
-  return [
-    esmExternalRequirePlugin({
-      external: [...external],
-      skipDuplicateCheck: true,
-    }),
-    {
-      name: "rolldown-plugin-cloudflare:nodejs-compat:injects",
-      resolveId: {
-        filter: { id: VIRTUAL_MODULE_ID_REGEXP },
-        handler(id) {
-          if (injectVirtualModules.has(id)) {
-            return { id };
-          }
-        },
-      },
-      load: {
-        filter: { id: VIRTUAL_MODULE_ID_REGEXP },
-        handler(id) {
-          return injectVirtualModules.get(id);
-        },
-      },
-    },
-    {
-      name: "rolldown-plugin-cloudflare:nodejs-compat:unenv-preset-imports",
-      resolveId: {
-        filter: { id: /^@cloudflare\/unenv-preset\// },
-        async handler(id, importer, options) {
-          const resolved = await this.resolve(id, importer, options);
-          if (resolved) return resolved;
-          return { id: require.resolve(id) };
-        },
-      },
-    },
-    {
-      name: "rolldown-plugin-cloudflare:nodejs-compat",
-      resolveId: {
-        filter: { id: NODE_BUILTIN_MODULES_REGEXP },
-        handler(source, importer, options) {
-          const aliased = alias[source];
-          if (!aliased) {
-            return;
-          }
-          if (external.includes(aliased)) {
-            return {
-              id: aliased,
-              external: true,
-            };
-          }
-          return this.resolve(aliased, importer, options);
-        },
-      },
-      transform(code, id) {
-        const info = this.getModuleInfo(id);
-        if (!info?.isEntry) {
-          return;
-        }
-        return [
-          ...polyfill.map((module) => `import "${module}";`),
-          ...Array.from(injectVirtualModules.keys()).map((module) => `import "${module}";`),
-          code,
-        ].join("\n");
-      },
-    } satisfies Plugin,
-  ];
-}
-
-function makeNodeJsAlsPlugin(): Plugin {
+export const nodejsAlsPlugin = createPlugin("nodejs-als", (options) => {
+  if (!hasNodejsAls(options.compatibilityFlags)) return;
   return {
-    name: "rolldown-plugin-cloudflare:nodejs-als",
-    resolveId: {
-      filter: { id: /^(node:)?async_hooks$/ },
-      handler(id) {
-        return { id, external: true };
+    rolldown: {
+      resolveId: {
+        filter: { id: ASYNC_HOOKS_REGEXP },
+        handler(id) {
+          return { id, external: true };
+        },
+      },
+    },
+    vite: {
+      configEnvironment(name) {
+        if (name === "client") return;
+        return {
+          resolve: {
+            builtins: ["async_hooks", "node:async_hooks"],
+          },
+          optimizeDeps: {
+            exclude: ["async_hooks", "node:async_hooks"],
+          },
+        };
       },
     },
   };
+});
+
+export interface UnenvApi {
+  polyfill: ReadonlyArray<string>;
+  inject: { [injectedName: string]: string };
 }
 
-function makeNodeJsImportWarningPlugin(): Plugin {
+export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
+  "nodejs-unenv",
+  (options) => {
+    if (!hasNodejsCompat(options.compatibilityFlags)) return;
+    const { alias, inject, external, polyfill } = defineEnv({
+      presets: [
+        getCloudflarePreset({
+          compatibilityDate: options.compatibilityDate,
+          compatibilityFlags: options.compatibilityFlags,
+        }),
+      ],
+    }).env;
+    const entries = new Set(Object.values(alias));
+    for (const globalInject of Object.values(inject)) {
+      if (typeof globalInject === "string") {
+        entries.add(globalInject);
+      } else {
+        entries.add(globalInject[0]);
+      }
+    }
+    polyfill.forEach((module) => entries.add(module));
+    external.forEach((module) => entries.delete(module));
+    const require = createRequire(import.meta.url);
+    const resolve = (id: string) => {
+      if (alias[id] && !external.includes(alias[id])) {
+        return require.resolve(alias[id]);
+      }
+      if (entries.has(id)) {
+        return require.resolve(id);
+      }
+    };
+    const RESOLVE_ID_FILTER = {
+      id: [NODE_BUILTIN_MODULES_REGEXP, /^unenv\//, /^@cloudflare\/unenv-preset\//],
+    };
+    return {
+      shared: {
+        api: {
+          polyfill,
+          inject: Object.fromEntries(
+            Object.entries(inject).map(([injectedName, moduleSpecifier]) => {
+              assert(
+                typeof moduleSpecifier === "string",
+                `expected moduleSpecifier to be a string`,
+              );
+              return [injectedName, moduleSpecifier];
+            }),
+          ),
+        },
+      },
+      rolldown: {
+        async options(options) {
+          options.plugins = [
+            esmExternalRequirePlugin({
+              external: [...external],
+              skipDuplicateCheck: true,
+            }),
+            options.plugins,
+          ];
+          return options;
+        },
+        resolveId: {
+          filter: RESOLVE_ID_FILTER,
+          handler(source, importer, options) {
+            const resolved = resolve(source);
+            if (!resolved) return;
+            return this.resolve(resolved, importer, options);
+          },
+        },
+      },
+      vite: {
+        enforce: "pre",
+        async configEnvironment(name) {
+          if (name === "client") return;
+          return {
+            resolve: {
+              builtins: [...external],
+            },
+            ...(this.meta.rolldownVersion
+              ? {
+                  build: {
+                    rolldownOptions: {
+                      plugins: [
+                        esmExternalRequirePlugin({
+                          external: [...external],
+                          skipDuplicateCheck: true,
+                        }),
+                      ],
+                    },
+                  },
+                }
+              : {}),
+          };
+        },
+        async configureServer(server) {
+          await Promise.all(
+            Object.values(server.environments).flatMap(async (environment) => {
+              const depsOptimizer = environment.depsOptimizer;
+              if (!depsOptimizer) return;
+              await depsOptimizer.init();
+              return Array.from(entries).map((entry) => {
+                const resolved = resolve(entry);
+                if (!resolved) return;
+                const registration = depsOptimizer.registerMissingImport(entry, resolved);
+                return registration?.processing;
+              });
+            }),
+          );
+        },
+        resolveId: {
+          filter: RESOLVE_ID_FILTER,
+          handler(source, importer, options) {
+            const resolved = resolve(source);
+            if (!resolved) return;
+            if (this.environment.mode === "dev" && this.environment.depsOptimizer) {
+              // We are in dev mode (rather than build).
+              // So let's pre-bundle this polyfill entry-point using the dependency optimizer.
+              const { id } = this.environment.depsOptimizer.registerMissingImport(source, resolved);
+              // We use the unresolved path to the polyfill and let the dependency optimizer's
+              // resolver find the resolved path to the bundled version.
+              return this.resolve(id, importer, options);
+            }
+            return this.resolve(resolved, importer, options);
+          },
+        },
+      },
+    };
+  },
+);
+
+export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (options) => {
+  if (hasNodejsCompat(options.compatibilityFlags)) return;
   const imports = new Map<string, Set<string>>();
   let root = process.cwd();
   return {
-    name: "rolldown-plugin-cloudflare:nodejs-import-warnings",
-    options(options) {
-      if (options.cwd) {
-        root = options.cwd;
-      }
-    },
-    resolveId: {
-      filter: { id: NODE_BUILTIN_MODULES_REGEXP },
-      async handler(id, importer) {
-        if (importer) {
-          if (!imports.has(id)) {
-            imports.set(id, new Set());
-          }
-          imports.get(id)?.add(importer);
+    rolldown: {
+      options(options) {
+        if (options.cwd) {
+          root = options.cwd;
         }
-        return { id, external: true };
       },
     },
-    buildStart() {
-      imports.clear();
+    vite: {
+      enforce: "pre",
+      configResolved(config) {
+        root = config.root;
+      },
     },
-    buildEnd() {
-      const filteredImports: Array<{ id: string; importer: string }> = [];
-      for (const [id, importers] of imports.entries()) {
-        for (const importer of importers) {
-          if (this.getModuleInfo(importer)) {
-            filteredImports.push({ id, importer });
+    shared: {
+      buildStart() {
+        imports.clear();
+      },
+      resolveId: {
+        filter: { id: NODE_BUILTIN_MODULES_REGEXP },
+        async handler(id, importer) {
+          if (hasNodejsAls(options.compatibilityFlags) && ASYNC_HOOKS_REGEXP.test(id)) return;
+          if (importer) {
+            if (!imports.has(id)) {
+              imports.set(id, new Set());
+            }
+            imports.get(id)?.add(importer);
+          }
+          return { id, external: true };
+        },
+      },
+      buildEnd() {
+        const filteredImports: Array<{ id: string; importer: string }> = [];
+        for (const [id, importers] of imports.entries()) {
+          for (const importer of importers) {
+            if (this.getModuleInfo(importer)) {
+              filteredImports.push({ id, importer });
+            }
           }
         }
-      }
-      if (filteredImports.length > 0) {
-        const message = [
-          "Unexpected Node.js imports. ",
-          'Do you need to enable the "nodejs_compat" compatibility flag? ',
-          "Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n",
-          ...filteredImports.map(
-            ({ id, importer }) => ` - "${id}" imported from "${path.relative(root, importer)}"\n`,
-          ),
-        ].join("");
-        this.warn(message);
-      }
+        if (filteredImports.length > 0) {
+          const message = [
+            "Unexpected Node.js imports. ",
+            'Do you need to enable the "nodejs_compat" compatibility flag? ',
+            "Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n",
+            ...filteredImports.map(
+              ({ id, importer }) => ` - "${id}" imported from "${path.relative(root, importer)}"\n`,
+            ),
+          ].join("");
+          this.warn(message);
+        }
+      },
     },
   };
-}
-
-function makeInjectVirtualModules(
-  inject: Readonly<Record<string, string | ReadonlyArray<string>>>,
-) {
-  const virtualModules = new Map<string, string>();
-  for (const [injectedName, moduleSpecifier] of Object.entries(inject)) {
-    // The type from unenv is string | string[], but the Cloudflare preset only uses string.
-    // This indicates a default export that we set on globalThis.
-    assert(typeof moduleSpecifier === "string", `expected moduleSpecifier to be a string`);
-    virtualModules.set(
-      injectVirtualModuleId(injectedName),
-      `import virtualModule from "${moduleSpecifier}"; globalThis.${injectedName} = virtualModule;`,
-    );
-  }
-  return virtualModules;
-}
-
-function injectVirtualModuleId(module: string) {
-  return `virtual:nodejs-global-inject/${module}` as const;
-}
+});

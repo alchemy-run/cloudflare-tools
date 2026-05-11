@@ -1,24 +1,32 @@
-import type { RolldownPluginOption } from "rolldown";
-import { makeAdditionalModulesPlugin } from "./plugins/additional-modules.js";
-import { cloudflareExternalsPlugin } from "./plugins/cloudflare-externals.js";
-import { makeNodejsCompatPlugin } from "./plugins/nodejs-compat.js";
-import { makeOptionsPlugin } from "./plugins/options.js";
-import { wasmInitPlugin } from "./plugins/wasm-init.js";
+import type { Plugin } from "rolldown";
+import {
+  additionalModulesPlugin,
+  cloudflareExternalsPlugin,
+  nodejsAlsPlugin,
+  nodejsImportWarningPlugin,
+  nodejsUnenvPlugin,
+  optionsPlugin,
+  virtualModulesPlugin,
+  wasmInitPlugin,
+} from "./plugins/index.js";
 
 export interface CloudflarePluginOptions {
   compatibilityDate?: string;
   compatibilityFlags?: Array<string>;
 }
 
-export type CloudflarePlugin = (options?: CloudflarePluginOptions) => RolldownPluginOption;
+export type CloudflarePlugin = (options?: CloudflarePluginOptions) => Array<Plugin | null>;
 
-const cloudflare: CloudflarePlugin = async (options = {}) => {
+const cloudflare: CloudflarePlugin = (options = {}) => {
   return [
-    makeOptionsPlugin(options),
-    cloudflareExternalsPlugin,
-    makeNodejsCompatPlugin(options),
-    wasmInitPlugin,
-    makeAdditionalModulesPlugin(),
+    optionsPlugin.rolldown(options),
+    cloudflareExternalsPlugin.rolldown(options),
+    nodejsAlsPlugin.rolldown(options),
+    nodejsImportWarningPlugin.rolldown(options),
+    nodejsUnenvPlugin.rolldown(options),
+    virtualModulesPlugin.rolldown(options),
+    wasmInitPlugin.rolldown(options),
+    additionalModulesPlugin.rolldown(options),
   ];
 };
 

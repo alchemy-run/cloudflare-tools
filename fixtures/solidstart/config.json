@@ -1,0 +1,256 @@
+{
+  "plugins": [
+    [
+      {
+        "name": "solid-start:config",
+        "enforce": "pre"
+      },
+      {
+        "name": "solid-start:manifest-plugin",
+        "enforce": "pre"
+      },
+      [
+        {
+          "name": "solid-start-fs-routes",
+          "enforce": "pre"
+        },
+        {
+          "name": "tree-shake",
+          "enforce": "pre"
+        },
+        {
+          "name": "fs-watcher"
+        }
+      ],
+      {
+        "name": "solid-lazy-css",
+        "enforce": "pre"
+      },
+      [
+        {
+          "name": "tanstack-start-directive-vite-plugin",
+          "enforce": "pre",
+          "transform": {
+            "filter": {
+              "code": {}
+            }
+          }
+        },
+        {
+          "name": "tanstack-start-server-fn-vite-plugin-manifest-server",
+          "enforce": "pre",
+          "resolveId": {
+            "filter": {
+              "id": {}
+            }
+          },
+          "load": {
+            "filter": {
+              "id": {}
+            }
+          }
+        }
+      ],
+      {
+        "name": "solid-start:virtual-modules"
+      },
+      {
+        "name": "solid-start:capture-client-bundle",
+        "enforce": "post"
+      },
+      [
+        {
+          "name": "solid-start-dev-server"
+        }
+      ],
+      {
+        "name": "solid",
+        "enforce": "pre"
+      }
+    ],
+    [
+      {
+        "name": "distilled-cloudflare:options",
+        "sharedDuringBuild": true
+      },
+      {
+        "name": "distilled-cloudflare:cloudflare-externals",
+        "sharedDuringBuild": true
+      },
+      {
+        "name": "distilled-cloudflare:nodejs-als",
+        "sharedDuringBuild": true
+      },
+      {
+        "name": "distilled-cloudflare:nodejs-import-warning",
+        "sharedDuringBuild": true,
+        "resolveId": {
+          "filter": {
+            "id": {}
+          }
+        },
+        "enforce": "pre"
+      },
+      null,
+      {
+        "name": "distilled-cloudflare:virtual-modules",
+        "sharedDuringBuild": true,
+        "resolveId": {
+          "filter": {
+            "id": {}
+          }
+        },
+        "load": {
+          "filter": {
+            "id": {}
+          }
+        },
+        "enforce": "pre"
+      },
+      {
+        "name": "distilled-cloudflare:wasm-init",
+        "sharedDuringBuild": true,
+        "load": {
+          "filter": {
+            "id": {}
+          }
+        }
+      },
+      {
+        "name": "distilled-cloudflare:additional-modules",
+        "sharedDuringBuild": true,
+        "resolveId": {
+          "filter": {
+            "id": [
+              {},
+              {},
+              {}
+            ]
+          }
+        },
+        "renderChunk": {
+          "filter": {
+            "code": {
+              "include": {}
+            }
+          }
+        },
+        "enforce": "pre"
+      }
+    ],
+    {
+      "name": "config"
+    }
+  ],
+  "build": {
+    "rollupOptions": {
+      "external": [
+        "cloudflare:workers"
+      ]
+    },
+    "assetsDir": "_build/assets"
+  },
+  "appType": "custom",
+  "environments": {
+    "client": {
+      "consumer": "client",
+      "build": {
+        "write": true,
+        "manifest": true,
+        "outDir": "dist/client",
+        "rollupOptions": {
+          "input": [
+            "./src/entry-client.tsx",
+            "/Users/john/Developer/Alchemy/distilled-cloudflare/fixtures/solidstart/src/routes/[...404].tsx?pick=default&pick=$css",
+            "/Users/john/Developer/Alchemy/distilled-cloudflare/fixtures/solidstart/src/routes/about.tsx?pick=default&pick=$css",
+            "/Users/john/Developer/Alchemy/distilled-cloudflare/fixtures/solidstart/src/routes/index.tsx?pick=default&pick=$css"
+          ],
+          "treeshake": true,
+          "preserveEntrySignatures": "exports-only"
+        }
+      }
+    },
+    "ssr": {
+      "consumer": "server",
+      "build": {
+        "ssr": true,
+        "write": true,
+        "manifest": true,
+        "copyPublicDir": false,
+        "rollupOptions": {
+          "input": "\u0000distilled:worker-entry:~/entry-server.tsx",
+          "preserveEntrySignatures": "strict"
+        },
+        "outDir": "dist/server",
+        "commonjsOptions": {
+          "include": [
+            {}
+          ]
+        },
+        "target": "es2024",
+        "emitAssets": true
+      },
+      "resolve": {
+        "noExternal": true,
+        "conditions": [
+          "workerd",
+          "worker",
+          "module",
+          "browser",
+          "development|production"
+        ]
+      },
+      "optimizeDeps": {
+        "noDiscovery": false,
+        "ignoreOutdatedRequests": true
+      },
+      "keepProcessEnv": true
+    }
+  },
+  "resolve": {
+    "alias": [
+      {
+        "find": {},
+        "replacement": "/@solid-refresh"
+      },
+      {
+        "find": "@solidjs/start/server/entry",
+        "replacement": "./src/entry-server.tsx"
+      },
+      {
+        "find": "~",
+        "replacement": "/Users/john/Developer/Alchemy/distilled-cloudflare/fixtures/solidstart/src"
+      }
+    ],
+    "dedupe": []
+  },
+  "define": {
+    "import.meta.env.MANIFEST": "globalThis.MANIFEST",
+    "import.meta.env.START_SSR": "true",
+    "import.meta.env.START_APP_ENTRY": "\"/Users/john/Developer/Alchemy/distilled-cloudflare/fixtures/solidstart/src/app.tsx\"",
+    "import.meta.env.START_CLIENT_ENTRY": "\"./src/entry-client.tsx\"",
+    "import.meta.env.START_DEV_OVERLAY": "true"
+  },
+  "builder": {
+    "sharedPlugins": true
+  },
+  "optimizeDeps": {
+    "include": [],
+    "exclude": [
+      "@solidjs/meta",
+      "@solidjs/router"
+    ]
+  },
+  "ssr": {
+    "noExternal": true,
+    "resolve": {
+      "conditions": [
+        "workerd",
+        "worker",
+        "module",
+        "browser",
+        "development|production"
+      ]
+    }
+  }
+}

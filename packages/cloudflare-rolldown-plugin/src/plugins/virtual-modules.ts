@@ -14,13 +14,13 @@ const EXPORT_TYPES_ID = "\0distilled:export-types" as const;
 export const virtualModulesPlugin = createPlugin("virtual-modules", (options) => {
   let unenvApi: UnenvApi | undefined;
   const inject = () => {
-    if (!unenvApi) return "";
+    if (!unenvApi) return [];
     return [
       ...unenvApi.polyfill.map((module) => `import "${module}";`),
       ...Object.keys(unenvApi.inject).map(
         (injectedName) => `import "${INJECT_PREFIX}${injectedName}";`,
       ),
-    ].join("\n");
+    ];
   };
   return {
     shared: {
@@ -51,26 +51,26 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
       },
       load: {
         filter: { id: VIRTUAL_MODULE_REGEXP },
-        async handler(id) {
+        handler(id) {
           if (id.startsWith(WORKER_ENTRY_PREFIX)) {
             const userEntryId = id.replace(WORKER_ENTRY_PREFIX, USER_ENTRY_PREFIX);
-            const userEntry = options.exports
-              ? `export { ${options.exports.join(", ")} } from "${userEntryId}";`
-              : `
-import * as userEntry from "${userEntryId}";
-export * from "${userEntryId}";
-export default userEntry.default ?? {};`;
-            return `
-${inject()}
-import { getExportTypes } from "${EXPORT_TYPES_ID}";
-${userEntry}
-if (import.meta.hot) {
-  import.meta.hot.accept((module) => {
-    const exportTypes = getExportTypes(module);
-    import.meta.hot.send("distilled-cloudflare:worker-export-types", exportTypes);
-  });
-}
-`;
+            return [
+              ...inject(),
+              `import { getExportTypes } from "${EXPORT_TYPES_ID}";`,
+              ...(options.exports
+                ? [`export { ${options.exports.join(", ")} } from "${userEntryId}";`]
+                : [
+                    `import * as userEntry from "${userEntryId}";`,
+                    `export * from "${userEntryId}";`,
+                    `export default userEntry.default ?? {};`,
+                  ]),
+              "if (import.meta.hot) {",
+              "  import.meta.hot.accept((module) => {",
+              "    const exportTypes = getExportTypes(module);",
+              '    import.meta.hot.send("distilled-cloudflare:worker-export-types", exportTypes);',
+              "  });",
+              "}",
+            ].join("\n");
           }
           if (id === EXPORT_TYPES_ID) {
             return `

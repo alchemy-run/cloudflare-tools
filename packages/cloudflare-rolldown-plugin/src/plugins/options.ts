@@ -1,5 +1,6 @@
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
+import type { CloudflarePluginOptions } from "../options.js";
 import { hasNodejsCompat } from "../utils.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
@@ -32,23 +33,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
       options.transform ??= {};
       options.transform.target ??= TARGET;
       options.transform.define ??= {};
-      Object.assign(options.transform.define, {
-        "process.env.NODE_ENV": '"production"',
-        "global.process.env.NODE_ENV": '"production"',
-        "globalThis.process.env.NODE_ENV": '"production"',
-        ...(hasNodejsCompat(pluginOptions.compatibilityFlags)
-          ? {}
-          : {
-              "process.env": "{}",
-              "global.process.env": "{}",
-              "globalThis.process.env": "{}",
-            }),
-        ...(pluginOptions.compatibilityDate && pluginOptions.compatibilityDate >= "2022-03-21"
-          ? {
-              "navigator.userAgent": '"Cloudflare-Workers"',
-            }
-          : {}),
-      });
+      Object.assign(options.transform.define, getDefine(pluginOptions, "production"));
       return options;
     },
   },
@@ -59,6 +44,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
         input: wrapEntryInput(options.environments?.ssr?.build?.rollupOptions?.input ?? {}),
         preserveEntrySignatures: "strict",
       };
+      const define = getDefine(pluginOptions, process.env.NODE_ENV || options.mode || "production");
       return {
         ssr: {
           noExternal: true,
@@ -79,13 +65,13 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
               copyPublicDir: false,
               ...(isRolldown
                 ? {
-                    // rolldownOptions: {
-                    //   ...rollupOptions,
-                    //   platform: "neutral",
-                    //   resolve: {
-                    //     extensions: DEFAULT_RESOLVE_EXTENSIONS,
-                    //   },
-                    // },
+                    rolldownOptions: {
+                      ...rollupOptions,
+                      platform: "neutral",
+                      resolve: {
+                        extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                      },
+                    },
                   }
                 : { rollupOptions }),
             },
@@ -102,26 +88,18 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                       },
                       transform: {
                         target: TARGET,
-                        define: {
-                          "process.env.NODE_ENV": '"production"',
-                          "global.process.env.NODE_ENV": '"production"',
-                          "globalThis.process.env.NODE_ENV": '"production"',
-                        },
+                        define,
                       },
                     },
                   }
                 : {
-                    // esbuildOptions: {
-                    //   platform: "neutral",
-                    //   conditions: [...DEFAULT_CONDITIONS, "development|production"],
-                    //   resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
-                    //   target: TARGET,
-                    //   define: {
-                    //     "process.env.NODE_ENV": '"production"',
-                    //     "global.process.env.NODE_ENV": '"production"',
-                    //     "globalThis.process.env.NODE_ENV": '"production"',
-                    //   },
-                    // },
+                    esbuildOptions: {
+                      platform: "neutral",
+                      conditions: [...DEFAULT_CONDITIONS, "development|production"],
+                      resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
+                      target: TARGET,
+                      define,
+                    },
                   }),
             },
             keepProcessEnv: true,
@@ -144,4 +122,24 @@ function wrapEntryInput(input: string | Array<string> | Record<string, string>) 
   return Object.fromEntries(
     Object.entries(input).map(([key, value]) => [virtualEntryId(key), value]),
   );
+}
+
+function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<string, string> {
+  return {
+    "process.env.NODE_ENV": JSON.stringify(nodeEnv),
+    "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
+    "globalThis.process.env.NODE_ENV": JSON.stringify(nodeEnv),
+    ...(hasNodejsCompat(options.compatibilityFlags)
+      ? {}
+      : {
+          "process.env": "{}",
+          "global.process.env": "{}",
+          "globalThis.process.env": "{}",
+        }),
+    ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
+      ? {
+          "navigator.userAgent": '"Cloudflare-Workers"',
+        }
+      : {}),
+  };
 }

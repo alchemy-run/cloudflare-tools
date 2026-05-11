@@ -103,10 +103,13 @@
       "peerDependencies": {
         "rolldown": "catalog:",
       },
+      "optionalPeers": [
+        "rolldown",
+      ],
     },
     "packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "dependencies": {
         "capnp-es": "^0.0.14",
         "workerd": "catalog:workers",

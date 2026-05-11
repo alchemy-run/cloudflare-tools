@@ -4,6 +4,8 @@ import { hasNodejsCompat } from "../utils.js";
 
 const DEFAULT_RESOLVE_CONDITION_NAMES = ["workerd", "worker", "module", "browser", "production"];
 
+const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "main"];
+
 const DEFAULT_RESOLVE_EXTENSIONS = [
   ".mjs",
   ".js",
@@ -24,6 +26,7 @@ export function makeOptionsPlugin(pluginOptions: CloudflarePluginOptions) {
       options.platform ??= "neutral";
       options.resolve ??= {};
       options.resolve.conditionNames ??= DEFAULT_RESOLVE_CONDITION_NAMES;
+      options.resolve.mainFields ??= DEFAULT_RESOLVE_MAIN_FIELDS;
       options.resolve.extensions ??= DEFAULT_RESOLVE_EXTENSIONS;
       options.transform ??= {};
       options.transform.target ??= "es2024";

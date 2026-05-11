@@ -16,6 +16,7 @@ describe("options plugin", () => {
       "browser",
       "production",
     ]);
+    expect(output.resolve?.mainFields).toEqual(["browser", "module", "main"]);
     expect(output.resolve?.extensions).toEqual([
       ".mjs",
       ".js",

@@ -22,6 +22,7 @@ export const nodejsAlsPlugin = createPlugin("nodejs-als", (options) => {
       },
     },
     vite: {
+      enforce: "pre",
       configEnvironment(name) {
         if (name === "client") return;
         return {
@@ -133,6 +134,12 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
                   },
                 }
               : {}),
+            exclude: [
+              ...nonPrefixedNodeModules,
+              ...nonPrefixedNodeModules.map((module) => `node:${module}`),
+              // New Node.js built-in modules are only published with the `node:` prefix.
+              ...["node:sea", "node:sqlite", "node:test", "node:test/reporters"],
+            ],
           };
         },
         async configureServer(server) {

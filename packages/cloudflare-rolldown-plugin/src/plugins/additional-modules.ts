@@ -10,7 +10,7 @@ import type {
 import { createPlugin } from "../factory.js";
 import { sanitizePath } from "../utils.js";
 
-const MODULE_RULES = [
+export const MODULE_RULES = [
   { type: "CompiledWasm", pattern: /\.wasm(\?module)?$/ },
   { type: "Data", pattern: /\.bin$/ },
   { type: "Text", pattern: /\.(txt|html|sql)$/ },

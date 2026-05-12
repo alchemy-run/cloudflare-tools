@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Globals from "./globals/Globals.ts";
 import type * as Plugin from "./Plugin.ts";
 import { ConfigError } from "./RuntimeError.shared.ts";
 import type { RuntimeWorker } from "./RuntimeWorker.ts";
@@ -14,19 +15,24 @@ export class PluginContext extends Context.Service<
       Plugin.Plugin<any> | Effect.Effect<Plugin.Plugin<any>, never, PluginContext>
     >;
     readonly get: <P extends Plugin.Plugin<any>>(name: string) => Effect.Effect<P, ConfigError>;
-    readonly config: Effect.Effect<{
-      entry: string | undefined;
-      sockets: Array<WorkerdConfig.Socket>;
-      services: Array<WorkerdConfig.Service>;
-      extensions: Array<WorkerdConfig.Extension>;
-    }>;
+    readonly config: Effect.Effect<
+      {
+        entry: string | undefined;
+        sockets: Array<WorkerdConfig.Socket>;
+        services: Array<WorkerdConfig.Service>;
+        extensions: Array<WorkerdConfig.Extension>;
+      },
+      ConfigError
+    >;
   }
 >()("cloudflare-runtime/PluginContext") {}
 
 export type ConfigHook<A, E, R> = Effect.Effect<A, E | ConfigError, R | PluginContext>;
 export type BindingHook<R = never> = ConfigHook<WorkerdConfig.Worker_Binding, never, R>;
 
-export const make = (worker: RuntimeWorker): Effect.Effect<PluginContext["Service"]> =>
+export const make = (
+  worker: RuntimeWorker,
+): Effect.Effect<PluginContext["Service"], never, Globals.Globals> =>
   Effect.gen(function* () {
     const plugins = new Map<string, Plugin.Plugin<any>>();
     const context = PluginContext.of({

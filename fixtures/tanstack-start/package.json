@@ -27,6 +27,7 @@
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.36.4",
     "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
     "@distilled.cloud/test-utils": "workspace:*",
     "@playwright/test": "catalog:",

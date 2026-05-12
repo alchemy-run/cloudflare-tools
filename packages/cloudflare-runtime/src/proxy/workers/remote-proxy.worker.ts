@@ -1,7 +1,7 @@
 import { RpcSession, type RpcStub, type RpcTransport } from "capnweb";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { SystemError } from "../../RuntimeError.shared.ts";
-import type { EntryQueuePayload } from "../../entry/entry.worker.ts";
+import type { EntryQueuePayload } from "../../globals/entry.worker.ts";
 import { decodeResponse, makeErrorResponse } from "../../internal/response.shared.ts";
 import {
   REMOTE_WEBSOCKET_PATH,

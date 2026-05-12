@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { PluginContext, type ConfigHook } from "./PluginContext.ts";
+import type { ConfigError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 
 export interface Plugin<Api = never> extends PluginConfig {
@@ -23,7 +24,7 @@ export interface Middleware {
 
 export type PluginBuilder<Api = never> =
   | PluginResult<Api>
-  | Effect.Effect<PluginResult<Api>, never, PluginContext>;
+  | Effect.Effect<PluginResult<Api>, ConfigError, PluginContext>;
 
 export type PluginResult<Api> = [Api] extends [never] ? Omit<Plugin<Api>, "api"> : Plugin<Api>;
 

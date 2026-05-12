@@ -1,3 +1,4 @@
+import { nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
@@ -27,7 +28,7 @@ const TARGET = "es2024";
 export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
   rolldown: {
     options(options) {
-      options.input = wrapEntryInput(options.input ?? {});
+      options.input = wrapEntryInput(pluginOptions.main ?? options.input ?? {});
       options.preserveEntrySignatures ??= "strict";
       options.platform ??= "neutral";
       options.resolve ??= {};
@@ -42,21 +43,40 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
     },
   },
   vite: {
-    config(userConfig) {
+    async config(userConfig) {
+      const vite = await import("vite");
       const isRolldown = "rolldownVersion" in this.meta;
+      const input =
+        pluginOptions.main ??
+        userConfig.environments?.ssr?.build?.rolldownOptions?.input ??
+        userConfig.environments?.ssr?.build?.rollupOptions?.input;
       const rollupOptions: vite.Rollup.RollupOptions = {
-        input: wrapEntryInput(userConfig.environments?.ssr?.build?.rollupOptions?.input ?? {}),
+        input: wrapEntryInput(input ?? {}),
         preserveEntrySignatures: "strict",
       };
       const define = getDefine(
         pluginOptions,
         process.env.NODE_ENV || userConfig.mode || "production",
       );
+      // oxlint-disable no-console
+      console.log("Config:", {
+        input,
+        rollupOptions,
+        define,
+      });
       return {
+        appType: "custom",
         ssr: {
           noExternal: true,
           resolve: {
             conditions: [...DEFAULT_CONDITIONS, "development|production"],
+          },
+        },
+        builder: {
+          buildApp: async (app) => {
+            console.log(app.environments);
+            await app.build(app.environments.ssr);
+            await app.build(app.environments.client);
           },
         },
         environments: {
@@ -92,6 +112,13 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
             optimizeDeps: {
               noDiscovery: false,
               ignoreOutdatedRequests: true,
+              entries: pluginOptions.main ? vite.normalizePath(pluginOptions.main) : undefined,
+              exclude: [
+                ...nonPrefixedNodeModules,
+                ...nonPrefixedNodeModules.map((module) => `node:${module}`),
+                // New Node.js built-in modules are only published with the `node:` prefix.
+                ...["node:sea", "node:sqlite", "node:test", "node:test/reporters"],
+              ],
               ...(isRolldown
                 ? {
                     rolldownOptions: {
@@ -129,11 +156,15 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
 function wrapEntryInput(input: string | Array<string> | Record<string, string>) {
   const virtualEntryId = (id: string) => `${WORKER_ENTRY_PREFIX}${id}` as const;
   if (typeof input === "string") {
-    return virtualEntryId(input);
+    return { main: virtualEntryId(input) };
   }
   if (Array.isArray(input)) {
     return Object.fromEntries(input.map((key) => [key, virtualEntryId(key)]));
   }
+  // oxlint-disable no-console
+  console.log("wrapEntryInput", {
+    input,
+  });
   return Object.fromEntries(
     Object.entries(input).map(([key, value]) => [key, virtualEntryId(value)]),
   );

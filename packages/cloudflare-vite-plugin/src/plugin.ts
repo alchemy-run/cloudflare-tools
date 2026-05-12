@@ -9,12 +9,16 @@ import {
   virtualModulesPlugin,
   wasmInitPlugin,
 } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
+import type { DurableObjectNamespace } from "@distilled.cloud/cloudflare-runtime";
 import type * as vite from "vite";
+import { dev } from "./dev-plugin.js";
 
-export type { CloudflarePluginOptions };
+export interface CloudflareVitePluginOptions extends CloudflarePluginOptions {
+  durableObjectNamespaces?: Array<DurableObjectNamespace>;
+}
 
 export default function cloudflareVitePlugin(
-  options: CloudflarePluginOptions = {},
+  options: CloudflareVitePluginOptions = {},
 ): Array<vite.Plugin | null> {
   return [
     optionsPlugin.vite(options),
@@ -32,5 +36,6 @@ export default function cloudflareVitePlugin(
         return { rsc: { serverHandler: false } } as vite.UserConfig;
       },
     },
+    dev(options),
   ];
 }

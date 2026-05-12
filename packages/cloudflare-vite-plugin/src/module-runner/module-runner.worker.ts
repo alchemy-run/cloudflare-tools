@@ -1,0 +1,192 @@
+import { DurableObject } from "cloudflare:workers";
+import { ModuleRunner, ssrDynamicImportKey, ssrModuleExportsKey } from "vite/module-runner";
+import { ENVIRONMENT_NAME_HEADER, INIT_PATH } from "./constants.shared.ts";
+import { stripInternalEnv, type Env } from "./env.worker.ts";
+
+declare global {
+  // This global variable is accessed by `@vitejs/plugin-rsc`
+  var __VITE_ENVIRONMENT_RUNNER_IMPORT__: (environmentName: string, id: string) => Promise<unknown>;
+}
+
+const callbacks = {
+  nextId: 0,
+  pending: new Map<number, () => Promise<unknown>>(),
+  results: new Map<number, unknown>(),
+  run: async <T>(env: Env, callback: () => Promise<T>): Promise<T> => {
+    const id = callbacks.nextId++;
+    callbacks.pending.set(id, callback);
+    const stub = env.__DISTILLED_MODULE_RUNNER__.get("singleton");
+    await stub.executeCallback(id);
+    return callbacks.results.get(id) as T;
+  },
+};
+
+/**
+ * Retrieves a specific export from a Worker entry module using the module runner.
+ */
+export async function getWorkerEntryExport<T>(env: Env, exportName: string): Promise<T> {
+  // oxlint-disable no-console
+  console.log("Getting worker entry export:", {
+    exportName,
+    environmentName: env.__DISTILLED_ENVIRONMENT__.environmentName,
+    entryId: env.__DISTILLED_ENVIRONMENT__.entryId,
+  });
+  const module = await globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__(
+    env.__DISTILLED_ENVIRONMENT__.environmentName,
+    env.__DISTILLED_ENVIRONMENT__.entryId,
+  );
+
+  const exportValue =
+    typeof module === "object" &&
+    module !== null &&
+    exportName in module &&
+    (module as Record<string, unknown>)[exportName];
+
+  if (!exportValue) {
+    throw new Error(
+      `"${env.__DISTILLED_ENVIRONMENT__.entryName}" does not define a "${exportName}" export.`,
+    );
+  }
+
+  return exportValue as T;
+}
+
+export class ModuleRunnerDO extends DurableObject<Env> {
+  private webSockets = new Map<string, WebSocket>();
+  private moduleRunners = new Map<string, ModuleRunner>();
+
+  async fetch(request: Request) {
+    const { pathname } = new URL(request.url);
+    if (pathname !== INIT_PATH) {
+      throw new Error(`Invalid path: ${pathname}`);
+    }
+    globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__ = async (environmentName: string, id: string) => {
+      // oxlint-disable no-console
+      console.log("__VITE_ENVIRONMENT_RUNNER_IMPORT__", {
+        environmentName,
+        id,
+      });
+      const moduleRunner = this.moduleRunners.get(environmentName);
+      if (!moduleRunner) {
+        throw new Error(`Module runner not initialized for environment: "${environmentName}"`);
+      }
+      return callbacks.run(this.env, () => moduleRunner.import(id));
+    };
+    const environmentName = request.headers.get(ENVIRONMENT_NAME_HEADER);
+    if (!environmentName) {
+      throw new Error(`Missing ${ENVIRONMENT_NAME_HEADER} header`);
+    }
+    const { 0: client, 1: server } = new WebSocketPair();
+    server.accept();
+
+    const moduleRunner = this.makeModuleRunner(server, environmentName);
+    this.moduleRunners.set(environmentName, moduleRunner);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  send(environmentName: string, data: string): void {
+    const webSocket = this.webSockets.get(environmentName);
+    if (!webSocket) {
+      throw new Error(`Module runner not initialized for environment: "${environmentName}"`);
+    }
+    webSocket.send(data);
+  }
+
+  async executeCallback(id: number): Promise<void> {
+    const callback = callbacks.pending.get(id);
+    if (!callback) {
+      throw new Error(`No pending callback with id ${id}`);
+    }
+    const result = await callback();
+    callbacks.results.set(id, result);
+  }
+
+  makeModuleRunner(webSocket: WebSocket, environmentName: string) {
+    const env = this.env;
+    return new ModuleRunner(
+      {
+        sourcemapInterceptor: "prepareStackTrace",
+        transport: {
+          connect({ onMessage }) {
+            webSocket.addEventListener("message", async ({ data }) => {
+              onMessage(JSON.parse(data.toString()));
+            });
+
+            onMessage({
+              type: "custom",
+              event: "vite:ws:connect",
+              data: { webSocket },
+            });
+          },
+          disconnect() {
+            webSocket.close();
+          },
+          async send(data) {
+            // We send messages via a binding to the Durable Object.
+            // This is because `import.meta.send` may be called within a Worker's request context.
+            // Directly using a WebSocket created in another context would be forbidden.
+            const stub = env.__DISTILLED_MODULE_RUNNER__.get("singleton");
+            // oxlint-disable no-console
+            console.log("Send data:", {
+              data,
+              environmentName,
+            });
+            stub.send(environmentName, JSON.stringify(data));
+          },
+          invoke: async (data) => {
+            const response = await env.__DISTILLED_INVOKE_MODULE__.fetch(
+              new Request("http://localhost", {
+                method: "POST",
+                headers: {
+                  "content-type": "application/json",
+                  [ENVIRONMENT_NAME_HEADER]: environmentName,
+                },
+                body: JSON.stringify(data),
+              }),
+            );
+            const result = await response.json<{ result: unknown } | { error: unknown }>();
+
+            return result;
+          },
+        },
+        hmr: true,
+      },
+      {
+        runInlinedModule: async (context, transformed, module) => {
+          // Wrap dynamic imports to route deferred dynamic imports
+          // through the DO's IoContext.
+          const originalDynamicImport = context[ssrDynamicImportKey];
+          context[ssrDynamicImportKey] = (dep) => {
+            return callbacks.run(env, () => originalDynamicImport(dep));
+          };
+
+          // The trailing newline ensures a `//` comment on the last line of
+          // `transformed` (e.g. a sourceMappingURL comment preserved by
+          // vite-plus) cannot swallow the closing brace.
+          const code = `"use strict";async (${Object.keys(context).join(",")})=>{${transformed}\n}`;
+          const fn = env.__DISTILLED_UNSAFE_EVAL__.eval(code, module.id);
+          // oxlint-disable no-console
+          console.log(`Running inlined module: ${module.id}`);
+          await fn(...Object.values(context));
+          Object.seal(context[ssrModuleExportsKey]);
+        },
+        runExternalModule: async (filepath) => {
+          if (filepath === "cloudflare:workers") {
+            const { env, ...mod } = await import("cloudflare:workers");
+            return Object.seal({
+              ...mod,
+              env: stripInternalEnv(env as Env),
+            });
+          }
+
+          try {
+            return await import(filepath);
+          } catch (error) {
+            console.error(`Error importing module: ${filepath}`, error);
+            throw error;
+          }
+        },
+      },
+    );
+  }
+}

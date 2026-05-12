@@ -1,5 +1,11 @@
 export interface CloudflarePluginOptions {
   /**
+   * The main entry point to use.
+   * Defaults to the one from your Rolldown configuration.
+   * @default undefined
+   */
+  main?: string;
+  /**
    * The compatibility date to use. This is optional, but should be defined to avoid unexpected behavior.
    * @default undefined
    */

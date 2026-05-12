@@ -7,7 +7,6 @@ const VIRTUAL_MODULE_REGEXP = /^\0distilled:.*$/;
 
 export const WORKER_ENTRY_PREFIX = "\0distilled:worker-entry:" as const;
 const USER_ENTRY_PREFIX = "\0distilled:user-entry:" as const;
-const PEAR_ENTRY_PREFIX = "\0distilled:pear-entry:" as const;
 const INJECT_PREFIX = "\0distilled:inject:" as const;
 const EXPORT_TYPES_ID = "\0distilled:export-types" as const;
 
@@ -23,6 +22,9 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
     ];
   };
   return {
+    vite: {
+      enforce: "pre",
+    },
     shared: {
       buildStart({ plugins }) {
         unenvApi = plugins.find(
@@ -32,20 +34,35 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
       },
       resolveId: {
         filter: { id: VIRTUAL_MODULE_REGEXP },
-        handler(id) {
+        async handler(id, importer, options) {
           if (
             id.startsWith(WORKER_ENTRY_PREFIX) ||
-            id.startsWith(PEAR_ENTRY_PREFIX) ||
             id.startsWith(INJECT_PREFIX) ||
             id === EXPORT_TYPES_ID
           ) {
+            // oxlint-disable no-console
+            console.log("resolve", {
+              id,
+              real: id.slice(USER_ENTRY_PREFIX.length),
+              importer,
+              options,
+            });
             return { id };
           }
           if (id.startsWith(USER_ENTRY_PREFIX)) {
-            return this.resolve(id.slice(USER_ENTRY_PREFIX.length), undefined, {
+            const resolved = await this.resolve(id.slice(USER_ENTRY_PREFIX.length), undefined, {
               isEntry: true,
               kind: "import-statement",
             });
+            // oxlint-disable no-console
+            console.log("resolve", {
+              id,
+              real: id.slice(USER_ENTRY_PREFIX.length),
+              importer,
+              options,
+              resolved,
+            });
+            return resolved;
           }
         },
       },
@@ -56,6 +73,7 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
             const userEntryId = id.replace(WORKER_ENTRY_PREFIX, USER_ENTRY_PREFIX);
             return [
               ...inject(),
+              `console.log("hello from virtual modules");`,
               ...(options.exports
                 ? [`export { ${options.exports.join(", ")} } from "${userEntryId}";`]
                 : [

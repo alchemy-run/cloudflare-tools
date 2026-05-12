@@ -42,7 +42,8 @@ export interface Assets {
 export interface DurableObjectNamespace {
   className: string;
   sql: boolean;
-  uniqueKey: string;
+  uniqueKey?: string;
+  ephemeralLocal?: true;
 }
 
 export const moduleToWorkerd = (module: Module): WorkerdConfig.Worker_Module => {

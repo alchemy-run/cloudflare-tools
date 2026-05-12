@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
+import * as Globals from "./globals/Globals.ts";
 import * as Storage from "./globals/Storage.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
@@ -28,10 +29,13 @@ export const RuntimeLive = Layer.effect(
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
     const localProxy = yield* LocalProxy.LocalProxy;
+    const globals = yield* Globals.Globals;
 
     return Runtime.of({
       start: Effect.fn(function* (worker) {
-        const context = yield* PluginContext.make(worker as RuntimeWorker);
+        const context = yield* PluginContext.make(worker as RuntimeWorker).pipe(
+          Effect.provideService(Globals.Globals, globals),
+        );
         const bindings = yield* Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
           concurrency: "unbounded",
         }).pipe(Effect.provideService(PluginContext.PluginContext, context));
@@ -57,6 +61,7 @@ export const RuntimeLive = Layer.effect(
                   className: namespace.className,
                   enableSql: namespace.sql,
                   uniqueKey: namespace.uniqueKey,
+                  ephemeralLocal: namespace.ephemeralLocal,
                 })),
                 durableObjectStorage: {
                   localDisk: storage.name,

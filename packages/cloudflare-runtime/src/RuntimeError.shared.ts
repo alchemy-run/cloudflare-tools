@@ -1,3 +1,4 @@
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
 /**
@@ -54,3 +55,8 @@ export class ApiError extends Schema.TaggedErrorClass<ApiError>()("ApiError", {
  */
 export const RuntimeError = Schema.Union([ConfigError, SystemError, ApiError]);
 export type RuntimeError = ConfigError | SystemError | ApiError;
+
+export const isRuntimeError = (error: unknown): error is RuntimeError =>
+  Predicate.isTagged(error, "ConfigError") ||
+  Predicate.isTagged(error, "SystemError") ||
+  Predicate.isTagged(error, "ApiError");

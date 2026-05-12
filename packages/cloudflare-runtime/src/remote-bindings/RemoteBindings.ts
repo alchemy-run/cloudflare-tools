@@ -2,12 +2,11 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
-import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ClientWorker from "worker:./workers/client.worker.ts";
 import * as OutboundWorker from "worker:./workers/outbound.worker.ts";
-import { makeErrorEnvelope } from "../internal/response.shared.ts";
+import * as Loopback from "../globals/Loopback.ts";
 import * as Plugin from "../Plugin.ts";
 import * as PluginContext from "../PluginContext.ts";
 import type { ApiError, ConfigError, SystemError } from "../RuntimeError.shared.ts";
@@ -32,13 +31,17 @@ export type { RemoteBinding };
 export const RemoteBindingsLive = Layer.effect(
   RemoteBindings,
   Effect.gen(function* () {
-    const httpServer = yield* HttpServer.HttpServer;
+    const loopback = yield* Loopback.Loopback;
     const remoteWorker = yield* RemoteWorker.RemoteWorker;
     const prefetches = new Map<
       number,
       Fiber.Fiber<RemoteWorkerResult, ApiError | ConfigError | SystemError>
     >();
-    yield* httpServer.serve(
+    if (Effect.isEffect(loopback)) {
+      return yield* Effect.die("Expected loopback to be initialized");
+    }
+    const serviceDesignator = yield* loopback.api.route(
+      "remote-bindings",
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const json = (yield* request.json) as unknown as RemoteWorkerConfig;
@@ -50,27 +53,15 @@ export const RemoteBindingsLive = Layer.effect(
         const deploy = prefetched ? Fiber.join(prefetched) : remoteWorker.deploy(json);
         return yield* deploy.pipe(
           Effect.flatMap((result) => HttpServerResponse.json({ ok: true, result })),
-          Effect.catchIf(
-            (e) => e._tag === "ApiError" || e._tag === "ConfigError" || e._tag === "SystemError",
-            (error) => HttpServerResponse.json(makeErrorEnvelope(error), { status: 500 }),
-          ),
         );
       }),
     );
-    const address = httpServer.address as HttpServer.TcpAddress;
     const build = Effect.fn(function* (
       config: RemoteWorkerConfig,
     ): Effect.fn.Return<Plugin.PluginConfig> {
       if (config.bindings.length === 0) return {};
       const fiber = yield* Effect.forkDetach(remoteWorker.deploy(config));
       prefetches.set(Hash.structure(config), fiber);
-      const loopback = {
-        name: "remote-bindings:loopback",
-        external: {
-          address: `${address.hostname}:${address.port}`,
-          http: {},
-        },
-      } satisfies WorkerdConfig.Service;
       const outbound = {
         name: "remote-bindings:outbound",
         worker: {
@@ -83,7 +74,7 @@ export const RemoteBindingsLive = Layer.effect(
             },
             {
               name: "LOOPBACK",
-              service: { name: loopback.name },
+              service: serviceDesignator,
             },
             {
               name: "OPTIONS",
@@ -109,7 +100,7 @@ export const RemoteBindingsLive = Layer.effect(
         },
       } satisfies WorkerdConfig.Service;
       return {
-        services: [client, outbound, loopback],
+        services: [client, outbound],
       };
     });
     return RemoteBindings.of(

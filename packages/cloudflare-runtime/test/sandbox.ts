@@ -3,9 +3,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { KvNamespace } from "../src/bindings/index.ts";
-import * as Runtime from "../src/Runtime.ts";
-import * as RuntimeServices from "../src/RuntimeServices.ts";
+import { KvNamespace } from "../dist/bindings/index.mjs";
+import * as Runtime from "../dist/Runtime.mjs";
+import * as RuntimeServices from "../dist/RuntimeServices.mjs";
 
 const main = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
@@ -43,7 +43,7 @@ const main = Effect.gen(function* () {
 await main.pipe(
   Effect.provide(
     RuntimeServices.layerRuntime({
-      server: { port: 0, host: "127.0.0.1" },
+      server: { port: 0, host: "localhost" },
       api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, credentials: Credentials.fromEnv() },
     }),
   ),

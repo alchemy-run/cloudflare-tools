@@ -3,15 +3,15 @@ import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
-import * as Runtime from "../src/workerd/Runtime.ts";
+import * as Workerd from "../src/workerd/Workerd.ts";
 
-const services = Layer.provide(Runtime.layer, NodeServices.layer);
+const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
 layer(services)((it) => {
   it.effect("spawns a workerd process", () =>
     Effect.gen(function* () {
-      const runtime = yield* Runtime.Runtime;
-      const result = yield* runtime.serve({
+      const workerd = yield* Workerd.Workerd;
+      const result = yield* workerd.serve({
         sockets: [
           {
             name: "test",
@@ -46,8 +46,8 @@ layer(services)((it) => {
 
   it.effect("fails on invalid worker configuration", () =>
     Effect.gen(function* () {
-      const runtime = yield* Runtime.Runtime;
-      const error = yield* runtime
+      const workerd = yield* Workerd.Workerd;
+      const error = yield* workerd
         .serve({
           sockets: [
             {
@@ -82,8 +82,8 @@ layer(services)((it) => {
 
   it.effect("fails on port conflict", () =>
     Effect.gen(function* () {
-      const runtime = yield* Runtime.Runtime;
-      const result = yield* runtime.serve({
+      const workerd = yield* Workerd.Workerd;
+      const result = yield* workerd.serve({
         sockets: [
           {
             name: "test",
@@ -107,7 +107,7 @@ layer(services)((it) => {
         ],
       });
       const port = result[0].port;
-      const error = yield* runtime
+      const error = yield* workerd
         .serve({
           sockets: [
             {

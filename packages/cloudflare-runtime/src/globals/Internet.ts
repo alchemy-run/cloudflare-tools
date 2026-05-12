@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as NodeTls from "node:tls";
-import type * as Config from "./workerd/Config.ts";
+import type * as Config from "../workerd/Config.ts";
 
 export class Internet extends Context.Service<Internet, Config.Service>()(
   "cloudflare-runtime/Internet",

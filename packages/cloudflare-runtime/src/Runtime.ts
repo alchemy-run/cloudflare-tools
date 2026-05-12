@@ -2,13 +2,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
-import * as Internet from "./Internet.ts";
+import * as Storage from "./globals/Storage.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
 import * as LocalProxy from "./proxy/LocalProxy.ts";
 import type { RuntimeError } from "./RuntimeError.shared.ts";
 import { moduleToWorkerd, type BindingHooks, type RuntimeWorker } from "./RuntimeWorker.ts";
-import * as Storage from "./Storage.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
 export class Runtime extends Context.Service<
@@ -28,7 +27,6 @@ export const RuntimeLive = Layer.effect(
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
-    const internet = yield* Internet.Internet;
     const localProxy = yield* LocalProxy.LocalProxy;
 
     return Runtime.of({
@@ -66,8 +64,6 @@ export const RuntimeLive = Layer.effect(
               },
             },
             ...services,
-            storage,
-            internet,
           ],
           extensions,
         });

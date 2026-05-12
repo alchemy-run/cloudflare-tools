@@ -5,12 +5,12 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as LocalProxyWorker from "worker:./workers/local-proxy.worker.ts";
-import * as Internet from "../Internet.ts";
-import { SystemError } from "../RuntimeError.shared.ts";
-import * as WorkerModule from "../WorkerModule.ts";
+import * as Internet from "../globals/Internet.ts";
 import { findAvailablePort } from "../internal/find-available-port.ts";
+import { SystemError } from "../RuntimeError.shared.ts";
+import { moduleToWorkerd } from "../RuntimeWorker.ts";
 import * as Config from "../workerd/Config.ts";
-import * as Runtime from "../workerd/Runtime.ts";
+import * as Workerd from "../workerd/Workerd.ts";
 import { LOCAL_CONFIGURE_PATH, type ControllerMessage } from "./ProxyApi.shared.ts";
 
 export class LocalProxy extends Context.Service<
@@ -30,9 +30,8 @@ export const layerLive = (config: LocalProxyConfig) =>
   Layer.effect(
     LocalProxy,
     Effect.gen(function* () {
-      const runtime = yield* Runtime.Runtime;
+      const runtime = yield* Workerd.Workerd;
       const http = yield* HttpClient.HttpClient;
-      const internet = yield* Internet.Internet;
       const result = yield* runtime.serve({
         sockets: [
           {
@@ -46,14 +45,14 @@ export const layerLive = (config: LocalProxyConfig) =>
             name: "proxy:local",
             worker: {
               compatibilityDate: "2026-03-10",
-              modules: LocalProxyWorker.modules.map(WorkerModule.toWorkerd),
+              modules: LocalProxyWorker.modules.map(moduleToWorkerd),
               bindings: [{ name: "PROXY", durableObjectNamespace: { className: "LocalProxy" } }],
               durableObjectNamespaces: [
                 { className: "LocalProxy", ephemeralLocal: Config.kVoid, preventEviction: true },
               ],
             },
           },
-          internet,
+          yield* Internet.Internet,
         ],
       });
       const address = `${config.host}:${result[0].port}`;

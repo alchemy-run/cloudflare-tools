@@ -1,55 +1,57 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { Worker } from "./Worker.ts";
-import type * as Config from "./workerd/Config.ts";
+import { PluginContext, type ConfigHook } from "./PluginContext.ts";
+import type * as WorkerdConfig from "./workerd/Config.ts";
 
-export const Service = <Self, P extends Plugin<any>>() => Context.Service<Self, P>();
-
-export interface Plugin<out E = never> {
-  readonly name: string;
-  readonly make: (worker: Worker) => Effect.Effect<PluginOutput, E>;
+export interface Plugin<Api = never> extends PluginConfig {
+  readonly api: Api;
+  readonly defer?: Effect.Effect<PluginConfig>;
 }
 
-export interface PluginOutput {
-  middlewares?: Array<Middleware>;
-  bindings?: Array<Config.Worker_Binding>;
-  services?: Array<Config.Service>;
-  extensions?: Array<Config.Extension>;
+export interface PluginConfig {
+  readonly services?: Array<WorkerdConfig.Service>;
+  readonly sockets?: Array<WorkerdConfig.Socket>;
+  readonly extensions?: Array<WorkerdConfig.Extension>;
+  readonly middlewares?: Array<Middleware>;
 }
 
 export interface Middleware {
   name: string;
-  worker: Config.Worker;
+  worker: WorkerdConfig.Worker;
   upstreamBindingName: string;
 }
 
-export const build = Effect.fn(function* <E>(worker: Worker, plugins: Array<Plugin<E>>) {
-  const outputs = yield* Effect.all(plugins.map((plugin) => plugin.make(worker)));
-  const services = outputs.flatMap((output) => output.services ?? []);
-  const bindings = outputs.flatMap((output) => output.bindings ?? []);
-  const extensions = outputs.flatMap((output) => output.extensions ?? []);
-  const middlewares = outputs.flatMap((output) => output.middlewares ?? []);
-  return {
-    bindings,
-    entry: middlewares[0]?.name ?? "user",
-    services: [
-      ...services,
-      ...middlewares.map((middleware, index) => ({
-        name: middleware.name,
-        worker: {
-          ...middleware.worker,
-          bindings: [
-            ...(middleware.worker.bindings ?? []),
-            {
-              name: middleware.upstreamBindingName,
-              service: {
-                name: index < middlewares.length - 1 ? middlewares[index + 1].name : "user",
-              },
-            },
-          ],
-        },
-      })),
-    ],
-    extensions,
-  };
-});
+export type PluginBuilder<Api = never> =
+  | PluginResult<Api>
+  | Effect.Effect<PluginResult<Api>, never, PluginContext>;
+
+export type PluginResult<Api> = [Api] extends [never] ? Omit<Plugin<Api>, "api"> : Plugin<Api>;
+
+export type PluginIdentifier<T extends string = string> = `cloudflare-runtime/plugin/${T}`;
+
+export type PluginService<
+  Self,
+  Identifier extends PluginIdentifier,
+  Api = never,
+> = Context.ServiceClass<Self, Identifier, PluginBuilder<Api>> & {
+  readonly Self: Self;
+  readonly Plugin: Plugin<Api>;
+};
+
+export const Service =
+  <Self, Api = never>() =>
+  <Identifier extends PluginIdentifier>(
+    identifier: Identifier,
+  ): PluginService<Self, Identifier, Api> =>
+    Context.Service<Self, PluginBuilder<Api>>()(identifier) as PluginService<Self, Identifier, Api>;
+
+export const use = <S extends PluginService<any, any, any>, A, E, R>(
+  plugin: S,
+  f: (plugin: S["Plugin"]) => Effect.Effect<A, E, R>,
+): ConfigHook<A, E, R | S["Self"]> =>
+  PluginContext.use((context) => context.get(plugin.key).pipe(Effect.flatMap(f)));
+
+export const useSync = <S extends PluginService<any, any, any>, A>(
+  plugin: S,
+  f: (plugin: S["Plugin"]) => A,
+): ConfigHook<A, never, S["Self"]> => use(plugin, (plugin) => Effect.succeed(f(plugin)));

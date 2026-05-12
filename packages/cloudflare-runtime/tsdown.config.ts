@@ -18,6 +18,9 @@ export default defineConfig([
     deps: {
       alwaysBundle: () => true,
     },
+    outputOptions: {
+      entryFileNames: "[name].mjs",
+    },
   },
   {
     entry: ["src/**/*.ts", "!src/**/*.worker.ts", "!src/global.d.ts"],

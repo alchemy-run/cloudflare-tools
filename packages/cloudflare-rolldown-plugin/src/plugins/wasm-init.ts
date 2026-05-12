@@ -4,6 +4,9 @@ import { sanitizePath } from "../utils.js";
 const WASM_INIT_QUERY = /\.wasm\?init$/;
 
 export const wasmInitPlugin = createPlugin("wasm-init", () => ({
+  vite: {
+    enforce: "pre",
+  },
   shared: {
     load: {
       filter: { id: WASM_INIT_QUERY },

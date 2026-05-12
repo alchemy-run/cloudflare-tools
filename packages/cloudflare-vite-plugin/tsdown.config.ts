@@ -49,16 +49,6 @@ export default defineConfig([
             const relativePathTs = path.relative(path.resolve("./src"), absolutePath);
             const relativePathMjs = relativePathTs.replace(/\.ts$/, ".mjs");
             const resolvedId = path.resolve("./workers", relativePathMjs);
-            console.log({
-              resolve: {
-                id,
-                importer,
-                absolutePath,
-                relativePathTs,
-                relativePathMjs,
-                resolvedId,
-              },
-            });
             return {
               id: resolvedId,
               external: "relative",

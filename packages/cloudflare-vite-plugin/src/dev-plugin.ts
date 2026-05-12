@@ -94,7 +94,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
                 DurableObjectNamespace.local("__DISTILLED_MODULE_RUNNER__", "ModuleRunnerDO"),
                 Json.binding("__DISTILLED_ENVIRONMENT__", {
                   environmentName: "ssr",
-                  entryId: options.main ?? "",
+                  entryId: vite.normalizePath(options.main ?? ""),
                   entryName: options.main ?? "",
                 }),
                 Loopback.binding(
@@ -132,8 +132,8 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       );
       console.log(`Server running at ${address}`);
       console.log("Server environments:", Object.keys(server.environments));
-      console.dir(server.environments, { depth: 1 });
       const environment = server.environments.ssr as DistilledDevEnvironment;
+      console.log("Environment:", environment);
       await environment.connect(address);
       const close = async () => {
         console.log("Server closed, shutting down");

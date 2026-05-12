@@ -26,6 +26,7 @@ export const cloudflareExternalsPlugin = createPlugin("cloudflare-externals", ()
       },
     },
     vite: {
+      enforce: "pre",
       configEnvironment(name) {
         if (name === "client") {
           // Some frameworks allow users to mix client and server code in the same file and then extract the server code.

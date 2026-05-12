@@ -34,35 +34,19 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
       },
       resolveId: {
         filter: { id: VIRTUAL_MODULE_REGEXP },
-        async handler(id, importer, options) {
+        handler(id) {
           if (
             id.startsWith(WORKER_ENTRY_PREFIX) ||
             id.startsWith(INJECT_PREFIX) ||
             id === EXPORT_TYPES_ID
           ) {
-            // oxlint-disable no-console
-            console.log("resolve", {
-              id,
-              real: id.slice(USER_ENTRY_PREFIX.length),
-              importer,
-              options,
-            });
             return { id };
           }
           if (id.startsWith(USER_ENTRY_PREFIX)) {
-            const resolved = await this.resolve(id.slice(USER_ENTRY_PREFIX.length), undefined, {
+            return this.resolve(id.slice(USER_ENTRY_PREFIX.length), undefined, {
               isEntry: true,
               kind: "import-statement",
             });
-            // oxlint-disable no-console
-            console.log("resolve", {
-              id,
-              real: id.slice(USER_ENTRY_PREFIX.length),
-              importer,
-              options,
-              resolved,
-            });
-            return resolved;
           }
         },
       },
@@ -71,9 +55,9 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
         handler(id) {
           if (id.startsWith(WORKER_ENTRY_PREFIX)) {
             const userEntryId = id.replace(WORKER_ENTRY_PREFIX, USER_ENTRY_PREFIX);
+
             return [
               ...inject(),
-              `console.log("hello from virtual modules");`,
               ...(options.exports
                 ? [`export { ${options.exports.join(", ")} } from "${userEntryId}";`]
                 : [

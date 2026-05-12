@@ -1,4 +1,3 @@
-import { nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
@@ -113,12 +112,6 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
               noDiscovery: false,
               ignoreOutdatedRequests: true,
               entries: pluginOptions.main ? vite.normalizePath(pluginOptions.main) : undefined,
-              exclude: [
-                ...nonPrefixedNodeModules,
-                ...nonPrefixedNodeModules.map((module) => `node:${module}`),
-                // New Node.js built-in modules are only published with the `node:` prefix.
-                ...["node:sea", "node:sqlite", "node:test", "node:test/reporters"],
-              ],
               ...(isRolldown
                 ? {
                     rolldownOptions: {

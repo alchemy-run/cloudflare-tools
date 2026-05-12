@@ -56,7 +56,6 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
             const userEntryId = id.replace(WORKER_ENTRY_PREFIX, USER_ENTRY_PREFIX);
             return [
               ...inject(),
-              `import { getExportTypes } from "${EXPORT_TYPES_ID}";`,
               ...(options.exports
                 ? [`export { ${options.exports.join(", ")} } from "${userEntryId}";`]
                 : [
@@ -65,6 +64,7 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
                     `export default userEntry.default ?? {};`,
                   ]),
               "if (import.meta.hot) {",
+              `  const getExportTypes = await import("${EXPORT_TYPES_ID}");`,
               "  import.meta.hot.accept((module) => {",
               "    const exportTypes = getExportTypes(module);",
               '    import.meta.hot.send("distilled-cloudflare:worker-export-types", exportTypes);',

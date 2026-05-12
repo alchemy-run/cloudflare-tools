@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Workerd from "../src/workerd/Workerd.ts";
 
-const services = Layer.provide(Workerd.layer, NodeServices.layer);
+const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
 layer(services)((it) => {
   it.effect("spawns a workerd process", () =>

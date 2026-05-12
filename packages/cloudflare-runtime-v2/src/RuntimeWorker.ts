@@ -1,14 +1,21 @@
-import type { ConfigHook } from "./ConfigBuilder.ts";
+import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
+import type { BindingHook } from "./PluginContext.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 
-export interface RuntimeWorker<E = never, R = never> {
+export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
-  readonly bindings: Array<ConfigHook<WorkerdConfig.Worker_Binding, E, R>>;
-  readonly modules: Array<Module>;
+  readonly bindings: B;
+  readonly modules: ReadonlyArray<Module>;
   readonly assets?: Assets;
+  readonly hyperdrives?: Record<string, HyperdriveOrigin>;
+  readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
 }
+
+export type BindingHooks = ReadonlyArray<BindingHook<any>>;
+
+export type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
 
 export type Module =
   | {
@@ -30,6 +37,12 @@ export interface Assets {
   notFoundHandling?: "none" | "404-page" | "single-page-application";
   runWorkerFirst?: Array<string> | boolean;
   serveDirectly?: boolean;
+}
+
+export interface DurableObjectNamespace {
+  className: string;
+  sql: boolean;
+  uniqueKey: string;
 }
 
 export const moduleToWorkerd = (module: Module): WorkerdConfig.Worker_Module => {

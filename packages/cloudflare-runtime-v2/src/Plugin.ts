@@ -1,30 +1,18 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import type * as Scope from "effect/Scope";
-import { ConfigBuilder, type ConfigHook } from "./ConfigBuilder.ts";
-import type { RuntimeWorker } from "./RuntimeWorker.ts";
+import { PluginContext, type ConfigHook } from "./PluginContext.js";
 import type * as WorkerdConfig from "./workerd/Config.ts";
-import type { ControlMessage } from "./workerd/Workerd.ts";
 
-export type AnyPlugin = Plugin<any>;
-
-export interface Plugin<Api = never> {
-  readonly defer?: boolean;
-  readonly config?:
-    | Configuration
-    | ((worker: RuntimeWorker, api: Api) => Effect.Effect<Configuration>);
-  readonly start?: (
-    controlMessage: Array<ControlMessage>,
-  ) => Effect.Effect<void, never, Scope.Scope>;
-  readonly api: [Api] extends [never] ? undefined : Api;
+export interface Plugin<Api = never> extends PluginConfig {
+  readonly api: Api;
+  readonly defer?: Effect.Effect<PluginConfig>;
 }
 
-export interface Configuration {
-  services?: Array<WorkerdConfig.Service>;
-  sockets?: Array<WorkerdConfig.Socket>;
-  extensions?: Array<WorkerdConfig.Extension>;
-  middlewares?: Array<Middleware>;
+export interface PluginConfig {
+  readonly services?: Array<WorkerdConfig.Service>;
+  readonly sockets?: Array<WorkerdConfig.Socket>;
+  readonly extensions?: Array<WorkerdConfig.Extension>;
+  readonly middlewares?: Array<Middleware>;
 }
 
 export interface Middleware {
@@ -32,62 +20,38 @@ export interface Middleware {
   worker: WorkerdConfig.Worker;
   upstreamBindingName: string;
 }
-type PluginEffect<Api> = Effect.Effect<Plugin<Api>, never, ConfigBuilder>;
-type ServiceClass<Self, Key extends string, Api> = Context.ServiceClass<
+
+export type PluginBuilder<Api = never> =
+  | PluginResult<Api>
+  | Effect.Effect<PluginResult<Api>, never, PluginContext>;
+
+export type PluginResult<Api> = [Api] extends [never] ? Omit<Plugin<Api>, "api"> : Plugin<Api>;
+
+export type PluginIdentifier<T extends string = string> = `cloudflare-runtime/plugin/${T}`;
+
+export type PluginService<
   Self,
-  Key,
-  PluginEffect<Api>
-> & {
-  Self: Self;
-  Api: Api;
-  Plugin: Plugin<Api>;
-  of: (plugin: Plugin<Api>) => Plugin<Api>;
+  Identifier extends PluginIdentifier,
+  Api = never,
+> = Context.ServiceClass<Self, Identifier, PluginBuilder<Api>> & {
+  readonly Self: Self;
+  readonly Plugin: Plugin<Api>;
 };
-type AnyServiceClass = ServiceClass<any, any, any>;
 
 export const Service =
   <Self, Api = never>() =>
-  <Identifier extends `plugin:${string}`>(
+  <Identifier extends PluginIdentifier>(
     identifier: Identifier,
-  ): ServiceClass<Self, Identifier, Api> =>
-    Context.Service<Self, PluginEffect<Api>>()(identifier) as ServiceClass<Self, Identifier, Api>;
+  ): PluginService<Self, Identifier, Api> =>
+    Context.Service<Self, PluginBuilder<Api>>()(identifier) as PluginService<Self, Identifier, Api>;
 
-export const effect = <E, R, P extends AnyServiceClass>(
-  plugin: P,
-  effect: Effect.Effect<P["Plugin"], E, R>,
-): Layer.Layer<P["Self"], E, R> =>
-  Layer.effect(
-    plugin,
-    Effect.gen(function* () {
-      const pluginInstance = yield* effect;
-      return Effect.gen(function* () {
-        const configBuilder = yield* ConfigBuilder;
-        yield* configBuilder.register<any>(plugin.key, { ...pluginInstance });
-        return pluginInstance;
-      });
-    }),
-  );
+export const use = <S extends PluginService<any, any, any>, A, E, R>(
+  plugin: S,
+  f: (plugin: S["Plugin"]) => Effect.Effect<A, E, R>,
+): ConfigHook<A, E, R | S["Self"]> =>
+  PluginContext.use((context) => context.get(plugin.key).pipe(Effect.flatMap(f)));
 
-export const sync = <P extends AnyServiceClass>(plugin: P, value: () => P["Plugin"]) =>
-  effect(plugin, Effect.sync(value));
-
-export const succeed = <P extends AnyServiceClass>(plugin: P, value: P["Plugin"]) =>
-  effect(plugin, Effect.succeed(value));
-
-export const use = <A, E, R, P extends AnyServiceClass>(
-  plugin: P,
-  use: (plugin: P["Plugin"]) => Effect.Effect<A, E, R>,
-): ConfigHook<A, E, R | P["Self"]> =>
-  Effect.gen(function* () {
-    const configBuilder = yield* ConfigBuilder;
-    const instance = yield* configBuilder.get<P["Plugin"]>(plugin.key);
-    if (!instance) {
-      return yield* Effect.die(new Error(`Plugin ${plugin.key} not found`));
-    }
-    return yield* use(instance);
-  });
-
-export const useSync = <A, P extends AnyServiceClass>(
-  plugin: P,
-  useSync: (plugin: P["Plugin"]) => A,
-): ConfigHook<A, never, P["Self"]> => use(plugin, (instance) => Effect.succeed(useSync(instance)));
+export const useSync = <S extends PluginService<any, any, any>, A>(
+  plugin: S,
+  f: (plugin: S["Plugin"]) => A,
+): ConfigHook<A, never, S["Self"]> => use(plugin, (plugin) => Effect.succeed(f(plugin)));

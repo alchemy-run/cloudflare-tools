@@ -1,0 +1,110 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import type * as Plugin from "./Plugin.ts";
+import { ConfigError } from "./RuntimeError.shared.ts";
+import type { RuntimeWorker } from "./RuntimeWorker.ts";
+import type * as WorkerdConfig from "./workerd/Config.ts";
+
+export class PluginContext extends Context.Service<
+  PluginContext,
+  {
+    readonly worker: RuntimeWorker;
+    readonly plugins: ReadonlyMap<
+      string,
+      Plugin.Plugin<any> | Effect.Effect<Plugin.Plugin<any>, never, PluginContext>
+    >;
+    readonly get: <P extends Plugin.Plugin<any>>(name: string) => Effect.Effect<P, ConfigError>;
+    readonly config: Effect.Effect<{
+      entry: string | undefined;
+      sockets: Array<WorkerdConfig.Socket>;
+      services: Array<WorkerdConfig.Service>;
+      extensions: Array<WorkerdConfig.Extension>;
+    }>;
+  }
+>()("cloudflare-runtime/PluginContext") {}
+
+export type ConfigHook<A, E, R> = Effect.Effect<A, E | ConfigError, R | PluginContext>;
+export type BindingHook<R = never> = ConfigHook<WorkerdConfig.Worker_Binding, never, R>;
+
+export const make = (worker: RuntimeWorker): Effect.Effect<PluginContext["Service"]> =>
+  Effect.gen(function* () {
+    const plugins = new Map<string, Plugin.Plugin<any>>();
+    const context = PluginContext.of({
+      worker,
+      plugins,
+      config: Effect.gen(function* () {
+        const configs = yield* Effect.forEach(
+          plugins.values(),
+          (plugin) =>
+            Effect.isEffect(plugin.defer)
+              ? plugin.defer.pipe(
+                  Effect.map((config) => ({ ...plugin, ...config })),
+                  Effect.provideService(PluginContext, context),
+                )
+              : Effect.succeed(plugin),
+          { concurrency: "unbounded" },
+        );
+        const services = configs.flatMap((config) => config.services ?? []);
+        const sockets = configs.flatMap((config) => config.sockets ?? []);
+        const extensions = configs.flatMap((config) => config.extensions ?? []);
+        const middlewares = configs.flatMap((config) => config.middlewares ?? []);
+        return {
+          entry: middlewares[0]?.name,
+          sockets,
+          extensions,
+          services: [
+            ...services,
+            ...middlewares.map((middleware, index) => ({
+              name: middleware.name,
+              worker: {
+                ...middleware.worker,
+                bindings: [
+                  ...(middleware.worker.bindings ?? []),
+                  {
+                    name: middleware.upstreamBindingName,
+                    service: {
+                      name: index < middlewares.length - 1 ? middlewares[index + 1].name : "user",
+                    },
+                  },
+                ],
+              },
+            })),
+          ],
+        };
+      }),
+      get: Effect.fn(function* (name: string) {
+        const plugin = plugins.get(name);
+        if (!plugin) {
+          return yield* new ConfigError({
+            subtag: "PluginNotFound",
+            message: `Plugin "${name}" not found`,
+            hint: `The plugin "${name}" is not registered in the current context.`,
+            detail: {
+              name,
+            },
+          });
+        }
+        return plugin as any;
+      }),
+    });
+    const effectContext = yield* Effect.context();
+    yield* Effect.forEach(effectContext.mapUnsafe, (entry) =>
+      Effect.gen(function* () {
+        if (!isPlugin(entry)) return;
+        const [key, builder] = entry;
+        const plugin = Effect.isEffect(builder)
+          ? yield* builder.pipe(Effect.provideService(PluginContext, context))
+          : builder;
+        plugins.set(key, plugin);
+      }),
+    );
+    return context;
+  });
+
+const isPlugin = <Identifier extends string>(
+  entry: [string, any],
+): entry is [Plugin.PluginIdentifier<Identifier>, Plugin.PluginBuilder<any>] =>
+  entry[0].startsWith("cloudflare-runtime/plugin/");
+
+export const use = PluginContext.use.bind(PluginContext);
+export const useSync = PluginContext.useSync.bind(PluginContext);

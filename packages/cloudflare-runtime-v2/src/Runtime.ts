@@ -2,30 +2,91 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
-import * as ConfigBuilder from "./ConfigBuilder.ts";
+import * as Internet from "./Internet.ts";
+import type { BindingHook } from "./PluginContext.ts";
+import * as PluginContext from "./PluginContext.ts";
+import * as LocalProxy from "./proxy/LocalProxy.ts";
 import type { RuntimeError } from "./RuntimeError.shared.ts";
-import type { RuntimeWorker } from "./RuntimeWorker.ts";
+import { moduleToWorkerd, type BindingHooks, type RuntimeWorker } from "./RuntimeWorker.ts";
+import * as Storage from "./Storage.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
 export class Runtime extends Context.Service<
   Runtime,
   {
-    readonly start: <E, R>(
-      worker: RuntimeWorker<E, R>,
-    ) => Effect.Effect<void, E | RuntimeError, R | Scope.Scope>;
+    readonly start: <B extends BindingHooks>(
+      worker: RuntimeWorker<B>,
+    ) => Effect.Effect<string, RuntimeError, BindingRequirements<B> | Scope.Scope>;
   }
 >()("cloudflare-runtime/Runtime") {}
+
+type BindingRequirements<B extends BindingHooks> =
+  B extends Array<never> ? never : B extends Array<BindingHook<infer R>> ? R : never;
 
 export const RuntimeLive = Layer.effect(
   Runtime,
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
+    const storage = yield* Storage.Storage;
+    const internet = yield* Internet.Internet;
+    const localProxy = yield* LocalProxy.LocalProxy;
 
     return Runtime.of({
       start: Effect.fn(function* (worker) {
-        const config = yield* ConfigBuilder.build(worker);
-        const result = yield* workerd.serve(config);
-        return result;
+        const context = yield* PluginContext.make(worker as RuntimeWorker);
+        const bindings = yield* Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
+          concurrency: "unbounded",
+        }).pipe(Effect.provideService(PluginContext.PluginContext, context));
+        const { entry, sockets, services, extensions } = yield* context.config;
+        const messages = yield* workerd.serve({
+          sockets: [
+            {
+              name: "http",
+              address: "127.0.0.1:0",
+              service: { name: entry ?? "user" },
+            },
+            ...sockets,
+          ],
+          services: [
+            {
+              name: "user",
+              worker: {
+                compatibilityDate: worker.compatibilityDate,
+                compatibilityFlags: worker.compatibilityFlags,
+                bindings,
+                modules: worker.modules.map(moduleToWorkerd),
+                durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
+                  className: namespace.className,
+                  enableSql: namespace.sql,
+                  uniqueKey: namespace.uniqueKey,
+                })),
+                durableObjectStorage: {
+                  localDisk: storage.name,
+                },
+              },
+            },
+            ...services,
+            storage,
+            internet,
+          ],
+          extensions,
+        });
+        const address = `http://localhost:${messages[0].port}`;
+        yield* localProxy.send({
+          _tag: "Local.Set",
+          worker: worker.name,
+          address,
+        });
+        yield* Effect.addFinalizer(() =>
+          localProxy
+            .send({
+              _tag: "Local.Unset",
+              worker: worker.name,
+              address,
+            })
+            .pipe(Effect.ignore),
+        );
+        return `${worker.name}.${localProxy.address}`;
       }),
     });
   }),

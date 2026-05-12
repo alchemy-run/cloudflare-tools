@@ -128,15 +128,14 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
 
 function wrapEntryInput(input: string | Array<string> | Record<string, string>) {
   const virtualEntryId = (id: string) => `${WORKER_ENTRY_PREFIX}${id}` as const;
-
   if (typeof input === "string") {
     return virtualEntryId(input);
   }
   if (Array.isArray(input)) {
-    return input.map(virtualEntryId);
+    return Object.fromEntries(input.map((key) => [key, virtualEntryId(key)]));
   }
   return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [virtualEntryId(key), value]),
+    Object.entries(input).map(([key, value]) => [key, virtualEntryId(value)]),
   );
 }
 
@@ -155,6 +154,11 @@ function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<st
     ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
       ? {
           "navigator.userAgent": '"Cloudflare-Workers"',
+        }
+      : {}),
+    ...(nodeEnv === "production"
+      ? {
+          "import.meta.hot": "false",
         }
       : {}),
   };

@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
@@ -53,6 +54,8 @@ export const RemoteBindingsLive = Layer.effect(
         const deploy = prefetched ? Fiber.join(prefetched) : remoteWorker.deploy(json);
         return yield* deploy.pipe(
           Effect.flatMap((result) => HttpServerResponse.json({ ok: true, result })),
+          Effect.tapCause((cause) => Effect.logError(Cause.pretty(cause))),
+          Effect.catch((error) => HttpServerResponse.json({ ok: false, error }, { status: 500 })),
         );
       }),
     );

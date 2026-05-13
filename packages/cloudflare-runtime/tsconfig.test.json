@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src", "test"],
+  "exclude": ["src/internal/workers.d.ts", "src/**/*.worker.ts"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/tsconfig.test.tsbuildinfo",
+    "outDir": ".cache/test",
+    "emitDeclarationOnly": true
+  }
+}

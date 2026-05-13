@@ -1,19 +1,15 @@
 import * as NodeHttp from "node:http";
 import * as vite from "vite";
-import { DistilledDevEnvironment } from "./dev-environment";
-import { createContext, startServer, type ServerContext, type ServerHandle } from "./dev-server";
-import type { CloudflareVitePluginOptions } from "./plugin";
-
-let context: ServerContext | undefined;
-let handle: ServerHandle | undefined;
-let isServerRestarting = false;
+import { DistilledDevEnvironment } from "./dev-environment.js";
+import { startServer, type ServerHandle } from "./dev-server.js";
+import type { CloudflareVitePluginOptions } from "./plugin.js";
 
 export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
+  let handle: ServerHandle | undefined;
+  let isServerRestarting = false;
   const close = async () => {
     await handle?.close();
     handle = undefined;
-    await context?.close();
-    context = undefined;
   };
   return {
     name: "distilled-cloudflare:dev",
@@ -59,8 +55,10 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
           isServerRestarting = false;
         }
       };
-      context = await createContext(options.server);
-      handle ??= await startServer(options, server, context);
+      if (!options.context) {
+        throw new Error("options.context is required for development");
+      }
+      handle ??= await startServer(options, server, options.context);
       const address = handle.address;
       const ssrEnvironment = server.environments.ssr;
       if (ssrEnvironment instanceof DistilledDevEnvironment) {

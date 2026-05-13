@@ -12,8 +12,9 @@ import {
 import type {
   BindingHooks,
   DurableObjectNamespace,
-  RuntimeConfig,
+  RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
+import type { Context } from "effect";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.js";
 
@@ -22,7 +23,7 @@ export interface CloudflareVitePluginOptions<
 > extends CloudflarePluginOptions {
   durableObjectNamespaces?: Array<DurableObjectNamespace>;
   bindings?: B;
-  server?: RuntimeConfig;
+  context?: Context.Context<RuntimeServices>;
 }
 
 export default function cloudflareVitePlugin(

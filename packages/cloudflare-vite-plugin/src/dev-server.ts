@@ -1,19 +1,16 @@
-import type { BindingHooks, Module, RuntimeConfig } from "@distilled.cloud/cloudflare-runtime";
-import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
+import type { BindingHooks, Module, RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
+import { Runtime } from "@distilled.cloud/cloudflare-runtime";
 import {
   DurableObjectNamespace,
   Json,
   Loopback,
   UnsafeEval,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
-import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -23,36 +20,16 @@ import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin";
 
-export type ServerContext = Awaited<ReturnType<typeof createContext>>;
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
-
-export const createContext = async (
-  config: RuntimeConfig = {
-    server: { port: 1337, host: "localhost" },
-    api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "", credentials: Credentials.fromEnv() },
-  },
-) => {
-  const scope = Scope.makeUnsafe();
-  const context = await layerRuntime(config).pipe(
-    Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
-    Layer.buildWithScope(scope),
-    Effect.runPromise,
-  );
-  return {
-    context,
-    scope,
-    close: () => closeScope(scope),
-  };
-};
 
 export const startServer = async <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
   server: vite.ViteDevServer,
-  context: ServerContext,
+  context: Context.Context<RuntimeServices>,
 ) => {
-  const scope = Scope.forkUnsafe(context.scope);
+  const scope = Scope.makeUnsafe();
   const address = await serve(options, server).pipe(
-    Effect.provide(context.context),
+    Effect.provide(context),
     Scope.provide(scope),
     Effect.runPromise,
   );

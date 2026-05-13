@@ -44,9 +44,10 @@ await main.pipe(
   Effect.provide(
     RuntimeServices.layerRuntime({
       server: { port: 0, host: "localhost" },
-      api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, credentials: Credentials.fromEnv() },
+      api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! },
     }),
   ),
+  Effect.provide(Credentials.fromEnv()),
   Effect.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   Effect.scoped,
   Effect.runPromise,

@@ -1,4 +1,3 @@
-import type * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as Layer from "effect/Layer";
 import { Assets, Hyperdrive } from "./bindings/index.ts";
 import * as Globals from "./globals/Globals.ts";
@@ -24,17 +23,15 @@ export interface HttpServerConfig {
 
 export interface ApiConfig {
   accountId: string;
-  credentials: Layer.Layer<Credentials.Credentials>;
 }
 
 export interface StorageConfig {
   directory: string;
 }
 
-export const layerRemoteBindings = ({ accountId, credentials }: ApiConfig) =>
+export const layerRemoteBindings = ({ accountId }: ApiConfig) =>
   RemoteBindings.RemoteBindingsLive.pipe(
     Layer.provide(RemoteWorker.layer(accountId)),
-    Layer.provide(credentials),
     Layer.provide(Access.layer),
   );
 
@@ -46,6 +43,14 @@ export const layerLoopback = () =>
 
 export const layerLocalBindings = () =>
   Layer.mergeAll(Assets.AssetsLive, Hyperdrive.HyperdriveLive);
+
+export type BindingServices =
+  | Assets.Assets
+  | Loopback.Loopback
+  | Hyperdrive.Hyperdrive
+  | RemoteBindings.RemoteBindings;
+
+export type RuntimeServices = Runtime.Runtime | BindingServices;
 
 export const layerRuntime = (config: RuntimeConfig) =>
   Runtime.RuntimeLive.pipe(

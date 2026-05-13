@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Globals from "./globals/Globals.ts";
 import type * as Plugin from "./Plugin.ts";
 import { ConfigError } from "./RuntimeError.shared.ts";
 import type { RuntimeWorker } from "./RuntimeWorker.ts";
@@ -32,7 +31,8 @@ export type BindingHook<R = never> = ConfigHook<WorkerdConfig.Worker_Binding, ne
 
 export const make = (
   worker: RuntimeWorker,
-): Effect.Effect<PluginContext["Service"], never, Globals.Globals> =>
+  inheritedPlugins?: PluginMap,
+): Effect.Effect<PluginContext["Service"], ConfigError> =>
   Effect.gen(function* () {
     const plugins = new Map<string, Plugin.Plugin<any>>();
     const context = PluginContext.of({
@@ -93,11 +93,13 @@ export const make = (
         return plugin as any;
       }),
     });
-    const effectContext = yield* Effect.context();
-    yield* Effect.forEach(effectContext.mapUnsafe, (entry) =>
+    const pluginMap: PluginMap = inheritedPlugins ?? new Map();
+    const pluginsFromContext = yield* pickPluginsFromContext();
+    for (const [key, builder] of pluginsFromContext.entries()) {
+      pluginMap.set(key, builder);
+    }
+    yield* Effect.forEach(pluginMap.entries(), ([key, builder]) =>
       Effect.gen(function* () {
-        if (!isPlugin(entry)) return;
-        const [key, builder] = entry;
         const plugin = Effect.isEffect(builder)
           ? yield* builder.pipe(Effect.provideService(PluginContext, context))
           : builder;
@@ -106,6 +108,13 @@ export const make = (
     );
     return context;
   });
+
+export type PluginMap = Map<Plugin.PluginIdentifier<string>, Plugin.PluginBuilder<any>>;
+
+export const pickPluginsFromContext = <R = never>() =>
+  Effect.context<R>().pipe(
+    Effect.map((context): PluginMap => new Map(context.mapUnsafe.entries().filter(isPlugin))),
+  );
 
 const isPlugin = <Identifier extends string>(
   entry: [string, any],

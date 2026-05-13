@@ -44,7 +44,7 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
           }
           if (id.startsWith(USER_ENTRY_PREFIX)) {
             return this.resolve(id.slice(USER_ENTRY_PREFIX.length), undefined, {
-              isEntry: false,
+              isEntry: true,
               kind: "import-statement",
             });
           }

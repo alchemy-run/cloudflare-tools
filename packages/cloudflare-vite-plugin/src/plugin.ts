@@ -9,12 +9,20 @@ import {
   virtualModulesPlugin,
   wasmInitPlugin,
 } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
-import type { DurableObjectNamespace } from "@distilled.cloud/cloudflare-runtime";
+import type {
+  BindingHooks,
+  DurableObjectNamespace,
+  RuntimeConfig,
+} from "@distilled.cloud/cloudflare-runtime";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.js";
 
-export interface CloudflareVitePluginOptions extends CloudflarePluginOptions {
+export interface CloudflareVitePluginOptions<
+  B extends BindingHooks = BindingHooks,
+> extends CloudflarePluginOptions {
   durableObjectNamespaces?: Array<DurableObjectNamespace>;
+  bindings?: B;
+  server?: RuntimeConfig;
 }
 
 export default function cloudflareVitePlugin(

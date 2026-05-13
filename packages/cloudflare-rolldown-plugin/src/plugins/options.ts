@@ -57,12 +57,6 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
         pluginOptions,
         process.env.NODE_ENV || userConfig.mode || "production",
       );
-      // oxlint-disable no-console
-      console.log("Config:", {
-        input,
-        rollupOptions,
-        define,
-      });
       return {
         appType: "custom",
         ssr: {
@@ -73,7 +67,6 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
         },
         builder: {
           buildApp: async (app) => {
-            console.log(app.environments);
             await app.build(app.environments.ssr);
             await app.build(app.environments.client);
           },
@@ -154,10 +147,6 @@ function wrapEntryInput(input: string | Array<string> | Record<string, string>) 
   if (Array.isArray(input)) {
     return Object.fromEntries(input.map((key) => [key, virtualEntryId(key)]));
   }
-  // oxlint-disable no-console
-  console.log("wrapEntryInput", {
-    input,
-  });
   return Object.fromEntries(
     Object.entries(input).map(([key, value]) => [key, virtualEntryId(value)]),
   );

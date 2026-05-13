@@ -58,6 +58,7 @@ export const WorkerdLive = Layer.effect(
           stdout: "inherit",
           stderr: "pipe",
           additionalFds: { fd3: { type: "output" } },
+          detached: false,
         },
       ).pipe(
         spawner.spawn,
@@ -75,8 +76,13 @@ export const WorkerdLive = Layer.effect(
     return Workerd.of({
       compatibilityDate: workerd.compatibilityDate,
       serve: Effect.fn("Workerd.serve")(function* (config, args) {
-        const handle = yield* Effect.acquireRelease(spawn(config, args), (handle) =>
-          Effect.ignore(handle.kill({ killSignal: "SIGKILL" })),
+        const handle = yield* spawn(config, args);
+        // const unregister = exitHook(() => process.kill(handle.pid, "SIGKILL"));
+        yield* Effect.addFinalizer(() =>
+          handle.kill({ killSignal: "SIGKILL" }).pipe(
+            // Effect.tap(() => Effect.sync(unregister)),
+            Effect.ignore,
+          ),
         );
 
         const count =

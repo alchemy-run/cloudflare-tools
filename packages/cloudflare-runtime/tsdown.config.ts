@@ -149,13 +149,13 @@ function workerExportsPlugin(): Plugin {
     },
     async writeBundle(options, bundle) {
       assert(options.dir, "Missing output directory");
-      const workerModulePath = path.resolve("dist/WorkerModule.mjs");
+      const workerModulePath = path.resolve("dist/RuntimeWorker.mjs");
       for (const [fileName, chunk] of Object.entries(bundle)) {
         const typesPath = path.resolve(options.dir, fileName.replace(/\.mjs$/, ".d.mts"));
         const importPath = path.relative(path.dirname(typesPath), workerModulePath);
         const code =
           chunk.type === "chunk" && chunk.isEntry
-            ? `import type { WorkerModule } from "${importPath}";\n\nexport const modules: [WorkerModule, ...WorkerModule[]];`
+            ? `import type { Module } from "${importPath}";\n\nexport const modules: [Module, ...Module[]];`
             : `declare const code: string;\nexport default code;\n`;
         await this.fs.writeFile(typesPath, code);
       }

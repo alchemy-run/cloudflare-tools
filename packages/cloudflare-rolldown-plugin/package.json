@@ -43,6 +43,10 @@
     "./options": {
       "types": "./dist/options.d.ts",
       "import": "./dist/options.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js"
     }
   },
   "publishConfig": {

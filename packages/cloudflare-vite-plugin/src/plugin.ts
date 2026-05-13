@@ -14,7 +14,7 @@ import type {
   DurableObjectNamespace,
   RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
-import type { Context } from "effect";
+import type * as Context from "effect/Context";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.js";
 

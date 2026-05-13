@@ -14,7 +14,7 @@ import * as Scope from "effect/Scope";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as vite from "vite";
+import type * as vite from "vite";
 import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker.ts";
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
@@ -24,11 +24,15 @@ export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
 export const startServer = async <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
+  entry: {
+    id: string;
+    name: string;
+  },
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices>,
 ) => {
   const scope = Scope.makeUnsafe();
-  const address = await serve(options, server).pipe(
+  const address = await serve(options, entry, server).pipe(
     Effect.provide(context),
     Scope.provide(scope),
     Effect.runPromise,
@@ -45,6 +49,10 @@ const closeScope = async (scope: Scope.Scope) => {
 
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
+  entry: {
+    id: string;
+    name: string;
+  },
   server: vite.ViteDevServer,
 ) {
   const runtime = yield* Runtime;
@@ -58,8 +66,8 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       DurableObjectNamespace.local("__DISTILLED_MODULE_RUNNER__", "ModuleRunnerDO"),
       Json.binding("__DISTILLED_ENVIRONMENT__", {
         environmentName: "ssr",
-        entryId: vite.normalizePath(options.main ?? ""),
-        entryName: options.main ?? "",
+        entryId: entry.id,
+        entryName: entry.name,
       }),
       Loopback.binding(
         "__DISTILLED_INVOKE_MODULE__",

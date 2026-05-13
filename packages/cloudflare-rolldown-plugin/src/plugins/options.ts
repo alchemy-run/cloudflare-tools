@@ -32,135 +32,154 @@ const DEFAULT_RESOLVE_EXTENSIONS = [
 
 const TARGET = "es2024";
 
-export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
-  rolldown: {
-    options(options) {
-      options.input = wrapEntryInput(pluginOptions.main ?? options.input ?? {});
-      options.preserveEntrySignatures ??= "strict";
-      options.platform ??= "neutral";
-      options.resolve ??= {};
-      options.resolve.conditionNames ??= [...getConditions(pluginOptions), "production"];
-      options.resolve.mainFields ??= getMainFields(pluginOptions);
-      options.resolve.extensions ??= DEFAULT_RESOLVE_EXTENSIONS;
-      options.transform ??= {};
-      options.transform.target ??= TARGET;
-      options.transform.define ??= {};
-      Object.assign(options.transform.define, getDefine(pluginOptions, "production"));
-      return options;
+export interface OptionsApi {
+  input: () => Record<string, string>;
+}
+
+export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (pluginOptions) => {
+  let input: Record<string, string> = {};
+  return {
+    shared: {
+      api: {
+        input: () => input,
+      },
     },
-  },
-  vite: {
-    async config(userConfig) {
-      const vite = await import("vite");
-      const isRolldown = "rolldownVersion" in this.meta;
-      const input =
-        pluginOptions.main ??
-        userConfig.environments?.ssr?.build?.rolldownOptions?.input ??
-        userConfig.environments?.ssr?.build?.rollupOptions?.input;
-      const rollupOptions: vite.Rollup.RollupOptions = {
-        input: wrapEntryInput(input ?? {}),
-        preserveEntrySignatures: "strict",
-      };
-      const define = getDefine(
-        pluginOptions,
-        process.env.NODE_ENV || userConfig.mode || "production",
-      );
-      const conditions = getConditions(pluginOptions);
-      const mainFields = getMainFields(pluginOptions);
-      return {
-        appType: "custom",
-        ssr: {
-          noExternal: true,
-          resolve: {
-            conditions: [...conditions, "development|production"],
-          },
-        },
-        builder: {
-          buildApp: async (app) => {
-            await app.build(app.environments.ssr);
-            await app.build(app.environments.client);
-          },
-        },
-        environments: {
-          client: {
-            build: {
-              outDir: getOutputDirectory(userConfig, "client"),
-            },
-          },
+    rolldown: {
+      options(options) {
+        input = normalizeInput(pluginOptions.main ?? options.input ?? {});
+        options.input = wrapInput(input);
+        options.preserveEntrySignatures ??= "strict";
+        options.platform ??= "neutral";
+        options.resolve ??= {};
+        options.resolve.conditionNames ??= [...getConditions(pluginOptions), "production"];
+        options.resolve.mainFields ??= getMainFields(pluginOptions);
+        options.resolve.extensions ??= DEFAULT_RESOLVE_EXTENSIONS;
+        options.transform ??= {};
+        options.transform.target ??= TARGET;
+        options.transform.define ??= {};
+        Object.assign(options.transform.define, getDefine(pluginOptions, "production"));
+        return options;
+      },
+    },
+    vite: {
+      async config(userConfig) {
+        const vite = await import("vite");
+        const isRolldown = "rolldownVersion" in this.meta;
+        input = normalizeInput(
+          pluginOptions.main ??
+            userConfig.environments?.ssr?.build?.rolldownOptions?.input ??
+            userConfig.environments?.ssr?.build?.rollupOptions?.input ??
+            {},
+        );
+        const rollupOptions: vite.Rollup.RollupOptions = {
+          input: wrapInput(input),
+          preserveEntrySignatures: "strict",
+        };
+        const define = getDefine(
+          pluginOptions,
+          process.env.NODE_ENV || userConfig.mode || "production",
+        );
+        const conditions = getConditions(pluginOptions);
+        const mainFields = getMainFields(pluginOptions);
+        return {
+          appType: "custom",
           ssr: {
+            noExternal: true,
             resolve: {
-              noExternal: true,
               conditions: [...conditions, "development|production"],
             },
-            build: {
-              ssr: true,
-              target: TARGET,
-              emitAssets: true,
-              copyPublicDir: false,
-              outDir: getOutputDirectory(userConfig, "ssr"),
-              ...(isRolldown
-                ? {
-                    rolldownOptions: {
-                      ...rollupOptions,
-                      platform: "neutral",
-                      resolve: {
-                        mainFields,
-                        extensions: DEFAULT_RESOLVE_EXTENSIONS,
-                      },
-                    },
-                  }
-                : { rollupOptions }),
+          },
+          builder: {
+            buildApp: async (app) => {
+              await app.build(app.environments.ssr);
+              await app.build(app.environments.client);
             },
-            optimizeDeps: {
-              noDiscovery: false,
-              ignoreOutdatedRequests: true,
-              entries: pluginOptions.main ? vite.normalizePath(pluginOptions.main) : undefined,
-              ...(isRolldown
-                ? {
-                    rolldownOptions: {
-                      platform: "neutral",
-                      resolve: {
-                        conditionNames: [...conditions, "development|production"],
-                        mainFields,
-                        extensions: DEFAULT_RESOLVE_EXTENSIONS,
+          },
+          environments: {
+            client: {
+              build: {
+                outDir: getOutputDirectory(userConfig, "client"),
+              },
+            },
+            ssr: {
+              resolve: {
+                noExternal: true,
+                conditions: [...conditions, "development|production"],
+              },
+              build: {
+                ssr: true,
+                target: TARGET,
+                emitAssets: true,
+                copyPublicDir: false,
+                outDir: getOutputDirectory(userConfig, "ssr"),
+                ...(isRolldown
+                  ? {
+                      rolldownOptions: {
+                        ...rollupOptions,
+                        platform: "neutral",
+                        resolve: {
+                          mainFields,
+                          extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                        },
                       },
-                      transform: {
+                    }
+                  : { rollupOptions }),
+              },
+              optimizeDeps: {
+                noDiscovery: false,
+                ignoreOutdatedRequests: true,
+                entries: pluginOptions.main ? vite.normalizePath(pluginOptions.main) : undefined,
+                ...(isRolldown
+                  ? {
+                      rolldownOptions: {
+                        platform: "neutral",
+                        resolve: {
+                          conditionNames: [...conditions, "development|production"],
+                          mainFields,
+                          extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                        },
+                        transform: {
+                          target: TARGET,
+                          define,
+                        },
+                      },
+                    }
+                  : {
+                      esbuildOptions: {
+                        platform: "neutral",
+                        conditions: [...conditions, "development|production"],
+                        resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
+                        mainFields,
                         target: TARGET,
                         define,
                       },
-                    },
-                  }
-                : {
-                    esbuildOptions: {
-                      platform: "neutral",
-                      conditions: [...conditions, "development|production"],
-                      resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
-                      mainFields,
-                      target: TARGET,
-                      define,
-                    },
-                  }),
+                    }),
+              },
+              keepProcessEnv: true,
             },
-            keepProcessEnv: true,
           },
-        },
-      };
+        };
+      },
     },
-  },
-}));
+  };
+});
 
-function wrapEntryInput(input: string | Array<string> | Record<string, string>) {
-  const virtualEntryId = (id: string) => `${WORKER_ENTRY_PREFIX}${id}` as const;
+const normalizeInput = (
+  input: string | Array<string> | Record<string, string>,
+): Record<string, string> => {
   if (typeof input === "string") {
-    return { [path.parse(input).name || "index"]: virtualEntryId(input) };
+    return { [path.parse(input).name || "index"]: input };
+  } else if (Array.isArray(input)) {
+    return Object.fromEntries(input.map((p) => [path.parse(p).name, p]));
+  } else {
+    return input;
   }
-  if (Array.isArray(input)) {
-    return Object.fromEntries(input.map((p) => [path.parse(p).name, virtualEntryId(p)]));
-  }
-  return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [key, virtualEntryId(value)]),
+};
+
+const wrapInput = (input: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(input).map(([key, id]) => [key, `${WORKER_ENTRY_PREFIX}${id}` as const]),
   );
-}
 
 function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<string, string> {
   return {

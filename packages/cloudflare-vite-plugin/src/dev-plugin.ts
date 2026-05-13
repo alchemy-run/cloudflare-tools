@@ -1,3 +1,5 @@
+import type { OptionsApi } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
+import { resolvePluginApi } from "@distilled.cloud/cloudflare-rolldown-plugin/utils";
 import * as NodeHttp from "node:http";
 import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
@@ -11,8 +13,12 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
     await handle?.close();
     handle = undefined;
   };
+  let optionsApi: OptionsApi | undefined;
   return {
     name: "distilled-cloudflare:dev",
+    configResolved({ plugins }) {
+      optionsApi = resolvePluginApi<OptionsApi>(plugins ?? [], "distilled-cloudflare:options");
+    },
     config() {
       return {
         environments: {
@@ -58,7 +64,15 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       if (!options.context) {
         throw new Error("options.context is required for development");
       }
-      handle ??= await startServer(options, server, options.context);
+      if (!optionsApi) {
+        throw new Error("Cannot resolve the cloudflare-runtime:options plugin");
+      }
+      const input = Object.entries(optionsApi.input());
+      if (input.length !== 1) {
+        throw new Error("Expected exactly one entry in the input");
+      }
+      const [name, id] = input[0];
+      handle ??= await startServer(options, { id, name }, server, options.context);
       const address = handle.address;
       const ssrEnvironment = server.environments.ssr;
       if (ssrEnvironment instanceof DistilledDevEnvironment) {

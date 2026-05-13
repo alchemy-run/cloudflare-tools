@@ -25,12 +25,6 @@ const callbacks = {
  * Retrieves a specific export from a Worker entry module using the module runner.
  */
 export async function getWorkerEntryExport<T>(env: Env, exportName: string): Promise<T> {
-  // oxlint-disable no-console
-  console.log("Getting worker entry export:", {
-    exportName,
-    environmentName: env.__DISTILLED_ENVIRONMENT__.environmentName,
-    entryId: env.__DISTILLED_ENVIRONMENT__.entryId,
-  });
   const module = await globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__(
     env.__DISTILLED_ENVIRONMENT__.environmentName,
     env.__DISTILLED_ENVIRONMENT__.entryId,
@@ -61,11 +55,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
       throw new Error(`Invalid path: ${pathname}`);
     }
     globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__ = async (environmentName: string, id: string) => {
-      // oxlint-disable no-console
-      console.log("__VITE_ENVIRONMENT_RUNNER_IMPORT__", {
-        environmentName,
-        id,
-      });
       const moduleRunner = this.moduleRunners.get(environmentName);
       if (!moduleRunner) {
         throw new Error(`Module runner not initialized for environment: "${environmentName}"`);
@@ -126,11 +115,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
             // This is because `import.meta.send` may be called within a Worker's request context.
             // Directly using a WebSocket created in another context would be forbidden.
             const stub = env.__DISTILLED_MODULE_RUNNER__.get("singleton");
-            // oxlint-disable no-console
-            console.log("Send data:", {
-              data,
-              environmentName,
-            });
             stub.send(environmentName, JSON.stringify(data));
           },
           invoke: async (data) => {
@@ -165,8 +149,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
           // vite-plus) cannot swallow the closing brace.
           const code = `"use strict";async (${Object.keys(context).join(",")})=>{${transformed}\n}`;
           const fn = env.__DISTILLED_UNSAFE_EVAL__.eval(code, module.id);
-          // oxlint-disable no-console
-          console.log(`Running inlined module: ${module.id}`);
           await fn(...Object.values(context));
           Object.seal(context[ssrModuleExportsKey]);
         },
@@ -179,12 +161,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
             });
           }
 
-          try {
-            return await import(filepath);
-          } catch (error) {
-            console.error(`Error importing module: ${filepath}`, error);
-            throw error;
-          }
+          return await import(filepath);
         },
       },
     );

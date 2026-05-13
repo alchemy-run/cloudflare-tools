@@ -1,4 +1,3 @@
-// oxlint-disable no-console
 import { MODULE_RULES } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import assert from "node:assert";
 import * as vite from "vite";

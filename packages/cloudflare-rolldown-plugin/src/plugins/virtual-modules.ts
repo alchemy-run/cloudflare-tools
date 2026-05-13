@@ -1,5 +1,5 @@
-import type { Plugin } from "rolldown";
 import { createPlugin } from "../factory.js";
+import { resolvePluginApi } from "../utils.js";
 import type { UnenvApi } from "./nodejs-compat.js";
 
 // oxlint-disable-next-line no-control-regex
@@ -27,10 +27,7 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
     },
     shared: {
       buildStart({ plugins }) {
-        unenvApi = plugins.find(
-          (plugin): plugin is Plugin<UnenvApi> =>
-            "name" in plugin && plugin.name === "distilled-cloudflare:nodejs-unenv",
-        )?.api;
+        unenvApi = resolvePluginApi<UnenvApi>(plugins, "distilled-cloudflare:nodejs-unenv");
       },
       resolveId: {
         filter: { id: VIRTUAL_MODULE_REGEXP },

@@ -1,10 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["bun.lock", "tsconfig.base.json"],
+  "ui": "tui",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".cache/**/*.tsbuildinfo"]
+    },
+    "dev": {
+      "persistent": true,
+      "cache": false
     },
     "format": {
       "cache": false

@@ -11,3 +11,10 @@ export function hasNodejsCompat(flags?: ReadonlyArray<string>): boolean {
 export function hasNodejsAls(flags?: ReadonlyArray<string>): boolean {
   return flags?.some((flag) => flag === "nodejs_als") ?? false;
 }
+
+export function resolvePluginApi<Api>(plugins: ReadonlyArray<unknown>, name: string) {
+  return plugins.find(
+    (plugin): plugin is { name: string; api: Api } =>
+      typeof plugin === "object" && plugin !== null && "name" in plugin && plugin.name === name,
+  )?.api;
+}

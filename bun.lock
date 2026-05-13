@@ -76,8 +76,11 @@
       },
       "devDependencies": {
         "@cloudflare/vite-plugin": "^1.36.4",
+        "@distilled.cloud/cloudflare": "catalog:",
+        "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
         "@distilled.cloud/test-utils": "workspace:*",
+        "@effect/platform-node": "catalog:effect",
         "@playwright/test": "catalog:",
         "@tailwindcss/typography": "^0.5.16",
         "@tanstack/devtools-vite": "latest",
@@ -85,12 +88,13 @@
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "@vitejs/plugin-react": "^5.1.4",
+        "effect": "catalog:effect",
         "vite": "catalog:",
       },
     },
     "packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.4.1-beta.2",
+      "version": "0.4.1-beta.5",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -111,7 +115,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.4.1-beta.2",
+      "version": "0.4.1-beta.5",
       "dependencies": {
         "workerd": "catalog:workers",
       },
@@ -140,7 +144,7 @@
     },
     "packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.4.1-beta.2",
+      "version": "0.4.1-beta.5",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },

@@ -5,9 +5,17 @@ import type { CloudflarePluginOptions } from "../options.js";
 import { hasNodejsCompat } from "../utils.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
-const DEFAULT_CONDITIONS = ["workerd", "worker", "module", "browser"];
+function getConditions(options: CloudflarePluginOptions): Array<string> {
+  return hasNodejsCompat(options.compatibilityFlags)
+    ? ["workerd", "worker", "node", "module"]
+    : ["workerd", "worker", "module", "browser"];
+}
 
-const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "jsnext:main", "jsnext"];
+function getMainFields(options: CloudflarePluginOptions): Array<string> {
+  return hasNodejsCompat(options.compatibilityFlags)
+    ? ["module", "main", "jsnext:main", "jsnext"]
+    : ["browser", "module", "jsnext:main", "jsnext"];
+}
 
 const DEFAULT_RESOLVE_EXTENSIONS = [
   ".mjs",
@@ -31,8 +39,8 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
       options.preserveEntrySignatures ??= "strict";
       options.platform ??= "neutral";
       options.resolve ??= {};
-      options.resolve.conditionNames ??= [...DEFAULT_CONDITIONS, "production"];
-      options.resolve.mainFields ??= DEFAULT_RESOLVE_MAIN_FIELDS;
+      options.resolve.conditionNames ??= [...getConditions(pluginOptions), "production"];
+      options.resolve.mainFields ??= getMainFields(pluginOptions);
       options.resolve.extensions ??= DEFAULT_RESOLVE_EXTENSIONS;
       options.transform ??= {};
       options.transform.target ??= TARGET;
@@ -57,12 +65,14 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
         pluginOptions,
         process.env.NODE_ENV || userConfig.mode || "production",
       );
+      const conditions = getConditions(pluginOptions);
+      const mainFields = getMainFields(pluginOptions);
       return {
         appType: "custom",
         ssr: {
           noExternal: true,
           resolve: {
-            conditions: [...DEFAULT_CONDITIONS, "development|production"],
+            conditions: [...conditions, "development|production"],
           },
         },
         builder: {
@@ -80,7 +90,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
           ssr: {
             resolve: {
               noExternal: true,
-              conditions: [...DEFAULT_CONDITIONS, "development|production"],
+              conditions: [...conditions, "development|production"],
             },
             build: {
               ssr: true,
@@ -94,7 +104,7 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                       ...rollupOptions,
                       platform: "neutral",
                       resolve: {
-                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                        mainFields,
                         extensions: DEFAULT_RESOLVE_EXTENSIONS,
                       },
                     },
@@ -110,8 +120,8 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                     rolldownOptions: {
                       platform: "neutral",
                       resolve: {
-                        conditionNames: [...DEFAULT_CONDITIONS, "development|production"],
-                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                        conditionNames: [...conditions, "development|production"],
+                        mainFields,
                         extensions: DEFAULT_RESOLVE_EXTENSIONS,
                       },
                       transform: {
@@ -123,9 +133,9 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
                 : {
                     esbuildOptions: {
                       platform: "neutral",
-                      conditions: [...DEFAULT_CONDITIONS, "development|production"],
+                      conditions: [...conditions, "development|production"],
                       resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
-                      mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                      mainFields,
                       target: TARGET,
                       define,
                     },
@@ -142,10 +152,10 @@ export const optionsPlugin = createPlugin("options", (pluginOptions) => ({
 function wrapEntryInput(input: string | Array<string> | Record<string, string>) {
   const virtualEntryId = (id: string) => `${WORKER_ENTRY_PREFIX}${id}` as const;
   if (typeof input === "string") {
-    return { main: virtualEntryId(input) };
+    return { [path.parse(input).name || "index"]: virtualEntryId(input) };
   }
   if (Array.isArray(input)) {
-    return Object.fromEntries(input.map((key) => [key, virtualEntryId(key)]));
+    return Object.fromEntries(input.map((p) => [path.parse(p).name, virtualEntryId(p)]));
   }
   return Object.fromEntries(
     Object.entries(input).map(([key, value]) => [key, virtualEntryId(value)]),

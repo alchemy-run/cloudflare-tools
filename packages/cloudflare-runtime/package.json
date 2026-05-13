@@ -117,6 +117,6 @@
   "inlinedDependencies": {
     "capnp-es": "0.0.14",
     "capnweb": "0.7.0",
-    "effect": "4.0.0-beta.60"
+    "effect": "4.0.0-beta.66"
   }
 }

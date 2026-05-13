@@ -43,7 +43,7 @@ export default function cloudflareVitePlugin(
       config() {
         return { rsc: { serverHandler: false } } as vite.UserConfig;
       },
-    },
+    } as vite.Plugin,
     dev(options),
   ];
 }

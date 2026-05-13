@@ -67,9 +67,7 @@ export const layer = Layer.effect(
       );
 
     const getEnv = (name: string) =>
-      Config.string(name)
-        .asEffect()
-        .pipe(Effect.catchTag("ConfigError", () => Effect.succeed(undefined)));
+      Config.string(name).pipe(Effect.catchTag("ConfigError", () => Effect.succeed(undefined)));
 
     return Access.of({
       getAccessHeaders: Effect.fn(function* (domain) {

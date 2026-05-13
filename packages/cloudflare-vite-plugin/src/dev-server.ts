@@ -26,32 +26,13 @@ import type { CloudflareVitePluginOptions } from "./plugin";
 export type ServerContext = Awaited<ReturnType<typeof createContext>>;
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
-const scope = Scope.makeUnsafe();
-
-process.on("SIGINT", async () => {
-  // oxlint-disable-next-line no-console
-  console.log("[SIGINT] Closing scopes");
-  await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
-  // oxlint-disable-next-line no-console
-  console.log("[SIGINT] Exiting");
-  process.exit(0);
-});
-
-process.on("SIGTERM", async () => {
-  // oxlint-disable-next-line no-console
-  console.log("[SIGTERM] Closing scopes");
-  await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
-  // oxlint-disable-next-line no-console
-  console.log("[SIGTERM] Exiting");
-  process.exit(0);
-});
-
 export const createContext = async (
   config: RuntimeConfig = {
     server: { port: 1337, host: "localhost" },
     api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "", credentials: Credentials.fromEnv() },
   },
 ) => {
+  const scope = Scope.makeUnsafe();
   const context = await layerRuntime(config).pipe(
     Layer.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
     Layer.buildWithScope(scope),

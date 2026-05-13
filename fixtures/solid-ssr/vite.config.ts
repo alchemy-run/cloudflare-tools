@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [
     devtools(),
     solidPlugin(),
-    cloudflare({ compatibilityFlags: ["nodejs_als"] }) as PluginOption,
+    cloudflare({ main: "./src/server.ts", compatibilityFlags: ["nodejs_als"] }) as PluginOption,
   ],
   server: {
     port: 3000,

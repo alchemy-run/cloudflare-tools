@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-vite-plugin",
-  "version": "0.3.0",
+  "version": "0.4.1-beta.5",
   "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/cloudflare-vite-plugin#readme",
   "bugs": {
     "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
@@ -43,8 +43,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
-    "@distilled.cloud/cloudflare-runtime": "workspace:*"
+    "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
@@ -56,6 +55,7 @@
   },
   "peerDependencies": {
     "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
     "effect": "catalog:effect",
     "vite": "^7.0.0 || ^8.0.0"
   },

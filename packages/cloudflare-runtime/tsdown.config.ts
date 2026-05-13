@@ -40,7 +40,10 @@ export default defineConfig([
     format: "esm",
     inputOptions: { makeAbsoluteExternalsRelative: true },
     outputOptions: {
-      exports: "named",
+      entryFileNames: (chunkInfo) => {
+        const name = chunkInfo.name.replace(/^node_modules\/.+\/node_modules\//, "vendor/");
+        return `${name}.${name.endsWith(".d") ? "mts" : "mjs"}`;
+      },
     },
     plugins: [
       {

@@ -10,6 +10,7 @@ import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawne
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
+import { exitHook } from "./internal/exit-hook.ts";
 import * as workerd from "./internal/workerd.ts";
 
 export type ControlMessage =
@@ -77,10 +78,18 @@ export const WorkerdLive = Layer.effect(
       compatibilityDate: workerd.compatibilityDate,
       serve: Effect.fn("Workerd.serve")(function* (config, args) {
         const handle = yield* spawn(config, args);
-        // const unregister = exitHook(() => process.kill(handle.pid, "SIGKILL"));
+
+        // Effect finalizers may not run reliably when the process is interrupted.
+        // As a workaround, we use a synchronous exit hook to kill the process as a last resort.
+        const unregister = exitHook(() => {
+          try {
+            process.kill(handle.pid, "SIGKILL");
+          } catch {}
+        });
+
         yield* Effect.addFinalizer(() =>
           handle.kill({ killSignal: "SIGKILL" }).pipe(
-            // Effect.tap(() => Effect.sync(unregister)),
+            Effect.tap(() => Effect.sync(unregister)),
             Effect.ignore,
           ),
         );

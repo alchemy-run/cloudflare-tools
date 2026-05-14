@@ -81,20 +81,25 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         );
         const conditions = getConditions(pluginOptions);
         const mainFields = getMainFields(pluginOptions);
+        const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
         return {
-          appType: "custom",
+          appType,
           ssr: {
             noExternal: true,
             resolve: {
               conditions: [...conditions, "development|production"],
             },
           },
-          builder: {
-            buildApp: async (app) => {
-              await app.build(app.environments.ssr);
-              await app.build(app.environments.client);
-            },
-          },
+          builder:
+            appType === "spa"
+              ? undefined
+              : {
+                  buildApp: async (app) => {
+                    await Promise.all(
+                      Object.values(app.environments).map((environment) => app.build(environment)),
+                    );
+                  },
+                },
           environments: {
             client: {
               build: {
@@ -111,7 +116,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 target: TARGET,
                 emitAssets: true,
                 copyPublicDir: false,
-                outDir: getOutputDirectory(userConfig, "ssr"),
+                outDir: getOutputDirectory(userConfig, "server"),
                 ...(isRolldown
                   ? {
                       rolldownOptions: {

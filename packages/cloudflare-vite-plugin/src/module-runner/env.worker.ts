@@ -21,6 +21,7 @@ export function stripInternalEnv(env: Env) {
     __DISTILLED_MODULE_RUNNER__,
     __DISTILLED_UNSAFE_EVAL__,
     __DISTILLED_INVOKE_MODULE__,
+    __DISTILLED_ENVIRONMENT__,
     ...userEnv
   } = env;
   return userEnv;

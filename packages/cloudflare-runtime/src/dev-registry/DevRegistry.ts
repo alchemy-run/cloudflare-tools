@@ -26,10 +26,6 @@ export interface ExternalServiceMap extends Map<
 export class DevRegistry extends Context.Service<
   DevRegistry,
   {
-    /** Whether the registry has a configured path and is therefore active. */
-    readonly isEnabled: boolean;
-    /** The on-disk path used to store registry entries, if any. */
-    readonly registryPath: string | undefined;
     /** Read the current set of registered workers from disk. */
     readonly getRegistry: () => Effect.Effect<WorkerRegistry>;
     /**
@@ -67,7 +63,6 @@ export const DevRegistryLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const registryPath = yield* DevRegistryPath;
-    const isEnabled = registryPath !== undefined && registryPath !== "";
 
     const registeredWorkers = new Set<string>();
     let externalServices: ExternalServiceMap = new Map();
@@ -139,58 +134,45 @@ export const DevRegistryLive = Layer.effect(
       }
     });
 
-    if (isEnabled) {
-      yield* heartbeat.pipe(
-        Effect.schedule(Schedule.spaced(HEARTBEAT_INTERVAL)),
-        Effect.forkScoped,
-      );
-    }
+    yield* heartbeat.pipe(Effect.schedule(Schedule.spaced(HEARTBEAT_INTERVAL)), Effect.forkScoped);
 
     return DevRegistry.of({
-      isEnabled,
-      registryPath,
-      getRegistry: () =>
-        Effect.sync(() => (registryPath ? readWorkerRegistrySync(registryPath) : {})),
-      register: (workers) =>
-        Effect.gen(function* () {
-          if (!registryPath) {
-            return;
-          }
-          yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
-          for (const [name, definition] of Object.entries(workers)) {
-            const definitionPath = path.join(registryPath, name);
-            yield* fs
-              .writeFileString(definitionPath, JSON.stringify(definition, null, 2))
-              .pipe(Effect.ignore);
-            registeredWorkers.add(name);
-          }
-          refresh();
-        }),
-      watch: (services, onUpdateFn) =>
-        Effect.gen(function* () {
-          if (!registryPath || services.size === 0) {
-            return;
-          }
-          externalServices = new Map(services);
-          onUpdate = onUpdateFn;
-          yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
-          if (!watcher) {
-            watcher = Chokidar.watch(registryPath, {
-              // On Windows, chokidar's default `fs.watch` backend frequently
-              // drops or delays create events for files added shortly after
-              // the watcher attaches — especially under CI virtualization.
-              // Fall back to polling on Windows so cross-process worker
-              // registrations are observed reliably. The registry directory
-              // is small, so the cost is negligible.
-              usePolling: process.platform === "win32",
-              interval: 100,
-            }).on("all", () => {
-              refresh();
-            });
-          }
-          // Seed previousJSON so the first update fires only on real change.
-          previousJSON = JSON.stringify(readWorkerRegistrySync(registryPath));
-        }),
+      getRegistry: () => Effect.sync(() => readWorkerRegistrySync(registryPath)),
+      register: Effect.fn(function* (workers) {
+        yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
+        for (const [name, definition] of Object.entries(workers)) {
+          const definitionPath = path.join(registryPath, name);
+          yield* fs
+            .writeFileString(definitionPath, JSON.stringify(definition, null, 2))
+            .pipe(Effect.ignore);
+          registeredWorkers.add(name);
+        }
+        refresh();
+      }),
+      watch: Effect.fn(function* (services, onUpdateFn) {
+        if (services.size === 0) {
+          return;
+        }
+        externalServices = new Map(services);
+        onUpdate = onUpdateFn;
+        yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
+        if (!watcher) {
+          watcher = Chokidar.watch(registryPath, {
+            // On Windows, chokidar's default `fs.watch` backend frequently
+            // drops or delays create events for files added shortly after
+            // the watcher attaches — especially under CI virtualization.
+            // Fall back to polling on Windows so cross-process worker
+            // registrations are observed reliably. The registry directory
+            // is small, so the cost is negligible.
+            usePolling: process.platform === "win32",
+            interval: 100,
+          }).on("all", () => {
+            refresh();
+          });
+        }
+        // Seed previousJSON so the first update fires only on real change.
+        previousJSON = JSON.stringify(readWorkerRegistrySync(registryPath));
+      }),
     });
   }),
 );

@@ -1,16 +1,20 @@
 import type { BindingHooks, Module, RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
-import { Runtime } from "@distilled.cloud/cloudflare-runtime";
+import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
 import {
   DurableObjectNamespace,
   Json,
   Loopback,
   UnsafeEval,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
+import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -41,6 +45,24 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     address,
     close: () => closeScope(scope),
   };
+};
+
+export const createDefaultContext = async () => {
+  const scope = Scope.makeUnsafe();
+
+  return await layerRuntime({
+    server: {
+      port: 0,
+      host: "localhost",
+    },
+    api: {
+      accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+    },
+  }).pipe(
+    Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
+    Layer.buildWithScope(scope),
+    Effect.runPromise,
+  );
 };
 
 const closeScope = async (scope: Scope.Scope) => {

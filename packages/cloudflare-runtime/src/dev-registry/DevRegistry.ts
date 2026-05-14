@@ -1,15 +1,15 @@
-import type { FSWatcher } from "chokidar";
-import { watch as chokidarWatch } from "chokidar";
+import * as Chokidar from "chokidar";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as NodeFs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import xdgAppPaths from "xdg-app-paths";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
+import * as XdgAppPaths from "xdg-app-paths";
 import { exitHook } from "../internal/exit-hook.ts";
 import type { WorkerDefinition, WorkerRegistry } from "./DevRegistryTypes.shared.ts";
 
@@ -65,12 +65,13 @@ export const DevRegistryLive = Layer.effect(
   DevRegistry,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const registryPath = yield* DevRegistryPath;
     const isEnabled = registryPath !== undefined && registryPath !== "";
 
     const registeredWorkers = new Set<string>();
     let externalServices: ExternalServiceMap = new Map();
-    let watcher: FSWatcher | undefined;
+    let watcher: Chokidar.FSWatcher | undefined;
     let onUpdate: ((registry: WorkerRegistry) => void) | undefined;
     let previousJSON = "{}";
 
@@ -174,7 +175,7 @@ export const DevRegistryLive = Layer.effect(
           onUpdate = onUpdateFn;
           yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
           if (!watcher) {
-            watcher = chokidarWatch(registryPath, {
+            watcher = Chokidar.watch(registryPath, {
               // On Windows, chokidar's default `fs.watch` backend frequently
               // drops or delays create events for files added shortly after
               // the watcher attaches — especially under CI virtualization.
@@ -212,7 +213,7 @@ function readWorkerRegistrySync(registryPath: string): WorkerRegistry {
 
   for (const workerName of NodeFs.readdirSync(registryPath)) {
     try {
-      const definitionPath = path.join(registryPath, workerName);
+      const definitionPath = NodePath.join(registryPath, workerName);
       const stats = NodeFs.statSync(definitionPath, { throwIfNoEntry: false });
 
       if (stats === undefined || stats.mtime.getTime() < Date.now() - STALE_AFTER_MS) {
@@ -239,12 +240,12 @@ function readWorkerRegistrySync(registryPath: string): WorkerRegistry {
  * `vite dev`, and `cloudflare-runtime` all see each other.
  */
 export const DevRegistryPath = Config.string("MINIFLARE_REGISTRY_PATH").pipe(
-  Config.orElse(() => Config.succeed(path.join(getGlobalWranglerConfigPath(), "registry"))),
+  Config.orElse(() => Config.succeed(NodePath.join(getGlobalWranglerConfigPath(), "registry"))),
 );
 
 function getGlobalWranglerConfigPath(): string {
-  const configDir = xdgAppPaths(".wrangler").config();
-  const legacyConfigDir = path.join(os.homedir(), ".wrangler");
+  const configDir = XdgAppPaths.default(".wrangler").config();
+  const legacyConfigDir = NodePath.join(NodeOs.homedir(), ".wrangler");
   if (NodeFs.statSync(legacyConfigDir, { throwIfNoEntry: false })?.isDirectory()) {
     return legacyConfigDir;
   }

@@ -4,11 +4,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { KvNamespace } from "../dist/bindings/index.mjs";
+import * as DevRegistry from "../dist/dev-registry/DevRegistry.mjs";
 import * as Runtime from "../dist/Runtime.mjs";
 import * as RuntimeServices from "../dist/RuntimeServices.mjs";
 
 const main = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
+  const path = yield* DevRegistry.DevRegistryPath;
+  console.log(path);
   const address = yield* runtime.start({
     name: "test",
     compatibilityDate: "2026-01-01",

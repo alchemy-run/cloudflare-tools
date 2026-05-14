@@ -1,4 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { USER_WORKER_SERVICE_NAME } from "../Constants.shared.ts";
 import type { WorkerdDebugPortConnector } from "./dev-registry-proxy-shared.worker.ts";
 import {
   resolveTarget,
@@ -28,7 +29,7 @@ interface Env {
 
 interface Props {
   service: string;
-  entrypoint: string | null;
+  entrypoint: string | undefined;
   // User-supplied `props` from the original service binding / tail consumer.
   // Forwarded to the remote entrypoint via the debug port so they are
   // available as `ctx.props` on the callee.
@@ -62,7 +63,11 @@ export class ExternalServiceProxy extends WorkerEntrypoint<Env, Props> {
     const target = resolveTarget(ctx.props.service);
     if (target && target.debugPortAddress) {
       const client = env.DEV_REGISTRY_DEBUG_PORT.connect(target.debugPortAddress);
-      this._entryFetcher = client.getEntrypoint("core:entry");
+      this._entryFetcher = client.getEntrypoint(
+        ctx.props.service ?? USER_WORKER_SERVICE_NAME,
+        ctx.props.entrypoint,
+        ctx.props.userProps,
+      );
     }
 
     return new Proxy(this, {

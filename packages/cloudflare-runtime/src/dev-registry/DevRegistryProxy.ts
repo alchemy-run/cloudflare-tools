@@ -47,7 +47,7 @@ export class DevRegistryProxy extends Plugin.Service<
       className: string,
     ) => Effect.Effect<WorkerdConfig.Worker_DurableObjectNamespace>;
   }
->()("cloudflare-runtime/plugin/dev-registry-proxy") {}
+>()("cloudflare-runtime/plugin/DevRegistryProxy") {}
 
 const PROXY_MAIN_MODULE_NAME = "__dev-registry-proxy-main.mjs";
 
@@ -102,7 +102,7 @@ export const DevRegistryProxyLive = Layer.effect(
         };
         const defer = Effect.gen(function* () {
           if (externals.size === 0) {
-            return { start };
+            return {};
           }
           const initialRegistry = yield* devRegistry.getRegistry();
           const mainModuleSource = buildMainModule(externals, initialRegistry);
@@ -152,11 +152,11 @@ export const DevRegistryProxyLive = Layer.effect(
           return {
             services: [proxyService],
             sockets: [pushSocket],
-            start,
           };
         });
         return {
           defer,
+          start,
           api: {
             registerService: (scriptName, entrypoint, props) =>
               Effect.sync(() => {

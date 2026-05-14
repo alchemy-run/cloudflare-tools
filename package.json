@@ -42,7 +42,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build --filter='@distilled.cloud/*'",
     "dev": "turbo run dev --filter='@distilled.cloud/*'",
     "check": "turbo run format lint typecheck",
     "check:write": "bun run format:write && bun run lint:write && turbo run typecheck",

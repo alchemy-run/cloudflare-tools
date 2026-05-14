@@ -85,7 +85,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
       UnsafeEval.binding("__DISTILLED_UNSAFE_EVAL__"),
-      DurableObjectNamespace.local("__DISTILLED_MODULE_RUNNER__", "ModuleRunnerDO"),
+      DurableObjectNamespace.local({
+        name: "__DISTILLED_MODULE_RUNNER__",
+        className: "ModuleRunnerDO",
+      }),
       Json.binding("__DISTILLED_ENVIRONMENT__", {
         environmentName: "ssr",
         entryId: entry.id,

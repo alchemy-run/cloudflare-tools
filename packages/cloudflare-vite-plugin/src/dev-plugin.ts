@@ -68,21 +68,30 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       if (!optionsApi) {
         throw new Error("Cannot resolve the cloudflare-runtime:options plugin");
       }
-      const input = Object.entries(optionsApi.input());
-      if (input.length > 1) {
+      const inputs = Object.values(optionsApi.input());
+      if (inputs.length > 1) {
         throw new Error(
-          `Expected exactly one entry in the input, got ${input.length} entries: ${JSON.stringify(input)}`,
+          `Expected exactly one entry in the input, got ${inputs.length} entries: ${JSON.stringify(inputs)}`,
         );
       }
-      const [name, id] = input[0] ?? [];
       if (!options.context) {
         context ??= await createDefaultContext();
       }
-      handle ??= await startServer(options, { id, name }, server, options.context ?? context!);
+      const [input] = inputs;
+      handle ??= await startServer(
+        options,
+        { id: input, name: input },
+        server,
+        options.context ?? context!,
+      );
       const address = handle.address;
       const ssrEnvironment = server.environments.ssr;
       if (ssrEnvironment instanceof DistilledDevEnvironment) {
         await ssrEnvironment.connect(address);
+      }
+      if (!input) {
+        // If there is no input, we are in SPA mode, so we don't need to route requests to the server.
+        return;
       }
       return () => {
         server.middlewares.use((req, res) => {

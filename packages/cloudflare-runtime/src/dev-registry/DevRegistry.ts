@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import type * as Scope from "effect/Scope";
 import * as NodeFs from "node:fs";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
@@ -33,16 +34,18 @@ export class DevRegistry extends Context.Service<
      * keeping their mtimes fresh so other processes know they're alive.
      * Cleanup is tied to the layer's scope and to the process exit hook.
      */
-    readonly register: (workers: Record<string, WorkerDefinition>) => Effect.Effect<void>;
+    readonly register: (
+      workers: Record<string, WorkerDefinition>,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     /**
-     * Begin watching the registry directory. The provided `onUpdate` callback
-     * fires whenever a file belonging to one of `services` changes. Watching
-     * stops when the layer's scope closes.
+     * Subscribe to changes to the registry. The `onUpdate` callback fires
+     * whenever a file belonging to one of `services` changes. The subscription
+     * is removed when the calling scope closes.
      */
-    readonly watch: (
+    readonly subscribe: (
       services: ExternalServiceMap,
       onUpdate: (registry: WorkerRegistry) => void,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<void, never, Scope.Scope>;
   }
 >()("cloudflare-runtime/dev-registry/DevRegistry") {}
 
@@ -65,9 +68,12 @@ export const DevRegistryLive = Layer.effect(
     const registryPath = yield* DevRegistryPath;
 
     const registeredWorkers = new Set<string>();
-    let externalServices: ExternalServiceMap = new Map();
+    interface Subscriber {
+      readonly services: ExternalServiceMap;
+      readonly onUpdate: (registry: WorkerRegistry) => void;
+    }
+    const subscribers = new Set<Subscriber>();
     let watcher: Chokidar.FSWatcher | undefined;
-    let onUpdate: ((registry: WorkerRegistry) => void) | undefined;
     let previousJSON = "{}";
 
     // Sync removal of our registered files. Used both by the scope finalizer
@@ -102,7 +108,7 @@ export const DevRegistryLive = Layer.effect(
     );
 
     const refresh = () => {
-      if (!onUpdate || !registryPath) {
+      if (subscribers.size === 0) {
         return;
       }
       const registry = readWorkerRegistrySync(registryPath);
@@ -112,12 +118,31 @@ export const DevRegistryLive = Layer.effect(
       }
       const previousRegistry = JSON.parse(previousJSON) as WorkerRegistry;
       previousJSON = json;
-      for (const [service] of externalServices) {
-        if (JSON.stringify(registry[service]) !== JSON.stringify(previousRegistry[service])) {
-          onUpdate(registry);
-          break;
+      for (const subscriber of subscribers) {
+        for (const [service] of subscriber.services) {
+          if (JSON.stringify(registry[service]) !== JSON.stringify(previousRegistry[service])) {
+            subscriber.onUpdate(registry);
+            break;
+          }
         }
       }
+    };
+
+    const ensureWatcher = () => {
+      if (watcher) {
+        return;
+      }
+      watcher = Chokidar.watch(registryPath, {
+        // On Windows, chokidar's default `fs.watch` backend frequently drops
+        // or delays create events for files added shortly after the watcher
+        // attaches — especially under CI virtualization. Fall back to polling
+        // on Windows so cross-process worker registrations are observed
+        // reliably. The registry directory is small, so the cost is negligible.
+        usePolling: process.platform === "win32",
+        interval: 100,
+      }).on("all", () => {
+        refresh();
+      });
     };
 
     const heartbeat = Effect.gen(function* () {
@@ -147,31 +172,30 @@ export const DevRegistryLive = Layer.effect(
             .pipe(Effect.ignore);
           registeredWorkers.add(name);
         }
+        yield* Effect.addFinalizer(() =>
+          Effect.forEach(Object.keys(workers), (name) =>
+            fs.remove(path.join(registryPath, name)).pipe(
+              Effect.tap(() => Effect.sync(() => registeredWorkers.delete(name))),
+              Effect.ignore,
+            ),
+          ),
+        );
         refresh();
       }),
-      watch: Effect.fn(function* (services, onUpdateFn) {
+      subscribe: Effect.fn(function* (services, onUpdate) {
         if (services.size === 0) {
           return;
         }
-        externalServices = new Map(services);
-        onUpdate = onUpdateFn;
         yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
-        if (!watcher) {
-          watcher = Chokidar.watch(registryPath, {
-            // On Windows, chokidar's default `fs.watch` backend frequently
-            // drops or delays create events for files added shortly after
-            // the watcher attaches — especially under CI virtualization.
-            // Fall back to polling on Windows so cross-process worker
-            // registrations are observed reliably. The registry directory
-            // is small, so the cost is negligible.
-            usePolling: process.platform === "win32",
-            interval: 100,
-          }).on("all", () => {
-            refresh();
-          });
+        ensureWatcher();
+        // Seed previousJSON the first time around so the first update only
+        // fires on a real change.
+        if (subscribers.size === 0) {
+          previousJSON = JSON.stringify(readWorkerRegistrySync(registryPath));
         }
-        // Seed previousJSON so the first update fires only on real change.
-        previousJSON = JSON.stringify(readWorkerRegistrySync(registryPath));
+        const subscriber: Subscriber = { services: new Map(services), onUpdate };
+        subscribers.add(subscriber);
+        yield* Effect.addFinalizer(() => Effect.sync(() => subscribers.delete(subscriber)));
       }),
     });
   }),

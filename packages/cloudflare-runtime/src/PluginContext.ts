@@ -1,9 +1,12 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import type * as Plugin from "./Plugin.ts";
+import type { RuntimeError } from "./RuntimeError.shared.ts";
 import { ConfigError } from "./RuntimeError.shared.ts";
 import type { RuntimeWorker } from "./RuntimeWorker.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
+import type * as Workerd from "./workerd/Workerd.ts";
 
 export class PluginContext extends Context.Service<
   PluginContext,
@@ -13,7 +16,10 @@ export class PluginContext extends Context.Service<
       string,
       Plugin.Plugin<any> | Effect.Effect<Plugin.Plugin<any>, never, PluginContext>
     >;
-    readonly get: <P extends Plugin.Plugin<any>>(name: string) => Effect.Effect<P, ConfigError>;
+    readonly get: <S extends Plugin.PluginService<any, any, any>>(
+      service: S,
+    ) => Effect.Effect<S["Plugin"], ConfigError>;
+    readonly start: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
     readonly config: Effect.Effect<
       {
         entry: string | undefined;
@@ -78,19 +84,22 @@ export const make = (
           ],
         };
       }),
-      get: Effect.fn(function* (name: string) {
-        const plugin = plugins.get(name);
+      start: Effect.fn(function* (ports) {
+        yield* Effect.forEach(plugins.values(), (plugin) => plugin.start?.(ports) ?? Effect.void);
+      }),
+      get: Effect.fn(function* (service) {
+        const plugin = plugins.get(service.key);
         if (!plugin) {
           return yield* new ConfigError({
             subtag: "PluginNotFound",
-            message: `Plugin "${name}" not found`,
-            hint: `The plugin "${name}" is not registered in the current context.`,
+            message: `Plugin "${service.key}" not found`,
+            hint: `The plugin "${service.key}" is not registered in the current context.`,
             detail: {
-              name,
+              name: service.key,
             },
           });
         }
-        return plugin as any;
+        return plugin;
       }),
     });
     const pluginMap: PluginMap = inheritedPlugins ?? new Map();

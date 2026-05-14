@@ -1,8 +1,10 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import { PluginContext, type ConfigHook } from "./PluginContext.ts";
-import type { ConfigError } from "./RuntimeError.shared.ts";
+import type { ConfigError, RuntimeError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
+import type * as Workerd from "./workerd/Workerd.ts";
 
 export interface Plugin<Api = never> extends PluginConfig {
   readonly api: Api;
@@ -14,6 +16,7 @@ export interface PluginConfig {
   readonly sockets?: Array<WorkerdConfig.Socket>;
   readonly extensions?: Array<WorkerdConfig.Extension>;
   readonly middlewares?: Array<Middleware>;
+  readonly start?: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
 }
 
 export interface Middleware {
@@ -50,7 +53,7 @@ export const use = <S extends PluginService<any, any, any>, A, E, R>(
   plugin: S,
   f: (plugin: S["Plugin"]) => Effect.Effect<A, E, R>,
 ): ConfigHook<A, E, R | S["Self"]> =>
-  PluginContext.use((context) => context.get(plugin.key).pipe(Effect.flatMap(f)));
+  PluginContext.use((context) => context.get(plugin).pipe(Effect.flatMap(f)));
 
 export const useSync = <S extends PluginService<any, any, any>, A>(
   plugin: S,

@@ -32,7 +32,7 @@ export const layerLive = (config: LocalProxyConfig) =>
     Effect.gen(function* () {
       const runtime = yield* Workerd.Workerd;
       const http = yield* HttpClient.HttpClient;
-      const result = yield* runtime.serve({
+      const ports = yield* runtime.serve({
         sockets: [
           {
             name: "http",
@@ -55,12 +55,12 @@ export const layerLive = (config: LocalProxyConfig) =>
           yield* Internet.Internet,
         ],
       });
-      const address = `${config.host}:${result[0].port}`;
+      const address = `${config.host}:${ports.http}`;
       return LocalProxy.of({
         address,
         send: Effect.fn((message) =>
           http
-            .post(new URL(LOCAL_CONFIGURE_PATH, `http://${config.host}:${result[0].port}`), {
+            .post(new URL(LOCAL_CONFIGURE_PATH, `http://${address}`), {
               body: HttpBody.jsonUnsafe(message),
             })
             .pipe(

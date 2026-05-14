@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
+import { SOCKET_HTTP, USER_WORKER_SERVICE_NAME } from "./dev-registry/Constants.shared.ts";
 import type * as Globals from "./globals/Globals.ts";
 import * as Storage from "./globals/Storage.ts";
 import type { BindingHook } from "./PluginContext.ts";
@@ -38,39 +39,43 @@ export const RuntimeLive = Layer.effect(
           concurrency: "unbounded",
         }).pipe(Effect.provideService(PluginContext.PluginContext, context));
         const { entry, sockets, services, extensions } = yield* context.config;
-        const messages = yield* workerd.serve({
-          sockets: [
-            {
-              name: "http",
-              address: "127.0.0.1:0",
-              service: { name: entry ?? "user" },
-            },
-            ...sockets,
-          ],
-          services: [
-            {
-              name: "user",
-              worker: {
-                compatibilityDate: worker.compatibilityDate,
-                compatibilityFlags: worker.compatibilityFlags,
-                bindings,
-                modules: worker.modules.map(moduleToWorkerd),
-                durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
-                  className: namespace.className,
-                  enableSql: namespace.sql,
-                  uniqueKey: namespace.uniqueKey,
-                  ephemeralLocal: namespace.ephemeralLocal,
-                })),
-                durableObjectStorage: {
-                  localDisk: storage.name,
+        const ports = yield* workerd.serve(
+          {
+            sockets: [
+              {
+                name: SOCKET_HTTP,
+                address: "127.0.0.1:0",
+                service: { name: entry ?? USER_WORKER_SERVICE_NAME },
+              },
+              ...sockets,
+            ],
+            services: [
+              {
+                name: USER_WORKER_SERVICE_NAME,
+                worker: {
+                  compatibilityDate: worker.compatibilityDate,
+                  compatibilityFlags: worker.compatibilityFlags,
+                  bindings,
+                  modules: worker.modules.map(moduleToWorkerd),
+                  durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
+                    className: namespace.className,
+                    enableSql: namespace.sql,
+                    uniqueKey: namespace.uniqueKey,
+                    ephemeralLocal: namespace.ephemeralLocal,
+                  })),
+                  durableObjectStorage: {
+                    localDisk: storage.name,
+                  },
                 },
               },
-            },
-            ...services,
-          ],
-          extensions,
-        });
-        const address = `http://localhost:${messages[0].port}`;
+              ...services,
+            ],
+            extensions,
+          },
+          { "debug-port": "127.0.0.1:0" },
+        );
+        yield* context.start(ports);
+        const address = `http://localhost:${ports.http}`;
         yield* localProxy.send({
           _tag: "Local.Set",
           worker: worker.name,

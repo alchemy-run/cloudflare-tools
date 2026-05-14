@@ -1,5 +1,7 @@
 import * as Layer from "effect/Layer";
 import { Assets, Hyperdrive } from "./bindings/index.ts";
+import * as DevRegistry from "./dev-registry/DevRegistry.ts";
+import * as DevRegistryProxy from "./dev-registry/DevRegistryProxy.ts";
 import * as Globals from "./globals/Globals.ts";
 import * as Internet from "./globals/Internet.ts";
 import * as Loopback from "./globals/Loopback.ts";
@@ -42,13 +44,18 @@ export const layerLoopback = () =>
   Layer.provide(Loopback.LoopbackLive, LoopbackServer.LoopbackServerLive);
 
 export const layerLocalBindings = () =>
-  Layer.mergeAll(Assets.AssetsLive, Hyperdrive.HyperdriveLive);
+  Layer.mergeAll(
+    Assets.AssetsLive,
+    Hyperdrive.HyperdriveLive,
+    DevRegistryProxy.DevRegistryProxyLive,
+  );
 
 export type BindingServices =
   | Assets.Assets
   | Loopback.Loopback
   | Hyperdrive.Hyperdrive
-  | RemoteBindings.RemoteBindings;
+  | RemoteBindings.RemoteBindings
+  | DevRegistryProxy.DevRegistryProxy;
 
 export type RuntimeServices = Runtime.Runtime | BindingServices;
 
@@ -61,5 +68,6 @@ export const layerRuntime = (config: RuntimeConfig) =>
     Layer.provideMerge(layerLoopback()),
     Layer.provide(layerStorage(config.storage)),
     Layer.provide(Internet.InternetLive),
+    Layer.provide(DevRegistry.DevRegistryLive),
     Layer.provide(Workerd.WorkerdLive),
   );

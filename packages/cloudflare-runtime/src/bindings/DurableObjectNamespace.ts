@@ -1,22 +1,69 @@
 import * as Effect from "effect/Effect";
+import { DevRegistryProxy } from "../dev-registry/DevRegistryProxy.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import { PluginContext } from "../PluginContext.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
+import type * as WorkerdConfig from "../workerd/Config.ts";
 
-export const local = (name: string, className: string): BindingHook =>
-  PluginContext.use(({ worker }) => {
-    if (!worker.durableObjectNamespaces?.find((namespace) => namespace.className === className)) {
-      return Effect.fail(
-        new ConfigError({
-          subtag: "DurableObjectNamespaceNotFound",
-          message: `Durable object namespace ${className} not found`,
-          hint: `Make sure the durable object namespace ${className} is defined in the worker config`,
-          detail: { className },
-        }),
-      );
+export interface LocalDurableObjectNamespaceProps {
+  /**
+   * Name of the binding.
+   */
+  readonly name: string;
+  /**
+   * Class name of the Durable Object namespace to bind to.
+   */
+  readonly className: string;
+  /**
+   * If set and the referenced worker isn't the current one, the binding is
+   * routed through the dev-registry proxy. This enables service-binding
+   * style cross-process Durable Object access during local development.
+   */
+  readonly scriptName?: string;
+}
+
+/**
+ * Bind a Durable Object namespace.
+ *
+ * - Without `scriptName`: bind a DO defined on the current worker.
+ * - With `scriptName === <current worker name>`: same as above.
+ * - With `scriptName !== <current worker name>`: route through the dev
+ *   registry proxy so the DO can live in a different `cloudflare-runtime`
+ *   or `wrangler dev` process.
+ */
+export const local = ({
+  name,
+  className,
+  scriptName,
+}: LocalDurableObjectNamespaceProps): BindingHook<DevRegistryProxy> =>
+  PluginContext.use((context) => {
+    if (scriptName === undefined || scriptName === context.worker.name) {
+      if (
+        !context.worker.durableObjectNamespaces?.find(
+          (namespace) => namespace.className === className,
+        )
+      ) {
+        return Effect.fail(
+          new ConfigError({
+            subtag: "DurableObjectNamespaceNotFound",
+            message: `Durable object namespace ${className} not found`,
+            hint: `Make sure the durable object namespace ${className} is defined in the worker config`,
+            detail: { className },
+          }),
+        );
+      }
+      return Effect.succeed<WorkerdConfig.Worker_Binding>({
+        name,
+        durableObjectNamespace: { className },
+      });
     }
-    return Effect.succeed({
-      name,
-      durableObjectNamespace: { className },
-    });
+    return context.get(DevRegistryProxy).pipe(
+      Effect.flatMap((proxy) => proxy.api.registerDurableObject(scriptName, className)),
+      Effect.map(
+        (durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
+          name,
+          durableObjectNamespace,
+        }),
+      ),
+    );
   });

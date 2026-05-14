@@ -34,13 +34,9 @@ layer(services)((it) => {
           },
         ],
       });
-      expect(result).toMatchObject([
-        {
-          event: "listen",
-          socket: "test",
-          port: expect.any(Number),
-        },
-      ]);
+      expect(result).toMatchObject({
+        test: expect.any(Number),
+      });
     }),
   );
 
@@ -106,7 +102,7 @@ layer(services)((it) => {
           },
         ],
       });
-      const port = result[0].port;
+      const port = result.test;
       const error = yield* workerd
         .serve({
           sockets: [

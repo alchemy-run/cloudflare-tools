@@ -13,7 +13,7 @@ import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
 import * as workerd from "./internal/workerd.ts";
 
-export type ControlMessage =
+type ControlMessage =
   | {
       event: "listen";
       socket: string;
@@ -24,6 +24,10 @@ export type ControlMessage =
       port: number;
     };
 
+export interface WorkerdPorts {
+  [socket: string]: number;
+}
+
 export class Workerd extends Context.Service<
   Workerd,
   {
@@ -31,7 +35,7 @@ export class Workerd extends Context.Service<
     readonly serve: (
       config: Config,
       args?: Record<string, string | number | boolean>,
-    ) => Effect.Effect<Array<ControlMessage>, ConfigError | SystemError, Scope.Scope>;
+    ) => Effect.Effect<WorkerdPorts, ConfigError | SystemError, Scope.Scope>;
   }
 >()("cloudflare-runtime/workerd/Workerd") {}
 
@@ -107,7 +111,13 @@ export const WorkerdLive = Layer.effect(
           Stream.runForEach(Effect.logError),
           Effect.forkChild,
         );
-        return controlMessages;
+        const ports: WorkerdPorts = {};
+        for (const message of controlMessages) {
+          if (message.event === "listen") {
+            ports[message.socket] = message.port;
+          }
+        }
+        return ports;
       }),
     });
   }),

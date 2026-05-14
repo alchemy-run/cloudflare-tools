@@ -95,9 +95,9 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               ? undefined
               : {
                   buildApp: async (app) => {
-                    await Promise.all(
-                      Object.values(app.environments).map((environment) => app.build(environment)),
-                    );
+                    for (const environment of Object.values(app.environments)) {
+                      await app.build(environment);
+                    }
                   },
                 },
           environments: {

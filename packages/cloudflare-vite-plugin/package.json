@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-vite-plugin",
-  "version": "0.4.1-beta.9",
+  "version": "0.4.1-beta.10",
   "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/cloudflare-vite-plugin#readme",
   "bugs": {
     "url": "https://github.com/alchemy-run/cloudflare-tools/issues"

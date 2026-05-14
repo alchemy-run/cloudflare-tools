@@ -7,10 +7,10 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import { exitHook } from "../internal/exit-hook.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
-import { exitHook } from "./internal/exit-hook.ts";
 import * as workerd from "./internal/workerd.ts";
 
 export type ControlMessage =

@@ -54,7 +54,6 @@
     "./dev-registry": "./dist/dev-registry/index.mjs",
     "./dev-registry/DevRegistry": "./dist/dev-registry/DevRegistry.mjs",
     "./dev-registry/DevRegistryTypes": "./dist/dev-registry/DevRegistryTypes.shared.mjs",
-    "./dev-registry/Wrangler": "./dist/dev-registry/Wrangler.mjs",
     "./globals": "./dist/globals/index.mjs",
     "./globals/Globals": "./dist/globals/Globals.mjs",
     "./globals/Internet": "./dist/globals/Internet.mjs",

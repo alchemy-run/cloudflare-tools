@@ -50,11 +50,11 @@ packages/vendor/<upstream-name>/
 
 ### tsconfig bucket semantics
 
-| Bucket   | Glob                 | Types                                                                          | Purpose                                                                 |
-|----------|----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------|
-| workers  | `src/workers/**`     | `@cloudflare/workers-types/experimental`, `@cloudflare/vitest-pool-workers/types` | Worker runtime code + colocated tests                                |
-| shared   | `src/shared/**`      | workers-types **and** `node`                                                   | Isomorphic code; intersection typing catches accidental env-specific use |
-| node     | `src/node/**`, `src/index.ts` | `node`                                                                | Node-only helpers (anything that imports `node:*` or uses `process.*`)  |
+| Bucket  | Glob                          | Types                                                                             | Purpose                                                                  |
+| ------- | ----------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| workers | `src/workers/**`              | `@cloudflare/workers-types/experimental`, `@cloudflare/vitest-pool-workers/types` | Worker runtime code + colocated tests                                    |
+| shared  | `src/shared/**`               | workers-types **and** `node`                                                      | Isomorphic code; intersection typing catches accidental env-specific use |
+| node    | `src/node/**`, `src/index.ts` | `node`                                                                            | Node-only helpers (anything that imports `node:*` or uses `process.*`)   |
 
 `tsconfig.json` is a solution file that references all three via
 `emitDeclarationOnly: true` (project references require emit).

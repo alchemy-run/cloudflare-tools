@@ -1,87 +1,96 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 
-const InternalConfigSchema = z.object({
-  account_id: z.number().optional(),
-  script_id: z.number().optional(),
-  debug: z.boolean().optional(),
+/**
+ * Strip `readonly` modifiers recursively. The upstream Cloudflare worker code
+ * mutates these config values freely (e.g. `config.compatibility_flags.push(...)`),
+ * so we expose mutable types rather than Schema's default `readonly` inference.
+ */
+type Mutable<T> =
+  T extends ReadonlyArray<infer U>
+    ? Array<Mutable<U>>
+    : T extends object
+      ? { -readonly [K in keyof T]: Mutable<T[K]> }
+      : T;
+
+const InternalConfigFields = {
+  account_id: Schema.optional(Schema.Number),
+  script_id: Schema.optional(Schema.Number),
+  debug: Schema.optional(Schema.Boolean),
+};
+
+const StaticRoutingSchema = Schema.Struct({
+  user_worker: Schema.Array(Schema.String),
+  asset_worker: Schema.optional(Schema.Array(Schema.String)),
 });
 
-const StaticRoutingSchema = z.object({
-  user_worker: z.array(z.string()),
-  asset_worker: z.array(z.string()).optional(),
+export type StaticRouting = Mutable<typeof StaticRoutingSchema.Type>;
+
+export const RouterConfigSchema = Schema.Struct({
+  invoke_user_worker_ahead_of_assets: Schema.optional(Schema.Boolean),
+  static_routing: Schema.optional(StaticRoutingSchema),
+  has_user_worker: Schema.optional(Schema.Boolean),
+  ...InternalConfigFields,
 });
 
-export type StaticRouting = z.infer<typeof StaticRoutingSchema>;
-
-export const RouterConfigSchema = z.object({
-  invoke_user_worker_ahead_of_assets: z.boolean().optional(),
-  static_routing: StaticRoutingSchema.optional(),
-  has_user_worker: z.boolean().optional(),
-  ...InternalConfigSchema.shape,
-});
-
-export const EyeballRouterConfigSchema = z.union([
-  z.object({
-    limitedAssetsOnly: z.boolean().optional(),
+export const EyeballRouterConfigSchema = Schema.NullOr(
+  Schema.Struct({
+    limitedAssetsOnly: Schema.optional(Schema.Boolean),
   }),
-  z.null(),
-]);
+);
 
-const MetadataStaticRedirectEntry = z.object({
-  status: z.number(),
-  to: z.string(),
-  lineNumber: z.number(),
+const MetadataStaticRedirectEntry = Schema.Struct({
+  status: Schema.Number,
+  to: Schema.String,
+  lineNumber: Schema.Number,
 });
 
-const MetadataRedirectEntry = z.object({
-  status: z.number(),
-  to: z.string(),
+const MetadataRedirectEntry = Schema.Struct({
+  status: Schema.Number,
+  to: Schema.String,
 });
 
-const MetadataStaticRedirects = z.record(MetadataStaticRedirectEntry);
-export type MetadataStaticRedirects = z.infer<typeof MetadataStaticRedirects>;
-const MetadataRedirects = z.record(MetadataRedirectEntry);
-export type MetadataRedirects = z.infer<typeof MetadataRedirects>;
+const MetadataStaticRedirects = Schema.Record(Schema.String, MetadataStaticRedirectEntry);
+export type MetadataStaticRedirects = Mutable<typeof MetadataStaticRedirects.Type>;
+const MetadataRedirects = Schema.Record(Schema.String, MetadataRedirectEntry);
+export type MetadataRedirects = Mutable<typeof MetadataRedirects.Type>;
 
-const MetadataHeaderEntry = z.object({
-  set: z.record(z.string()).optional(),
-  unset: z.array(z.string()).optional(),
+const MetadataHeaderEntry = Schema.Struct({
+  set: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  unset: Schema.optional(Schema.Array(Schema.String)),
 });
 
-const MetadataHeaders = z.record(MetadataHeaderEntry);
-export type MetadataHeaders = z.infer<typeof MetadataHeaders>;
+const MetadataHeaders = Schema.Record(Schema.String, MetadataHeaderEntry);
+export type MetadataHeaders = Mutable<typeof MetadataHeaders.Type>;
 
-export const RedirectsSchema = z
-  .object({
-    version: z.literal(1),
-    staticRules: MetadataStaticRedirects,
-    rules: MetadataRedirects,
-  })
-  .optional();
-
-export const HeadersSchema = z
-  .object({
-    version: z.literal(2),
-    rules: MetadataHeaders,
-  })
-  .optional();
-
-export const AssetConfigSchema = z.object({
-  compatibility_date: z.string().optional(),
-  compatibility_flags: z.array(z.string()).optional(),
-  html_handling: z
-    .enum(["auto-trailing-slash", "force-trailing-slash", "drop-trailing-slash", "none"])
-    .optional(),
-  not_found_handling: z.enum(["single-page-application", "404-page", "none"]).optional(),
-  redirects: RedirectsSchema,
-  headers: HeadersSchema,
-  has_static_routing: z.boolean().optional(),
-  ...InternalConfigSchema.shape,
+export const RedirectsSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  staticRules: MetadataStaticRedirects,
+  rules: MetadataRedirects,
 });
 
-export type EyeballRouterConfig = z.infer<typeof EyeballRouterConfigSchema>;
-export type RouterConfig = z.infer<typeof RouterConfigSchema>;
-export type AssetConfig = z.infer<typeof AssetConfigSchema>;
+export const HeadersSchema = Schema.Struct({
+  version: Schema.Literal(2),
+  rules: MetadataHeaders,
+});
+
+export const AssetConfigSchema = Schema.Struct({
+  compatibility_date: Schema.optional(Schema.String),
+  compatibility_flags: Schema.optional(Schema.Array(Schema.String)),
+  html_handling: Schema.optional(
+    Schema.Literals(["auto-trailing-slash", "force-trailing-slash", "drop-trailing-slash", "none"]),
+  ),
+  not_found_handling: Schema.optional(
+    Schema.Literals(["single-page-application", "404-page", "none"]),
+  ),
+  redirects: Schema.optional(RedirectsSchema),
+  headers: Schema.optional(HeadersSchema),
+  has_static_routing: Schema.optional(Schema.Boolean),
+  ...InternalConfigFields,
+});
+
+export type EyeballRouterConfig = Mutable<typeof EyeballRouterConfigSchema.Type>;
+export type RouterConfig = Mutable<typeof RouterConfigSchema.Type>;
+export type AssetConfig = Mutable<typeof AssetConfigSchema.Type>;
 
 export interface UnsafePerformanceTimer {
   readonly timeOrigin: number;

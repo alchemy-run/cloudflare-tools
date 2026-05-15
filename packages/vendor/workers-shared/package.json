@@ -19,11 +19,11 @@
     "@cloudflare/vitest-pool-workers": "^0.13.0",
     "@cloudflare/workers-types": "catalog:workers",
     "@types/node": "*",
+    "effect": "catalog:effect",
     "ignore": "^5.2.0",
     "mime": "^4.0.7",
     "toucan-js": "4.0.0",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "vitest": "catalog:"
   }
 }

@@ -14,6 +14,7 @@ export default defineConfig([
     minify: {
       mangle: false,
     },
+    dts: false,
     plugins: [cloudflare({ compatibilityDate: "2026-03-10" }), workerExportsPlugin()],
     deps: {
       alwaysBundle: () => true,
@@ -41,7 +42,10 @@ export default defineConfig([
     inputOptions: { makeAbsoluteExternalsRelative: true },
     outputOptions: {
       entryFileNames: (chunkInfo) => {
-        const name = chunkInfo.name.replace(/^node_modules\/.+\/node_modules\//, "vendor/");
+        const name = chunkInfo.name.replace(
+          /(^node_modules\/.+\/node_modules\/)|(^packages\/vendor\/)/,
+          "vendor/",
+        );
         return `${name}.${name.endsWith(".d") ? "mts" : "mjs"}`;
       },
     },

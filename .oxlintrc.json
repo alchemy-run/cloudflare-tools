@@ -108,6 +108,14 @@
       "rules": {
         "import/extensions": ["error", "ignorePackages"]
       }
+    },
+    {
+      // Vendored Cloudflare worker source; keep upstream patterns intact.
+      "files": ["packages/vendor/*/src/**/*.ts"],
+      "rules": {
+        "eslint/no-unmodified-loop-condition": "off",
+        "eslint/no-useless-constructor": "off"
+      }
     }
   ]
 }

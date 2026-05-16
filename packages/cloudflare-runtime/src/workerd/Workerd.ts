@@ -1,11 +1,13 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as NodeChildProcess from "node:child_process";
-import * as NodeStream from "node:stream";
-import { exitHook } from "../internal/exit-hook.ts";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
@@ -37,147 +39,122 @@ export class Workerd extends Context.Service<
   }
 >()("cloudflare-runtime/workerd/Workerd") {}
 
-export const WorkerdLive = Layer.sync(Workerd, () => {
-  const spawn = (
-    command: string,
-    args: Array<string>,
-    spawnOptions: NodeChildProcess.SpawnOptions,
-  ) =>
-    Effect.callback<readonly [NodeChildProcess.ChildProcess, Effect.Effect<void>], SystemError>(
-      (resume) => {
-        const handle = NodeChildProcess.spawn(command, args, spawnOptions);
-        const onError = (error: Error) => {
-          handle.off("error", onError);
-          handle.off("spawn", onSpawn);
-          resume(
-            Effect.fail(
-              new SystemError({
-                subtag: "WorkerdSpawn",
-                message: "Failed to spawn the Workers runtime (workerd) process.",
-                cause: error,
-              }),
-            ),
-          );
-        };
-        const onSpawn = () => {
-          const unregister = exitHook(() => {
-            handle.kill("SIGKILL");
-          });
-          const kill = Effect.sync(() => {
-            handle.kill("SIGKILL");
-            unregister();
-          });
-          handle.off("error", onError);
-          handle.off("spawn", onSpawn);
-          resume(Effect.succeed([handle, kill]));
-        };
-        const onStderr = (data: Buffer) => {
-          process.stderr.write(data);
-        };
-        handle.once("error", onError);
-        handle.once("spawn", onSpawn);
-        handle.stderr?.on("data", onStderr);
-        return Effect.sync(() => {
-          handle.kill("SIGKILL");
-        });
-      },
-    );
-  return Workerd.of({
-    compatibilityDate: workerd.compatibilityDate,
-    serve: Effect.fn("Workerd.serve")(
-      function* (config, args) {
-        const [handle, kill] = yield* spawn(
-          workerd.bin,
-          [
-            "serve",
-            "--binary",
-            "--experimental",
-            "--verbose",
-            "--control-fd=3",
-            ...Object.entries(args ?? {}).map(([key, value]) =>
-              typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
-            ),
-            "-",
-          ],
-          {
-            stdio: ["pipe", "inherit", "pipe", "pipe"],
-          },
-        );
-        yield* Effect.addFinalizer(() => kill);
-        const controlMessages = yield* Effect.callback<
-          Array<ControlMessage>,
-          ConfigError | SystemError
-        >((resume) => {
+export const WorkerdLive = Layer.effect(
+  Workerd,
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner;
+
+    return Workerd.of({
+      compatibilityDate: workerd.compatibilityDate,
+      serve: Effect.fn("Workerd.serve")(
+        function* (config, args) {
           const count =
             (config.sockets?.length ?? 0) +
             (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
             (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
 
-          if (
-            !handle.stdin ||
-            !handle.stderr ||
-            !(handle.stdio[3] instanceof NodeStream.Readable)
-          ) {
-            return resume(
-              new SystemError({
-                subtag: "WorkerdSpawn",
-                message:
-                  "The Workers runtime (workerd) process did not have a stdin, stderr, or control fd.",
-              }),
-            );
-          }
+          const command = ChildProcess.make(
+            workerd.bin,
+            [
+              "serve",
+              "--binary",
+              "--experimental",
+              "--verbose",
+              "--control-fd=3",
+              ...Object.entries(args ?? {}).map(([key, value]) =>
+                typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
+              ),
+              "-",
+            ],
+            {
+              stdin: Stream.make(new Uint8Array(serializeConfig(config))),
+              stdout: "inherit",
+              stderr: "pipe",
+              detached: false,
+              additionalFds: {
+                fd3: { type: "output" },
+              },
+            },
+          );
 
-          let stderr = "";
-          let control = "";
+          const handle = yield* spawner.spawn(command).pipe(
+            Effect.mapError(
+              (cause) =>
+                new SystemError({
+                  subtag: "WorkerdSpawn",
+                  message: "Failed to spawn the Workers runtime (workerd) process.",
+                  cause,
+                }),
+            ),
+          );
 
-          const onStderr = (data: Buffer) => {
-            stderr += data.toString();
-          };
-          const onControl = (data: Buffer) => {
-            control += data.toString();
-            const messages = control
-              .split("\n")
-              .filter((line) => line.trim() !== "")
-              .map((line) => JSON.parse(line) as ControlMessage);
-            if (messages.length === count) {
-              removeListeners();
-              resume(Effect.succeed(messages));
+          const stderrRef = yield* Ref.make("");
+
+          const stderrFiber = yield* handle.stderr.pipe(
+            Stream.decodeText(),
+            Stream.splitLines,
+            Stream.runForEach((line) =>
+              Ref.update(stderrRef, (s) => (s.length === 0 ? line : `${s}\n${line}`)).pipe(
+                Effect.andThen(Effect.logError(line)),
+              ),
+            ),
+            Effect.ignore,
+            Effect.forkScoped,
+          );
+
+          const collectControl = handle.getOutputFd(3).pipe(
+            Stream.decodeText(),
+            Stream.splitLines,
+            Stream.filter((line) => line.trim() !== ""),
+            Stream.map((line) => JSON.parse(line) as ControlMessage),
+            Stream.take(count),
+            Stream.runCollect,
+            Effect.flatMap((messages) =>
+              messages.length === count ? Effect.succeed(messages) : Effect.never,
+            ),
+            Effect.mapError(
+              (cause) =>
+                new SystemError({
+                  subtag: "WorkerdSpawn",
+                  message:
+                    "The Workers runtime (workerd) process failed while reading control messages.",
+                  cause,
+                }),
+            ),
+          );
+
+          const failOnExit = Effect.matchEffect(handle.exitCode, {
+            onSuccess: (code) =>
+              Fiber.join(stderrFiber).pipe(
+                Effect.andThen(Ref.get(stderrRef)),
+                Effect.flatMap((stderr) => classifyWorkerdError(stderr, code)),
+              ),
+            onFailure: () =>
+              Fiber.join(stderrFiber).pipe(
+                Effect.andThen(Ref.get(stderrRef)),
+                Effect.flatMap((stderr) => classifyWorkerdError(stderr, null)),
+              ),
+          });
+
+          const controlMessages = yield* Effect.raceFirst(collectControl, failOnExit);
+
+          const ports: WorkerdPorts = {};
+          for (const message of controlMessages) {
+            if (message.event === "listen") {
+              ports[message.socket] = message.port;
             }
-          };
-          const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-            removeListeners();
-            resume(classifyWorkerdError(stderr, code, signal));
-          };
-          const removeListeners = () => {
-            handle.stderr?.off("data", onStderr);
-            handle.stdio[3]?.off("data", onControl);
-            handle.off("exit", onExit);
-          };
-          handle.stderr?.on("data", onStderr);
-          handle.stdio[3]?.on("data", onControl);
-          handle.on("exit", onExit);
-
-          handle.stdin?.write(Buffer.from(serializeConfig(config)));
-          handle.stdin?.end();
-
-          return Effect.sync(removeListeners);
-        });
-        const ports: WorkerdPorts = {};
-        for (const message of controlMessages) {
-          if (message.event === "listen") {
-            ports[message.socket] = message.port;
           }
-        }
-        return ports;
-      },
-      (effect) =>
-        Effect.retry(effect, {
-          while: (error) => error._tag === "SystemError",
-          schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(3)),
-        }),
-    ),
-  });
-});
+          return ports;
+        },
+        (effect) =>
+          Effect.retry(effect, {
+            while: (error) => error._tag === "SystemError",
+            schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(3)),
+          }),
+      ),
+    });
+  }),
+);
 
 /**
  * Workerd writes failures to stderr in a few well-known shapes. This
@@ -188,10 +165,9 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
 const classifyWorkerdError = (
   stderr: string | undefined,
   exitCode: number | null,
-  signal: NodeJS.Signals | null,
-): ConfigError | SystemError => {
+): Effect.Effect<never, ConfigError | SystemError> => {
   const text = (stderr ?? "").trim();
-  const detail = { stderr: text, exitCode, signal };
+  const detail = { stderr: text, exitCode };
   const lines = text
     .split("\n")
     .map((line) => line.trim())
@@ -204,27 +180,33 @@ const classifyWorkerdError = (
   if (serviceLine) {
     const match = serviceLine.match(/^service ([^:]+): (.*)$/);
     const [, service, message] = match ?? [];
-    return new ConfigError({
-      subtag: "WorkerdUserScript",
-      message: message ?? serviceLine,
-      hint: service ? `Check the configuration for service "${service}".` : undefined,
-      detail: { ...detail, service },
-    });
+    return Effect.fail(
+      new ConfigError({
+        subtag: "WorkerdUserScript",
+        message: message ?? serviceLine,
+        hint: service ? `Check the configuration for service "${service}".` : undefined,
+        detail: { ...detail, service },
+      }),
+    );
   }
 
   // Pattern: address-in-use comes through as a `kj::Exception`.
   if (/Address already in use/i.test(text)) {
-    return new ConfigError({
-      subtag: "WorkerdAddressInUse",
-      message: "The Workers runtime could not bind to the requested address (already in use).",
-      hint: "Pick a different port or stop the process using it.",
-      detail,
-    });
+    return Effect.fail(
+      new ConfigError({
+        subtag: "WorkerdAddressInUse",
+        message: "The Workers runtime could not bind to the requested address (already in use).",
+        hint: "Pick a different port or stop the process using it.",
+        detail,
+      }),
+    );
   }
 
-  return new SystemError({
-    subtag: "WorkerdStartFailed",
-    message: "The Workers runtime failed to start.",
-    detail,
-  });
+  return Effect.fail(
+    new SystemError({
+      subtag: "WorkerdStartFailed",
+      message: "The Workers runtime failed to start.",
+      detail,
+    }),
+  );
 };

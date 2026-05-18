@@ -34,7 +34,7 @@ import * as RouterWorker from "worker:./router.worker.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
-import { moduleToWorkerd } from "../../RuntimeWorker.ts";
+import { moduleToWorkerd, type RuntimeWorker } from "../../RuntimeWorker.ts";
 
 export class Assets extends Plugin.Service<Assets, { isConfigured: boolean }>()(
   "cloudflare-runtime/plugin/Assets",
@@ -56,6 +56,13 @@ export const AssetsLive = Layer.effect(
 
     const buildAssetManifest = Effect.fn("buildAssetManifest")(function* (dir: string) {
       const files = yield* fs.readDirectory(dir, { recursive: true }).pipe(
+        Effect.catchIf(
+          (error) => error.reason._tag === "NotFound",
+          () =>
+            Effect.succeed([]).pipe(
+              Effect.tap(() => Effect.logWarning(`Could not read assets directory "${dir}"`)),
+            ),
+        ),
         Effect.mapError(
           (cause) =>
             new SystemError({
@@ -210,44 +217,9 @@ export const AssetsLive = Layer.effect(
           };
         }
         const { encodedAssetManifest, assetsReverseMap } = yield* buildAssetManifest(
-          worker.assets.directory,
+          path.resolve(worker.assets.directory),
         );
-        let headers: AssetConfig["headers"] | undefined;
-        if (worker.assets.headers) {
-          const parsedHeaders = parseHeaders(worker.assets.headers);
-          headers = constructHeaders({
-            headers: parsedHeaders,
-            headersFile: worker.assets.headers,
-            logger: undefined!,
-          }).headers;
-        }
-        let redirects: AssetConfig["redirects"] | undefined;
-        if (worker.assets.redirects) {
-          const parsedRedirects = parseRedirects(worker.assets.redirects);
-          redirects = constructRedirects({
-            redirects: parsedRedirects,
-            redirectsFile: worker.assets.redirects,
-            logger: undefined!,
-          }).redirects;
-        }
-        let staticRouting: StaticRouting | undefined;
-        if (Array.isArray(worker.assets.runWorkerFirst)) {
-          staticRouting = parseStaticRouting(worker.assets.runWorkerFirst);
-        }
-        const routerConfig: RouterConfig = {
-          invoke_user_worker_ahead_of_assets: worker.assets.runWorkerFirst !== false,
-          static_routing: staticRouting,
-          has_user_worker: true,
-        };
-        const assetsConfig: AssetConfig = {
-          compatibility_date: worker.compatibilityDate,
-          compatibility_flags: worker.compatibilityFlags,
-          html_handling: worker.assets.htmlHandling,
-          not_found_handling: worker.assets.notFoundHandling,
-          headers,
-          redirects,
-          has_static_routing: !!staticRouting,
-        };
+        const { assetsConfig, routerConfig } = buildAssetConfigs(worker);
         return {
           services: [
             {
@@ -332,6 +304,48 @@ export const AssetsLive = Layer.effect(
     );
   }),
 );
+
+export const buildAssetConfigs = (
+  worker: Pick<RuntimeWorker, "assets" | "compatibilityDate" | "compatibilityFlags">,
+) => {
+  let headers: AssetConfig["headers"] | undefined;
+  if (worker.assets?.headers) {
+    const parsedHeaders = parseHeaders(worker.assets.headers);
+    headers = constructHeaders({
+      headers: parsedHeaders,
+      headersFile: worker.assets.headers,
+      logger: undefined!,
+    }).headers;
+  }
+  let redirects: AssetConfig["redirects"] | undefined;
+  if (worker.assets?.redirects) {
+    const parsedRedirects = parseRedirects(worker.assets.redirects);
+    redirects = constructRedirects({
+      redirects: parsedRedirects,
+      redirectsFile: worker.assets.redirects,
+      logger: undefined!,
+    }).redirects;
+  }
+  let staticRouting: StaticRouting | undefined;
+  if (Array.isArray(worker.assets?.runWorkerFirst)) {
+    staticRouting = parseStaticRouting(worker.assets.runWorkerFirst);
+  }
+  const routerConfig: RouterConfig = {
+    invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst !== false,
+    static_routing: staticRouting,
+    has_user_worker: true,
+  };
+  const assetsConfig: AssetConfig = {
+    compatibility_date: worker.compatibilityDate,
+    compatibility_flags: worker.compatibilityFlags,
+    html_handling: worker.assets?.htmlHandling,
+    not_found_handling: worker.assets?.notFoundHandling,
+    headers,
+    redirects,
+    has_static_routing: !!staticRouting,
+  };
+  return { assetsConfig, routerConfig };
+};
 
 export const binding = (name: string): BindingHook<Assets> =>
   Plugin.use(Assets, (assets) =>

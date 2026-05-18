@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import { PluginContext, type ConfigHook } from "./PluginContext.ts";
-import type { ConfigError, RuntimeError } from "./RuntimeError.shared.ts";
+import type { RuntimeError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 import type * as Workerd from "./workerd/Workerd.ts";
 
@@ -27,7 +27,7 @@ export interface Middleware {
 
 export type PluginBuilder<Api = never> =
   | PluginResult<Api>
-  | Effect.Effect<PluginResult<Api>, ConfigError, PluginContext>;
+  | Effect.Effect<PluginResult<Api>, RuntimeError, PluginContext>;
 
 export type PluginResult<Api> = [Api] extends [never] ? Omit<Plugin<Api>, "api"> : Plugin<Api>;
 

@@ -38,7 +38,7 @@ export type BindingHook<R = never> = ConfigHook<WorkerdConfig.Worker_Binding, ne
 export const make = (
   worker: RuntimeWorker,
   inheritedPlugins?: PluginMap,
-): Effect.Effect<PluginContext["Service"], ConfigError> =>
+): Effect.Effect<PluginContext["Service"], RuntimeError> =>
   Effect.gen(function* () {
     const plugins = new Map<string, Plugin.Plugin<any>>();
     const context = PluginContext.of({

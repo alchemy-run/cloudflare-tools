@@ -8,6 +8,7 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { exitHook } from "../internal/exit-hook.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
@@ -74,6 +75,7 @@ export const WorkerdLive = Layer.effect(
               additionalFds: {
                 fd3: { type: "output" },
               },
+              killSignal: "SIGKILL",
             },
           );
 
@@ -85,6 +87,17 @@ export const WorkerdLive = Layer.effect(
                   message: "Failed to spawn the Workers runtime (workerd) process.",
                   cause,
                 }),
+            ),
+          );
+
+          const unregister = exitHook(() => {
+            process.kill(handle.pid, "SIGKILL");
+          });
+
+          yield* Effect.addFinalizer(() =>
+            handle.kill({ killSignal: "SIGKILL" }).pipe(
+              Effect.tap(() => Effect.sync(unregister)),
+              Effect.ignore,
             ),
           );
 

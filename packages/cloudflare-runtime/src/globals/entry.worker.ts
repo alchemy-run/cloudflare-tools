@@ -1,4 +1,4 @@
-import type { Fetcher } from "@cloudflare/workers-types/experimental";
+import type { ExportedHandler, Fetcher } from "@cloudflare/workers-types/experimental";
 import { makeErrorResponse } from "../internal/response.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 

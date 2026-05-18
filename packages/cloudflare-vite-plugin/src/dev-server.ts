@@ -21,6 +21,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as vite from "vite";
 import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker.ts";
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
+import * as ViteAssets from "./assets/ViteAssets";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin";
 
@@ -37,6 +38,7 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
 ) => {
   const scope = Scope.makeUnsafe();
   const address = await serve(options, entry, server).pipe(
+    Effect.provide(ViteAssets.ViteAssetsLive(server)),
     Effect.provide(context),
     Scope.provide(scope),
     Effect.runPromise,

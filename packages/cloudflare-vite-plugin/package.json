@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/vendor-workers-shared": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "rolldown": "catalog:",
     "tsdown": "catalog:",

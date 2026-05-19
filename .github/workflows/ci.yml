@@ -32,3 +32,5 @@ jobs:
 
       - name: Test
         run: bun run test
+        env:
+          TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}

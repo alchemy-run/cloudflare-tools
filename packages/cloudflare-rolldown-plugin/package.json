@@ -69,6 +69,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
     "@distilled.cloud/test-utils": "workspace:*",
+    "mysql2": "^3.22.3",
     "vite": "catalog:",
     "vitest": "catalog:"
   },

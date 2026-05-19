@@ -1,9 +1,10 @@
 import { createMiniflareFromRolldown } from "@distilled.cloud/test-utils/miniflare";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { buildFixture } from "./utils/build-fixture";
 
 describe("regression", () => {
   it("bundles mysql2", async () => {
+    assert(process.env.TEST_MYSQL_URL, "TEST_MYSQL_URL is not set");
     const pluginOptions = {
       compatibilityDate: "2025-07-01",
       compatibilityFlags: ["nodejs_compat"],
@@ -15,7 +16,7 @@ describe("regression", () => {
     await using miniflare = await createMiniflareFromRolldown(built.output, {
       ...pluginOptions,
       bindings: {
-        DATABASE_URL: process.env.MYSQL_DATABASE_URL!,
+        DATABASE_URL: process.env.TEST_MYSQL_URL,
       },
     });
     expect(await miniflare.fetchJson<{ result: number }>("/")).toEqual({ result: 1 });

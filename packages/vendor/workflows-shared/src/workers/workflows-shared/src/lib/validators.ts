@@ -1,5 +1,5 @@
+import * as Schema from "effect/Schema";
 import { ms } from "itty-time";
-import { z } from "zod";
 
 export const MAX_WORKFLOW_NAME_LENGTH = 64;
 
@@ -45,34 +45,36 @@ export function isValidStepName(name: string): boolean {
   return !CONTROL_CHAR_REGEX.test(name);
 }
 
-const STEP_CONFIG_SCHEMA = z
-  .object({
-    retries: z
-      .object({
-        delay: z.number().gte(0).or(z.string()),
-        limit: z.number().gte(0),
-        backoff: z.enum(["constant", "linear", "exponential"]).optional(),
-      })
-      .strict()
-      .optional(),
-    timeout: z.number().gte(0).or(z.string()).optional(),
-  })
-  .strict();
+const NonNegativeNumberOrString = Schema.Union([
+  Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
+  Schema.String,
+]);
+
+const StepConfigSchema = Schema.Struct({
+  retries: Schema.optional(
+    Schema.Struct({
+      delay: NonNegativeNumberOrString,
+      limit: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
+      backoff: Schema.optional(Schema.Literals(["constant", "linear", "exponential"])),
+    }),
+  ),
+  timeout: Schema.optional(NonNegativeNumberOrString),
+});
+
+const isStepConfigShape = Schema.is(StepConfigSchema);
 
 export function isValidStepConfig(stepConfig: unknown): boolean {
-  const config = STEP_CONFIG_SCHEMA.safeParse(stepConfig);
-
-  if (!config.success) {
+  if (!isStepConfigShape(stepConfig)) {
     return false;
   }
 
-  if (config.data.retries !== undefined && Number.isNaN(ms(config.data.retries.delay))) {
+  if (stepConfig.retries !== undefined && Number.isNaN(ms(stepConfig.retries.delay))) {
     return false;
   }
 
-  if (config.data.timeout !== undefined) {
-    const timeout = config.data.timeout;
-    if (timeout == 0 || Number.isNaN(ms(config.data.timeout))) {
+  if (stepConfig.timeout !== undefined) {
+    const { timeout } = stepConfig;
+    if (timeout == 0 || Number.isNaN(ms(timeout))) {
       return false;
     }
   }

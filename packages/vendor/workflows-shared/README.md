@@ -42,6 +42,12 @@ at commit `2dc61751451f142dbf93e618133a5c8942c07c9a` (path:
   from a placeholder `"shared"` module with a `@ts-expect-error`. Both types
   are actually defined in the sibling `../context.ts`; the import has been
   rewritten accordingly and the `@ts-expect-error` removed.
+- `src/lib/validators.ts` — upstream uses `zod` for `STEP_CONFIG_SCHEMA`.
+  Rewritten on top of `effect/Schema` to keep the vendor tree on a single
+  validation library (matching `vendor-workers-shared`) and to avoid adding
+  `zod` to the dependency graph. `isValidStepConfig` retains identical
+  semantics: shape check via `Schema.is`, followed by the same
+  `ms()`-based delay / timeout sanity checks.
 
 ## Consumer imports
 

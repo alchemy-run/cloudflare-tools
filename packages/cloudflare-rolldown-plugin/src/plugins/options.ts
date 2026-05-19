@@ -6,7 +6,7 @@ import { hasNodejsCompat } from "../utils.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
 const DEFAULT_RESOLVE_CONDITION_NAMES = ["workerd", "worker", "module", "browser"];
-const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "jsnext:main", "jsnext"];
+const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "jsnext:main", "jsnext", "main"];
 const DEFAULT_RESOLVE_EXTENSIONS = [
   ".mjs",
   ".js",

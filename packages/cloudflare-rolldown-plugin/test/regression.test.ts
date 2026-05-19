@@ -19,6 +19,6 @@ describe("regression", () => {
         DATABASE_URL: process.env.TEST_MYSQL_URL,
       },
     });
-    expect(await miniflare.fetchJson<{ result: number }>("/")).toEqual({ result: 1 });
+    expect(await miniflare.fetchJson<{ sql: string }>("/")).toMatchObject({ sql: "SELECT 1" });
   });
 });

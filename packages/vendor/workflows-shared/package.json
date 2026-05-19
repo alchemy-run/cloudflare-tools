@@ -1,0 +1,29 @@
+{
+  "name": "@distilled.cloud/vendor-workflows-shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Vendored TypeScript source of @cloudflare/workflows-shared.",
+  "license": "MIT AND Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./workers/workflows-shared": "./src/workers/workflows-shared/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "heap-js": "^2.5.0",
+    "itty-time": "^2.0.2",
+    "zod": "^3.22.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.13.0",
+    "@cloudflare/workers-types": "catalog:workers",
+    "@types/node": "*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

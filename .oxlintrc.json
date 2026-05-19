@@ -114,7 +114,9 @@
       "files": ["packages/vendor/*/src/**/*.ts"],
       "rules": {
         "eslint/no-unmodified-loop-condition": "off",
-        "eslint/no-useless-constructor": "off"
+        "eslint/no-useless-constructor": "off",
+        "eslint/preserve-caught-error": "off",
+        "typescript/array-type": "off"
       }
     }
   ]

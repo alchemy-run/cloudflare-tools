@@ -126,6 +126,7 @@
         "@cloudflare/workers-types": "catalog:workers",
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@distilled.cloud/vendor-workers-shared": "workspace:*",
+        "@distilled.cloud/vendor-workflows-shared": "workspace:*",
         "@effect/platform-bun": "catalog:effect",
         "@effect/platform-node": "catalog:effect",
         "@effect/vitest": "catalog:effect",

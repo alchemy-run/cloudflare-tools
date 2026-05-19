@@ -1,5 +1,5 @@
 import * as Layer from "effect/Layer";
-import { Assets, Hyperdrive } from "./bindings/index.ts";
+import { Assets, Hyperdrive, Workflows } from "./bindings/index.ts";
 import * as DevRegistry from "./dev-registry/DevRegistry.ts";
 import * as DevRegistryProxy from "./dev-registry/DevRegistryProxy.ts";
 import * as Globals from "./globals/Globals.ts";
@@ -41,6 +41,7 @@ export const layerLocalBindings = () =>
   Layer.mergeAll(
     Assets.AssetsLive,
     Hyperdrive.HyperdriveLive,
+    Workflows.WorkflowsLive,
     DevRegistryProxy.DevRegistryProxyLive,
   );
 
@@ -48,6 +49,7 @@ export type BindingServices =
   | Assets.Assets
   | Loopback.Loopback
   | Hyperdrive.Hyperdrive
+  | Workflows.Workflows
   | RemoteBindings.RemoteBindings
   | DevRegistryProxy.DevRegistryProxy;
 

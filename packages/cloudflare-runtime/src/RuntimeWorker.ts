@@ -11,6 +11,25 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly assets?: Assets;
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  readonly workflows?: Record<string, Workflow>;
+}
+
+export interface Workflow {
+  /**
+   * Name of the user-defined `WorkflowEntrypoint` subclass exported from the
+   * user worker's main module.
+   */
+  className: string;
+  /**
+   * Maximum number of steps allowed per workflow instance. Forwarded to the
+   * engine as the `STEP_LIMIT` binding.
+   */
+  stepLimit?: number;
+  /**
+   * Additional compatibility flags to apply to the workflows engine worker
+   * service (on top of the standard `experimental` flag).
+   */
+  compatibilityFlags?: ReadonlyArray<string>;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;

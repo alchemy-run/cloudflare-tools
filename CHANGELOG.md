@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.6.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.6.1) (2026-05-21)
+
+### Bug Fixes
+
+- **runtime**: include x-forwarded-for and x-forwarded-proto headers - by @john-royal [(1acca6b)](https://github.com/alchemy-run/cloudflare-tools/commit/1acca6b53b3d82c132553648450a398d44e4c7d9)
+
+## [v0.6.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.6.0) (2026-05-19)
+
+### Features
+
+- **vite-plugin**: assets - by @john-royal in [#12](https://github.com/alchemy-run/cloudflare-tools/pull/12) [(befe2cf)](https://github.com/alchemy-run/cloudflare-tools/commit/befe2cfc5a63bf3c4ddbfdf6b71ae2a4169914e9)
+- **runtime**: assets - by @john-royal in [#10](https://github.com/alchemy-run/cloudflare-tools/pull/10) [(1a93bec)](https://github.com/alchemy-run/cloudflare-tools/commit/1a93bec7a6129bf80b7c5d04d4002d64b6fb8c39)
+
+### Bug Fixes
+
+- **rolldown-plugin**: mysql2 not bundling - by @john-royal in [#14](https://github.com/alchemy-run/cloudflare-tools/pull/14) [(d9a2b33)](https://github.com/alchemy-run/cloudflare-tools/commit/d9a2b33eb29f0257da9bb5572f86c3f432bed095)
+
 ## [v0.5.4](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.5.4) (2026-05-15)
 
 *No significant changes*

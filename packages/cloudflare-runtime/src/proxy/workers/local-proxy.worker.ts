@@ -207,7 +207,15 @@ export class LocalProxy extends DurableObject<Env> {
     }
     try {
       const proxied = new URL(original.pathname + original.search, localAddress);
-      return await fetch(proxied, request);
+      const headers = new Headers(request.headers);
+      headers.set("x-forwarded-host", original.host);
+      headers.set("x-forwarded-proto", original.protocol.replace(/:$/, ""));
+      return await fetch(proxied, {
+        method: request.method,
+        headers,
+        body: request.body,
+        redirect: "manual",
+      });
     } catch (error) {
       const worker = this.workers.get(name);
       if (!worker || worker.localAddress === localAddress) {

@@ -153,7 +153,7 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:workers",
-        "@distilled.cloud/vendor-workers-shared": "workspace:",
+        "@distilled.cloud/vendor-workers-shared": "workspace:*",
         "@effect/platform-node": "catalog:effect",
         "rolldown": "catalog:",
         "tsdown": "catalog:",
@@ -163,11 +163,13 @@
       "peerDependencies": {
         "@distilled.cloud/cloudflare": "catalog:",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
+        "@effect/platform-bun": "catalog:effect",
         "@effect/platform-node": "catalog:effect",
         "effect": "catalog:effect",
         "vite": "^7.0.0 || ^8.0.0",
       },
       "optionalPeers": [
+        "@effect/platform-bun",
         "@effect/platform-node",
       ],
     },

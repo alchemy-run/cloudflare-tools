@@ -57,11 +57,15 @@
   "peerDependencies": {
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
     "vite": "^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
     "@effect/platform-node": {
       "optional": true
     }

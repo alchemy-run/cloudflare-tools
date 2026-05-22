@@ -7,7 +7,6 @@ import {
   UnsafeEval,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -49,6 +48,19 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   };
 };
 
+const importPlatformServices = Layer.unwrap(
+  Effect.promise(async () => {
+    try {
+      const BunServices = await import("@effect/platform-bun/BunServices");
+      return BunServices.layer;
+    } catch {
+      // ignore and fall back to NodeServices
+    }
+    const NodeServices = await import("@effect/platform-node/NodeServices");
+    return NodeServices.layer;
+  }),
+);
+
 export const createDefaultContext = async () => {
   const scope = Scope.makeUnsafe();
 
@@ -57,7 +69,9 @@ export const createDefaultContext = async () => {
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
+    Layer.provide(
+      Layer.mergeAll(Credentials.fromEnv(), importPlatformServices, FetchHttpClient.layer),
+    ),
     Layer.buildWithScope(scope),
     Effect.runPromise,
   );

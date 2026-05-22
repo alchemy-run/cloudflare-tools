@@ -32,7 +32,7 @@
       }
     },
     "catalog": {
-      "@distilled.cloud/cloudflare": "^0.21.0",
+      "@distilled.cloud/cloudflare": "^0.21.5",
       "@playwright/test": "^1.52.0",
       "rolldown": "^1.0.1",
       "tsdown": "^0.22.0",

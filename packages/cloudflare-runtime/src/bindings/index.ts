@@ -1,4 +1,5 @@
 export * as Ai from "./Ai.ts";
+export * as Artifacts from "./Artifacts.ts";
 export * as Assets from "./assets/Assets.ts";
 export * as Browser from "./Browser.ts";
 export * as D1 from "./D1.ts";

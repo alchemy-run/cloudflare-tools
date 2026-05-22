@@ -13,14 +13,15 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "typecheck": "tsc -b"
+    "build": "tsc -b",
+    "typecheck": "tsc"
   },
   "devDependencies": {
+    "@alchemy.run/node-utils": "catalog:",
     "@cloudflare/vitest-pool-workers": "^0.13.0",
     "@cloudflare/workers-types": "catalog:workers",
     "@types/node": "*",
     "effect": "catalog:effect",
-    "ignore": "^5.2.0",
     "mime": "^4.0.7",
     "toucan-js": "4.0.0",
     "typescript": "catalog:",

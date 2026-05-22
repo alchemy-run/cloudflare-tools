@@ -141,6 +141,64 @@ The example below assumes the upstream lives at
    submodule is updated and you re-vendor, bump the SHA there so the
    provenance stays accurate.
 
+## Conventions
+
+### Replacing upstream validators with `effect/Schema`
+
+Upstream packages often use `zod` (or hand-rolled `interface`s) to describe
+runtime-validated config shapes. We standardize on `effect/Schema` for these
+in vendored packages.
+
+The mechanical mapping for the common Zod patterns:
+
+| Zod                                     | `effect/Schema`                                  |
+|-----------------------------------------|--------------------------------------------------|
+| `z.object({ ... })`                     | `Schema.Struct({ ... })`                         |
+| `z.string()` / `.number()` / `.boolean()` | `Schema.String` / `Schema.Number` / `Schema.Boolean` |
+| `z.array(X)`                            | `Schema.Array(X)`                                |
+| `z.record(X)`                           | `Schema.Record(Schema.String, X)`                |
+| `z.literal(N)`                          | `Schema.Literal(N)`                              |
+| `z.enum([...])`                         | `Schema.Literals([...])`                         |
+| `z.union([X, Y])`                       | `Schema.Union([X, Y])`                           |
+| `z.union([X, z.null()])`                | `Schema.NullOr(X)`                               |
+| Field `.optional()` inside an object    | `Schema.optional(X)`                             |
+| `SchemaA.shape` spread into `z.object`  | Extract a plain fields object and spread it      |
+| `z.infer<typeof S>`                     | `typeof S.Type` (wrap in `Mutable<T>` — see below) |
+
+For standalone `z.object({...}).optional()` exports: define them as bare
+`Schema.Struct(...)`s and apply `Schema.optional(...)` at the use site in the
+parent struct. Cleaner, and almost always equivalent for vendored code where
+the schema isn't re-exported as a top-level parser.
+
+#### Mutability
+
+`Schema.Struct` / `Schema.Array` / `Schema.Record` infer **deeply `readonly`**
+types, while Zod's `z.infer<...>` produces fully mutable types. Most upstream
+worker code mutates these values (e.g. `config.compatibility_flags.push(...)`,
+assigning to record entries) and breaks under `readonly`.
+
+Apply a deep mutability helper to every exported type that originated from a
+Schema:
+
+```ts
+type Mutable<T> = T extends ReadonlyArray<infer U>
+  ? Array<Mutable<U>>
+  : T extends object
+    ? { -readonly [K in keyof T]: Mutable<T[K]> }
+    : T;
+
+export type RouterConfig = Mutable<typeof RouterConfigSchema.Type>;
+```
+
+The runtime schema stays canonical; only the type alias is unwrapped. See
+[`workers-shared/src/shared/types.ts`](workers-shared/src/shared/types.ts)
+for a worked example.
+
+#### Dependency
+
+Add `"effect": "catalog:effect"` to `devDependencies` (the catalog version
+range lives in the root `package.json`). Remove the old `zod` entry.
+
 ## Updating a vendored package
 
 1. `git submodule update --remote workers-sdk` (or the relevant submodule).

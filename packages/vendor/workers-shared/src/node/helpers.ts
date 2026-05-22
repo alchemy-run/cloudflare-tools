@@ -1,13 +1,13 @@
+import ignore from "@alchemy.run/node-utils/ignore";
+import mime from "mime";
+import type { PathOrFileDescriptor } from "node:fs";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
-import ignore from "ignore";
-import mime from "mime";
 import {
   CF_ASSETS_IGNORE_FILENAME,
   HEADERS_FILENAME,
   REDIRECTS_FILENAME,
 } from "../shared/constants";
-import type { PathOrFileDescriptor } from "node:fs";
 
 /** normalises sep for windows and prefix with `/` */
 export const normalizeFilePath = (relativeFilepath: string) => {

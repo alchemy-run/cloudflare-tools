@@ -1,3 +1,4 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Chokidar from "chokidar";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -11,7 +12,6 @@ import * as NodeFs from "node:fs";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import * as XdgAppPaths from "xdg-app-paths";
-import { exitHook } from "../internal/exit-hook.ts";
 import type { WorkerDefinition, WorkerRegistry } from "./DevRegistryTypes.shared.ts";
 
 export type { WorkerDefinition, WorkerRegistry } from "./DevRegistryTypes.shared.ts";

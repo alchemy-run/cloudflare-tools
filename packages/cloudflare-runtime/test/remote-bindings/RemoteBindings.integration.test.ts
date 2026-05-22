@@ -4,7 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { Ai, D1, Images, KvNamespace, R2Bucket, Service, VersionMetadata } from "../../src/bindings/index.ts";
+import { Ai, Artifacts, D1, Images, KvNamespace, R2Bucket, Service, VersionMetadata } from "../../src/bindings/index.ts";
 import * as Runtime from "../../src/Runtime.ts";
 import * as RuntimeServices from "../../src/RuntimeServices.ts";
 
@@ -22,6 +22,7 @@ import * as RuntimeServices from "../../src/RuntimeServices.ts";
  * - `TEST_D1_DATABASE_ID`     - id of an existing D1 database
  * - `TEST_SERVICE_WORKER_NAME` - name of an already-deployed worker that
  *                                responds with 200 to a GET /
+ * - `TEST_ARTIFACTS_NAMESPACE` - name of an existing artifacts namespace
  *
  * Bindings whose remote helper takes only a name (Ai, Images, Browser,
  * VersionMetadata) work without extra env config.
@@ -32,6 +33,7 @@ const kvNamespaceId = process.env.TEST_KV_NAMESPACE_ID;
 const r2BucketName = process.env.TEST_R2_BUCKET_NAME;
 const d1DatabaseId = process.env.TEST_D1_DATABASE_ID;
 const serviceWorker = process.env.TEST_SERVICE_WORKER_NAME;
+const artifactsNamespace = process.env.TEST_ARTIFACTS_NAMESPACE;
 
 const ROUTER_SCRIPT = `
 export default {
@@ -74,6 +76,10 @@ export default {
         case "/version": {
           return Response.json(env.VERSION ?? null);
         }
+        case "/artifacts": {
+          if (!env.ARTIFACTS) return new Response("no-artifacts", { status: 412 });
+          return new Response(typeof env.ARTIFACTS.fetch === "function" ? "artifacts-bound" : "artifacts-missing");
+        }
       }
     } catch (error) {
       return new Response(String(error?.stack ?? error), { status: 500 });
@@ -99,6 +105,7 @@ describe.skipIf(!accountId)("RemoteBindings (integration)", () => {
     ...(r2BucketName ? [R2Bucket.remote("R2", r2BucketName)] : []),
     ...(d1DatabaseId ? [D1.remote("DB", d1DatabaseId)] : []),
     ...(serviceWorker ? [Service.remote("SVC", serviceWorker)] : []),
+    ...(artifactsNamespace ? [Artifacts.binding("ARTIFACTS", artifactsNamespace)] : []),
   ];
 
   type RouteCase = {
@@ -117,6 +124,12 @@ describe.skipIf(!accountId)("RemoteBindings (integration)", () => {
     { label: "R2", path: "/r2", expectBodyMatches: /^ok-r2$/, skip: !r2BucketName },
     { label: "D1", path: "/d1", expectBodyMatches: /"one":\s*1/, skip: !d1DatabaseId },
     { label: "Service", path: "/svc", expectBodyMatches: /^\d{3}$/, skip: !serviceWorker },
+    {
+      label: "Artifacts",
+      path: "/artifacts",
+      expectBodyMatches: /artifacts-bound/,
+      skip: !artifactsNamespace,
+    },
   ];
 
   it("starts a worker with all remote bindings and exercises each route", async () => {

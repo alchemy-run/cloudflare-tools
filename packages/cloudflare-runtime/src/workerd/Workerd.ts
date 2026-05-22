@@ -72,7 +72,11 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
           resume(Effect.succeed([handle, kill]));
         };
         const onStderr = (data: Buffer) => {
-          process.stderr.write(data);
+          const lines = data.toString().split("\n");
+          for (const line of lines) {
+            if (line.includes("CODE_MOVED for unknown code block")) continue;
+            console.error(line);
+          }
         };
         handle.once("error", onError);
         handle.once("spawn", onSpawn);

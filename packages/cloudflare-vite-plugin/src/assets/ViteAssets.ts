@@ -67,7 +67,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                     },
                     {
                       name: "__VITE_HEADERS__",
-                      json: viteDevServer.config.server.headers ?? {},
+                      json: JSON.stringify(viteDevServer.config.server.headers ?? {}),
                     },
                     {
                       name: "__VITE_HTML_EXISTS__",

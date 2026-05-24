@@ -1,8 +1,12 @@
 import type { MinimalPluginContext } from "rolldown";
-import { assert, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { optionsPlugin } from "../src/plugins/options.js";
 
 describe("options plugin", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("applies the Cloudflare defaults", () => {
     const plugin = optionsPlugin.rolldown({});
     const input = {};
@@ -105,5 +109,23 @@ describe("options plugin", () => {
       '"Cloudflare-Workers"',
     );
     expect(withoutNavigatorOutput.transform?.define?.["navigator.userAgent"]).toBeUndefined();
+  });
+
+  it("normalizes Windows absolute entry ids before prefixing virtual worker ids", () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+
+    const plugin = optionsPlugin.rolldown({});
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
+    const output = plugin.options.call({} as MinimalPluginContext, {
+      input: {
+        worker: "D:\\workspace\\src\\index.ts",
+      },
+    });
+    assert(output, "output is not defined");
+    assert(!(output instanceof Promise), "output is a promise");
+
+    expect(output.input).toEqual({
+      worker: "\0distilled:worker-entry:D:/workspace/src/index.ts",
+    });
   });
 });

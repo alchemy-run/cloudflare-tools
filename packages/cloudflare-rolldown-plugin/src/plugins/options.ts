@@ -172,9 +172,15 @@ const normalizeInput = (
   }
 };
 
+const normalizeVirtualEntryId = (id: string) =>
+  process.platform === "win32" ? id.replace(/\\/g, "/") : id;
+
 const wrapInput = (input: Record<string, string>) =>
   Object.fromEntries(
-    Object.entries(input).map(([key, id]) => [key, `${WORKER_ENTRY_PREFIX}${id}` as const]),
+    Object.entries(input).map(([key, id]) => [
+      key,
+      `${WORKER_ENTRY_PREFIX}${normalizeVirtualEntryId(id)}` as const,
+    ]),
   );
 
 function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<string, string> {

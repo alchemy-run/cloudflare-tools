@@ -1,5 +1,5 @@
 import * as Layer from "effect/Layer";
-import { Assets, Hyperdrive } from "./bindings/index.ts";
+import { Assets, Hyperdrive, RateLimit } from "./bindings/index.ts";
 import * as DevRegistry from "./dev-registry/DevRegistry.ts";
 import * as DevRegistryProxy from "./dev-registry/DevRegistryProxy.ts";
 import * as Globals from "./globals/Globals.ts";
@@ -42,6 +42,7 @@ export const layerLocalBindings = () =>
     Assets.AssetsLive,
     Hyperdrive.HyperdriveLive,
     DevRegistryProxy.DevRegistryProxyLive,
+    RateLimit.RateLimitLive,
   );
 
 export type BindingServices =

@@ -43,7 +43,7 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
             namespaceId: 1,
             simple: { limit: 2, period: 60 },
           }),
-        ] as const,
+        ],
       });
 
       let res = yield* fetch("/");
@@ -73,7 +73,7 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
             namespaceId: 1,
             simple: { limit: 2, period: 60 },
           }),
-        ] as const,
+        ],
       });
 
       const TESTS = [

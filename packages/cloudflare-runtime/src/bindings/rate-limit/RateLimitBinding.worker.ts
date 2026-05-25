@@ -6,10 +6,9 @@ import type { RateLimitProps } from "./RateLimitProps.shared.ts";
 const RATE_LIMIT_OPTION_KEYS = ["key", "limit", "period"];
 const RATE_LIMIT_PERIOD_VALUES = [10, 60];
 
-function validate(test: boolean, message: string): asserts test {
-  if (!test) {
-    throw new Error(message);
-  }
+// create a new Ratelimit
+export default function makeBinding(env: { PROPS: RateLimitProps }) {
+  return new RateLimitBinding(env.PROPS);
 }
 
 class RateLimitBinding implements RateLimit {
@@ -58,7 +57,8 @@ class RateLimitBinding implements RateLimit {
   }
 }
 
-// create a new Ratelimit
-export default function (env: { PROPS: RateLimitProps }) {
-  return new RateLimitBinding(env.PROPS);
+function validate(test: boolean, message: string): asserts test {
+  if (!test) {
+    throw new Error(message);
+  }
 }

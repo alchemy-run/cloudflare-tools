@@ -12,9 +12,9 @@ Each vendored upstream gets its own workspace package named
 These packages:
 
 - Are `"private": true` and never published.
-- Ship raw `.ts` from `src/` via the `exports` map — no bundling, no `dist/`.
-- Only run `typecheck` (no `build`, no `test`). Consumer packages handle
-  bundling and any test wiring themselves.
+- Ship raw `.ts` from `src/` via the `exports` map — consumers bundle into
+  their own outputs; we do not ship a `dist/`.
+- Run `build`, `typecheck`, and `test` scripts (see [Scripts](#scripts) below).
 - Conform to the repo's `oxlint` + `oxfmt` rules. Where upstream patterns can't
   be made compliant trivially, narrow rule overrides live in
   [`.oxlintrc.json`](../../.oxlintrc.json) scoped to `packages/vendor/*/src/**`.
@@ -32,6 +32,7 @@ packages/vendor/<upstream-name>/
   tsconfig.workers.json
   tsconfig.shared.json
   tsconfig.node.json
+  vitest.config.ts               (one root config with four projects)
   src/
     index.ts                     (Node-facing barrel, typechecked under node)
     workers/                     (code that runs in the Workers runtime)
@@ -59,6 +60,73 @@ packages/vendor/<upstream-name>/
 `tsconfig.json` is a solution file that references all three via
 `emitDeclarationOnly: true` (project references require emit).
 
+## Scripts
+
+Every vendored package exposes the same script surface:
+
+| Script       | Command      | Purpose                                                                                                            |
+| ------------ | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `build`      | `tsc -b`     | Walks the project references and emits `.d.ts` declarations into `.cache/` so consumer packages can resolve types. |
+| `typecheck`  | `tsc`        | Type-checks against the solution config without emit. Faster feedback than `build` during development.             |
+| `test`       | `vitest run` | Runs all four vitest projects once (see [Testing](#testing)).                                                      |
+| `test:watch` | `vitest`     | Re-runs affected tests on change.                                                                                  |
+
+The `build` / `typecheck` split exists because consumer packages (e.g.
+`@distilled.cloud/cloudflare-runtime`) use TypeScript project references and
+need our emitted `.d.ts` files, while local development wants the fast
+no-emit `tsc` invocation.
+
+## Testing
+
+Tests are vendored alongside source and **kept runnable**. Even though we
+don't modify upstream behavior often, when we do (refactors, dependency
+swaps like `zod` → `effect/Schema`, vendoring out `mime`, etc.) the upstream
+test suite is our best regression guard.
+
+A single [`vitest.config.ts`](workers-shared/vitest.config.ts) at the package
+root uses Vitest 4's `test.projects` to fan out into four named projects in
+one invocation:
+
+| Project         | Environment                                                   | Includes                                       |
+| --------------- | ------------------------------------------------------------- | ---------------------------------------------- |
+| `node`          | `node`                                                        | `src/node/**/*.test.ts`                        |
+| `shared`        | `node`                                                        | `src/shared/**/*.test.ts`                      |
+| `<worker-name>` | `@cloudflare/vitest-pool-workers` + upstream `wrangler.jsonc` | `src/workers/<worker-name>/tests/**/*.test.ts` |
+
+The Worker projects load each worker's vendored `wrangler.jsonc` verbatim;
+its `main: "src/worker.ts"` path is relative to the wrangler config itself,
+so no rewriting is needed.
+
+Skeleton (see [`workers-shared/vitest.config.ts`](workers-shared/vitest.config.ts)
+for the full example):
+
+```ts
+import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    projects: [
+      { test: { name: "node", include: ["src/node/**/*.test.ts"], environment: "node" } },
+      { test: { name: "shared", include: ["src/shared/**/*.test.ts"], environment: "node" } },
+      {
+        plugins: [
+          cloudflareTest({ wrangler: { configPath: "./src/workers/<worker>/wrangler.jsonc" } }),
+        ],
+        test: {
+          name: "<worker>",
+          include: ["src/workers/<worker>/tests/**/*.test.ts"],
+          testTimeout: 50_000,
+        },
+      },
+    ],
+  },
+});
+```
+
+When adding tests for a new worker, append another `cloudflareTest`-backed
+project entry. No new dependencies or config files needed.
+
 ### Classifying a file
 
 - Imports `node:*` or uses `process.*` / `Buffer` (outside ambient global use)? → `node/`.
@@ -80,11 +148,12 @@ The example below assumes the upstream lives at
    mkdir -p packages/vendor/<upstream>/src/{workers,shared,node}
    ```
 
-   Copy `package.json`, `README.md`, and the four `tsconfig.*.json` files from
-   [`packages/vendor/workers-shared/`](workers-shared/) as a starting point and
-   update:
+   Copy `package.json`, `README.md`, the four `tsconfig.*.json` files, and
+   `vitest.config.ts` from [`packages/vendor/workers-shared/`](workers-shared/)
+   as a starting point and update:
    - `package.json` → `name: "@distilled.cloud/vendor-<upstream>"`, `description`, `exports` entries for any directory-as-module subpaths.
    - `README.md` → provenance (upstream URL, commit SHA, license), file mapping table.
+   - `vitest.config.ts` → add one `cloudflareTest`-backed project per worker (the `node` and `shared` projects work as-is via the glob patterns).
    - tsconfigs typically need no changes — the globs are package-local.
 
 2. **Copy the upstream source.** Use `cp -R` from the in-repo submodule (not
@@ -127,10 +196,14 @@ The example below assumes the upstream lives at
 
    ```bash
    bun install
-   bun run turbo run typecheck --filter @distilled.cloud/vendor-<upstream>
+   bun run turbo run typecheck test --filter @distilled.cloud/vendor-<upstream>
    bunx oxlint lint packages/vendor/<upstream>
    bunx oxfmt format --check packages/vendor/<upstream>
    ```
+
+   If any tests fail against vanilla upstream source, that's a signal something
+   was misclassified or an import got rewritten incorrectly — not a green
+   light to skip them. Tests must pass before landing the initial vendor.
 
    If `oxlint` flags upstream patterns that aren't trivially fixable, add the
    specific rules to the existing `packages/vendor/*/src/**/*.ts` override
@@ -151,19 +224,19 @@ in vendored packages.
 
 The mechanical mapping for the common Zod patterns:
 
-| Zod                                     | `effect/Schema`                                  |
-|-----------------------------------------|--------------------------------------------------|
-| `z.object({ ... })`                     | `Schema.Struct({ ... })`                         |
+| Zod                                       | `effect/Schema`                                      |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `z.object({ ... })`                       | `Schema.Struct({ ... })`                             |
 | `z.string()` / `.number()` / `.boolean()` | `Schema.String` / `Schema.Number` / `Schema.Boolean` |
-| `z.array(X)`                            | `Schema.Array(X)`                                |
-| `z.record(X)`                           | `Schema.Record(Schema.String, X)`                |
-| `z.literal(N)`                          | `Schema.Literal(N)`                              |
-| `z.enum([...])`                         | `Schema.Literals([...])`                         |
-| `z.union([X, Y])`                       | `Schema.Union([X, Y])`                           |
-| `z.union([X, z.null()])`                | `Schema.NullOr(X)`                               |
-| Field `.optional()` inside an object    | `Schema.optional(X)`                             |
-| `SchemaA.shape` spread into `z.object`  | Extract a plain fields object and spread it      |
-| `z.infer<typeof S>`                     | `typeof S.Type` (wrap in `Mutable<T>` — see below) |
+| `z.array(X)`                              | `Schema.Array(X)`                                    |
+| `z.record(X)`                             | `Schema.Record(Schema.String, X)`                    |
+| `z.literal(N)`                            | `Schema.Literal(N)`                                  |
+| `z.enum([...])`                           | `Schema.Literals([...])`                             |
+| `z.union([X, Y])`                         | `Schema.Union([X, Y])`                               |
+| `z.union([X, z.null()])`                  | `Schema.NullOr(X)`                                   |
+| Field `.optional()` inside an object      | `Schema.optional(X)`                                 |
+| `SchemaA.shape` spread into `z.object`    | Extract a plain fields object and spread it          |
+| `z.infer<typeof S>`                       | `typeof S.Type` (wrap in `Mutable<T>` — see below)   |
 
 For standalone `z.object({...}).optional()` exports: define them as bare
 `Schema.Struct(...)`s and apply `Schema.optional(...)` at the use site in the
@@ -181,11 +254,12 @@ Apply a deep mutability helper to every exported type that originated from a
 Schema:
 
 ```ts
-type Mutable<T> = T extends ReadonlyArray<infer U>
-  ? Array<Mutable<U>>
-  : T extends object
-    ? { -readonly [K in keyof T]: Mutable<T[K]> }
-    : T;
+type Mutable<T> =
+  T extends ReadonlyArray<infer U>
+    ? Array<Mutable<U>>
+    : T extends object
+      ? { -readonly [K in keyof T]: Mutable<T[K]> }
+      : T;
 
 export type RouterConfig = Mutable<typeof RouterConfigSchema.Type>;
 ```
@@ -206,5 +280,7 @@ range lives in the root `package.json`). Remove the old `zod` entry.
 3. Re-apply the import-path mutations and barrel adjustments (a `git diff` of
    the prior vendored tree against the new submodule contents makes this
    straightforward).
-4. Run the verification commands from step 6 above.
+4. Run the verification commands from step 6 above. The test suite catches
+   most semantic regressions from upstream changes; the typecheck catches
+   shape changes; lint/format catches the rest.
 5. Update the upstream commit SHA in the package `README.md`.

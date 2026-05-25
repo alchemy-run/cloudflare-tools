@@ -16,9 +16,9 @@ export class PluginContext extends Context.Service<
       string,
       Plugin.Plugin<any> | Effect.Effect<Plugin.Plugin<any>, never, PluginContext>
     >;
-    readonly get: <S extends Plugin.PluginService<any, any, any>>(
-      service: S,
-    ) => Effect.Effect<S["Plugin"], ConfigError>;
+    readonly get: <Self, Identifier extends Plugin.PluginIdentifier, Api>(
+      service: Plugin.PluginService<Self, Identifier, Api>,
+    ) => Effect.Effect<Plugin.Plugin<Api>, ConfigError>;
     readonly start: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
     readonly config: Effect.Effect<
       {

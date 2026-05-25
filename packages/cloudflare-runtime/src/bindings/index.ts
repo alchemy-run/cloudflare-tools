@@ -11,6 +11,7 @@ export * as Json from "./Json.ts";
 export * as KvNamespace from "./KvNamespace.ts";
 export * as Loopback from "./Loopback.ts";
 export * as R2Bucket from "./R2Bucket.ts";
+export * as RateLimit from "./rate-limit/index.ts";
 export * as Service from "./Service.ts";
 export * as Text from "./Text.ts";
 export * as UnsafeEval from "./UnsafeEval.ts";

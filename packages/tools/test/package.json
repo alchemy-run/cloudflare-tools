@@ -4,16 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./miniflare": {
-      "bun": "./src/miniflare.ts",
-      "types": "./dist/miniflare.d.ts",
-      "import": "./dist/miniflare.js"
-    },
-    "./miniflare-module": {
-      "bun": "./src/miniflare-module.ts",
-      "types": "./dist/miniflare-module.d.ts",
-      "import": "./dist/miniflare-module.js"
-    }
+    "./miniflare": "./src/miniflare.ts",
+    "./miniflare-module": "./src/miniflare-module.ts"
   },
   "scripts": {
     "build": "tsc",

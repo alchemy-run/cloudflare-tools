@@ -18,3 +18,4 @@ export * as UnsafeEval from "./UnsafeEval.ts";
 export * as VersionMetadata from "./VersionMetadata.ts";
 export * as WasmModule from "./WasmModule.ts";
 export * as WorkerLoader from "./WorkerLoader.ts";
+export * as Workflows from "./workflows/index.ts";

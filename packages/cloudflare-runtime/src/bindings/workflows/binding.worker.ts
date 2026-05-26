@@ -1,0 +1,6 @@
+// Re-export the vendored `WorkflowBinding` entrypoint and `Engine` Durable
+// Object class so they get bundled into the workflows engine service worker.
+export {
+  Engine,
+  WorkflowBinding,
+} from "@distilled.cloud/vendor-workflows-shared/workers/workflows-shared/local-binding-worker";

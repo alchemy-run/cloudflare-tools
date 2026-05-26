@@ -1,4 +1,5 @@
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
+import type { WorkflowEntry } from "./bindings/workflows/WorkflowEntry.shared.ts";
 import type { BindingHook } from "./PluginContext.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
@@ -9,12 +10,14 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly modules: ReadonlyArray<Module>;
   readonly assets?: Assets;
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
+  readonly workflows?: Record<string, WorkflowEntry>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;
 
 export type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
+export type { WorkflowEntry } from "./bindings/workflows/WorkflowEntry.shared.ts";
 
 export type Module =
   | {

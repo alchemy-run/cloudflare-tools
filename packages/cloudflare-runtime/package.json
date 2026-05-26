@@ -55,6 +55,9 @@
     "./bindings/VersionMetadata": "./dist/node/bindings/VersionMetadata.mjs",
     "./bindings/WasmModule": "./dist/node/bindings/WasmModule.mjs",
     "./bindings/WorkerLoader": "./dist/node/bindings/WorkerLoader.mjs",
+    "./bindings/workflows": "./dist/node/bindings/workflows/index.mjs",
+    "./bindings/workflows/WorkflowEntry": "./dist/node/bindings/workflows/WorkflowEntry.shared.mjs",
+    "./bindings/workflows/Workflows": "./dist/node/bindings/workflows/Workflows.mjs",
     "./dev-registry": "./dist/node/dev-registry/index.mjs",
     "./dev-registry/Constants": "./dist/node/dev-registry/Constants.shared.mjs",
     "./dev-registry/DevRegistry": "./dist/node/dev-registry/DevRegistry.mjs",
@@ -109,6 +112,7 @@
     "@distilled.cloud/build-utils": "workspace:*",
     "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
     "@distilled.cloud/vendor-workers-shared": "workspace:*",
+    "@distilled.cloud/vendor-workflows-shared": "workspace:*",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/vitest": "catalog:effect",
@@ -137,6 +141,8 @@
     "capnp-es": "0.0.14",
     "capnweb": "0.7.0",
     "effect": "4.0.0-beta.66",
+    "heap-js": "2.7.1",
+    "itty-time": "2.0.2",
     "mime": "4.1.0",
     "toucan-js": "4.0.0"
   }

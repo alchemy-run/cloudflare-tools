@@ -1,33 +1,29 @@
-import type { WorkflowBinding } from "@distilled.cloud/vendor-workflows-shared/workers/workflows-shared/src/binding";
-
-const dispose = (value: unknown) => {
-  const d = (value as { [Symbol.dispose]?: () => void })[Symbol.dispose];
-  if (typeof d === "function") {
-    d.call(value);
-  }
-};
+import type { WorkflowBinding } from "@distilled.cloud/vendor-workflows-shared/src/binding";
 
 class WorkflowImpl implements Workflow {
   constructor(private binding: WorkflowBinding) {}
 
   async get(id: string): Promise<WorkflowInstance> {
     const instanceHandle = new InstanceImpl(id, this.binding);
+    // throws instance.not_found if instance doesn't exist
+    // this is needed for backwards compat
     await instanceHandle.status();
     return instanceHandle;
   }
 
   async create(options?: WorkflowInstanceCreateOptions): Promise<WorkflowInstance> {
-    const result = (await this.binding.create(options)) as WorkflowInstance & Disposable;
-    try {
-      return new InstanceImpl(result.id, this.binding);
-    } finally {
-      dispose(result);
-    }
+    using result = (await this.binding.create(options)) as WorkflowInstance & Disposable;
+
+    return new InstanceImpl(result.id, this.binding);
   }
 
-  async createBatch(options: WorkflowInstanceCreateOptions[]): Promise<WorkflowInstance[]> {
+  async createBatch(
+    options: Array<WorkflowInstanceCreateOptions>,
+  ): Promise<Array<WorkflowInstance>> {
     const result = await this.binding.createBatch(options);
-    return result.map((res) => new InstanceImpl(res.id, this.binding));
+    return result.map((res) => {
+      return new InstanceImpl(res.id, this.binding);
+    });
   }
 
   async unsafeGetBindingName(): Promise<string> {
@@ -70,67 +66,37 @@ class InstanceImpl implements WorkflowInstance {
   }
 
   public async pause(): Promise<void> {
-    const instance = await this.getInstance();
-    try {
-      await instance.pause();
-    } finally {
-      dispose(instance);
-    }
+    using instance = await this.getInstance();
+    await instance.pause();
   }
 
   public async resume(): Promise<void> {
-    const instance = await this.getInstance();
-    try {
-      await instance.resume();
-    } finally {
-      dispose(instance);
-    }
+    using instance = await this.getInstance();
+    await instance.resume();
   }
 
   public async terminate(): Promise<void> {
-    const instance = await this.getInstance();
-    try {
-      await instance.terminate();
-    } finally {
-      dispose(instance);
-    }
+    using instance = await this.getInstance();
+    await instance.terminate();
   }
 
   public async restart(): Promise<void> {
-    const instance = await this.getInstance();
-    try {
-      await instance.restart();
-    } finally {
-      dispose(instance);
-    }
+    using instance = await this.getInstance();
+    await instance.restart();
   }
 
   public async status(): Promise<InstanceStatus> {
-    const instance = await this.getInstance();
-    try {
-      const res = (await instance.status()) as InstanceStatus & Disposable;
-      try {
-        return structuredClone(res);
-      } finally {
-        dispose(res);
-      }
-    } finally {
-      dispose(instance);
-    }
+    using instance = await this.getInstance();
+    using res = (await instance.status()) as InstanceStatus & Disposable;
+    return structuredClone(res);
   }
 
   public async sendEvent(args: { payload: unknown; type: string }): Promise<void> {
-    const instance = await this.getInstance();
-    try {
-      await instance.sendEvent(args);
-    } finally {
-      dispose(instance);
-    }
+    using instance = await this.getInstance();
+    await instance.sendEvent(args);
   }
 }
 
-export function makeBinding(env: { binding: WorkflowBinding }): Workflow {
+export default function makeBinding(env: { binding: WorkflowBinding }): Workflow {
   return new WorkflowImpl(env.binding);
 }
-
-export default makeBinding;

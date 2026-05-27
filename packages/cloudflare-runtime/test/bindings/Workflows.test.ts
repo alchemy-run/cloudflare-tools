@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Workflows from "../../src/bindings/workflows/Workflows.ts";
 import * as DevRegistry from "../../src/dev-registry/DevRegistry.ts";
 import * as Globals from "../../src/globals/Globals.ts";
 import * as Internet from "../../src/globals/Internet.ts";
@@ -11,7 +12,6 @@ import * as Storage from "../../src/globals/Storage.ts";
 import * as Runtime from "../../src/Runtime.ts";
 import * as RuntimeServices from "../../src/RuntimeServices.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
-import * as Workflows from "../../src/bindings/workflows/Workflows.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const WORKFLOW_SCRIPT = `
@@ -75,6 +75,10 @@ const runOnceAgainstStorage = (directory: string) =>
   }).pipe(Effect.provide(persistenceRuntimeLayer(directory)), Effect.scoped);
 
 describe("Workflows binding", () => {
+  // NOTE: this test uses `describe`/`it.effect` (not `layer(...)`), so it picks
+  // up the @effect/vitest default `TestEnv` (TestClock + TestConsole). That
+  // happens to work here because `runOnceAgainstStorage` provides its own
+  // `Runtime.RuntimeLive` layer with a real Clock via `NodeServices.layer`.
   it.effect(
     "persists Workflow data on file-system between runs",
     () =>
@@ -203,90 +207,95 @@ const waitForStepOutput = (
     throw new Error(`Timed out waiting for step output "${expected}"`);
   });
 
-layer(localRuntimeLayer)("Workflows binding lifecycle", (it) => {
-  // TODO: re-enable once we resolve why the engine Durable Object does not
-  // transition out of `waitingForPause` in this environment. The terminate
-  // test below works end-to-end because terminate simply aborts the engine
-  // without requiring a subsequent restart-from-alarm.
-  it.effect.skip(
+// `excludeTestServices: true` keeps the real wall-clock Clock. Without it,
+// `@effect/vitest` provides a TestClock and `Effect.sleep` would block (since
+// nothing advances the virtual clock). The workflow engine's `pause`/`restart`
+// flow relies on a real timer firing in `workerd` for the in-flight step, and
+// we observe it from Node by polling on the real clock.
+layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifecycle", (it) => {
+  it.effect(
     "pause and resume a running workflow",
     () =>
-    Effect.gen(function* () {
-      const { fetch } = yield* startLifecycleWorker();
-      const id = "pause-resume-test";
+      Effect.gen(function* () {
+        const { fetch } = yield* startLifecycleWorker();
+        const id = "pause-resume-test";
 
-      const createRes = yield* fetch(`/create?id=${id}`);
-      const createData = (yield* Effect.promise(() => createRes.json())) as {
-        id: string;
-      };
-      expect(createData.id).toBe(id);
+        const createRes = yield* fetch(`/create?id=${id}`);
+        const createData = (yield* Effect.promise(() => createRes.json())) as {
+          id: string;
+        };
+        expect(createData.id).toBe(id);
 
-      yield* waitForStepOutput(fetch, id, "step-1-done");
+        yield* waitForStepOutput(fetch, id, "step-1-done");
 
-      const pauseRes = yield* fetch(`/pause?id=${id}`);
-      const pauseData = (yield* Effect.promise(() => pauseRes.json())) as Record<string, unknown>;
-      expect(pauseData).toHaveProperty("status");
-      yield* waitForStatus(fetch, id, "paused");
+        const pauseRes = yield* fetch(`/pause?id=${id}`);
+        const pauseData = (yield* Effect.promise(() => pauseRes.json())) as Record<
+          string,
+          unknown
+        >;
+        expect(pauseData).toHaveProperty("status");
 
-      const resumeRes = yield* fetch(`/resume?id=${id}`);
-      const resumeData = (yield* Effect.promise(() => resumeRes.json())) as Record<
-        string,
-        unknown
-      >;
-      expect(resumeData).toHaveProperty("status");
+        yield* waitForStatus(fetch, id, "paused");
 
-      const final = yield* waitForStatus(fetch, id, "complete");
-      expect(final["output"]).toBe("workflow-complete");
-    }),
-    { timeout: 60_000 },
+        const resumeRes = yield* fetch(`/resume?id=${id}`);
+        const resumeData = (yield* Effect.promise(() => resumeRes.json())) as Record<
+          string,
+          unknown
+        >;
+        expect(resumeData).toHaveProperty("status");
+
+        const final = yield* waitForStatus(fetch, id, "complete");
+        expect(final["output"]).toBe("workflow-complete");
+      }),
+    { timeout: 30_000 },
   );
 
   it.effect(
     "terminate a running workflow",
     () =>
-    Effect.gen(function* () {
-      const { fetch } = yield* startLifecycleWorker();
-      const id = "terminate-test";
+      Effect.gen(function* () {
+        const { fetch } = yield* startLifecycleWorker();
+        const id = "terminate-test";
 
-      const createRes = yield* fetch(`/create?id=${id}`);
-      yield* Effect.promise(() => createRes.text());
+        const createRes = yield* fetch(`/create?id=${id}`);
+        yield* Effect.promise(() => createRes.text());
 
-      yield* waitForStepOutput(fetch, id, "step-1-done");
+        yield* waitForStepOutput(fetch, id, "step-1-done");
 
-      const terminateRes = yield* fetch(`/terminate?id=${id}`);
-      const terminateData = (yield* Effect.promise(() => terminateRes.json())) as Record<
-        string,
-        unknown
-      >;
-      expect(terminateData).toHaveProperty("status");
+        const terminateRes = yield* fetch(`/terminate?id=${id}`);
+        const terminateData = (yield* Effect.promise(() => terminateRes.json())) as Record<
+          string,
+          unknown
+        >;
+        expect(terminateData).toHaveProperty("status");
 
-      yield* waitForStatus(fetch, id, "terminated");
-    }),
-    { timeout: 60_000 },
+        yield* waitForStatus(fetch, id, "terminated");
+      }),
+    { timeout: 30_000 },
   );
 
-  it.effect.skip(
+  it.effect(
     "restart a running workflow",
     () =>
-    Effect.gen(function* () {
-      const { fetch } = yield* startLifecycleWorker();
-      const id = "restart-test";
+      Effect.gen(function* () {
+        const { fetch } = yield* startLifecycleWorker();
+        const id = "restart-test";
 
-      const createRes = yield* fetch(`/create?id=${id}`);
-      yield* Effect.promise(() => createRes.text());
+        const createRes = yield* fetch(`/create?id=${id}`);
+        yield* Effect.promise(() => createRes.text());
 
-      yield* waitForStepOutput(fetch, id, "step-1-done");
+        yield* waitForStepOutput(fetch, id, "step-1-done");
 
-      const restartRes = yield* fetch(`/restart?id=${id}`);
-      const restartData = (yield* Effect.promise(() => restartRes.json())) as Record<
-        string,
-        unknown
-      >;
-      expect(restartData).toHaveProperty("status");
+        const restartRes = yield* fetch(`/restart?id=${id}`);
+        const restartData = (yield* Effect.promise(() => restartRes.json())) as Record<
+          string,
+          unknown
+        >;
+        expect(restartData).toHaveProperty("status");
 
-      const final = yield* waitForStatus(fetch, id, "complete");
-      expect(final["output"]).toBe("workflow-complete");
-    }),
-    { timeout: 60_000 },
+        const final = yield* waitForStatus(fetch, id, "complete");
+        expect(final["output"]).toBe("workflow-complete");
+      }),
+    { timeout: 30_000 },
   );
 });

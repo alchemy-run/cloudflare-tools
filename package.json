@@ -29,7 +29,7 @@
       "workers": {
         "@cloudflare/workers-types": "^4.20260310.1",
         "miniflare": "^4.20260329.0",
-        "workerd": "^1.20260414.1"
+        "workerd": "1.20260526.1"
       }
     },
     "catalog": {

@@ -14,6 +14,7 @@ export default defineConfig([
     minify: {
       mangle: false,
     },
+    target: "esnext",
     dts: false,
     plugins: [cloudflare({ compatibilityDate: "2026-03-10" }), InternalWorkerExportPlugin()],
     deps: {

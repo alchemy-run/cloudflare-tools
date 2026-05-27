@@ -56,7 +56,6 @@
     "./bindings/WasmModule": "./dist/node/bindings/WasmModule.mjs",
     "./bindings/WorkerLoader": "./dist/node/bindings/WorkerLoader.mjs",
     "./bindings/workflows": "./dist/node/bindings/workflows/index.mjs",
-    "./bindings/workflows/WorkflowEntry": "./dist/node/bindings/workflows/WorkflowEntry.shared.mjs",
     "./bindings/workflows/Workflows": "./dist/node/bindings/workflows/Workflows.mjs",
     "./dev-registry": "./dist/node/dev-registry/index.mjs",
     "./dev-registry/Constants": "./dist/node/dev-registry/Constants.shared.mjs",

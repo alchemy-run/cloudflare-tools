@@ -52,10 +52,13 @@ const runOnceAgainstStorage = (directory: string) =>
       compatibilityDate: "2024-11-20",
       compatibilityFlags: [],
       modules: [{ name: "main.js", type: "ESModule", content: WORKFLOW_SCRIPT }],
-      workflows: {
-        MY_WORKFLOW: { className: "MyWorkflow", name: "MY_WORKFLOW" },
-      },
-      bindings: [Workflows.local("MY_WORKFLOW")],
+      bindings: [
+        Workflows.local({
+          binding: "MY_WORKFLOW",
+          workflowName: "MY_WORKFLOW",
+          className: "MyWorkflow",
+        }),
+      ],
     });
 
     const res = yield* fetch("/");
@@ -158,10 +161,13 @@ const startLifecycleWorker = () =>
     compatibilityDate: "2026-03-09",
     compatibilityFlags: [],
     modules: [{ name: "main.js", type: "ESModule", content: LIFECYCLE_SCRIPT }],
-    workflows: {
-      LIFECYCLE_WORKFLOW: { className: "LifecycleWorkflow", name: "LIFECYCLE_WORKFLOW" },
-    },
-    bindings: [Workflows.local("LIFECYCLE_WORKFLOW")],
+    bindings: [
+      Workflows.local({
+        binding: "LIFECYCLE_WORKFLOW",
+        workflowName: "LIFECYCLE_WORKFLOW",
+        className: "LifecycleWorkflow",
+      }),
+    ],
   });
 
 const waitForStatus = (
@@ -358,10 +364,13 @@ describe("Workflows binding cross-instance", () => {
             compatibilityDate: "2026-03-09",
             compatibilityFlags: [],
             modules: [{ name: "main.js", type: "ESModule", content: CROSS_INSTANCE_OWNER_SCRIPT }],
-            workflows: {
-              CROSS_WORKFLOW: { className: "CrossWorkflow", name: "CROSS_WORKFLOW" },
-            },
-            bindings: [Workflows.local("CROSS_WORKFLOW")],
+            bindings: [
+              Workflows.local({
+                binding: "CROSS_WORKFLOW",
+                workflowName: "CROSS_WORKFLOW",
+                className: "CrossWorkflow",
+              }),
+            ],
           });
 
           // Consumer: declares the binding with `scriptName` pointing at
@@ -379,14 +388,14 @@ describe("Workflows binding cross-instance", () => {
                   content: CROSS_INSTANCE_CONSUMER_SCRIPT,
                 },
               ],
-              workflows: {
-                CROSS_WORKFLOW: {
+              bindings: [
+                Workflows.local({
+                  binding: "CROSS_WORKFLOW",
+                  workflowName: "CROSS_WORKFLOW",
                   className: "CrossWorkflow",
-                  name: "CROSS_WORKFLOW",
                   scriptName: "cross-owner",
-                },
-              },
-              bindings: [Workflows.local("CROSS_WORKFLOW")],
+                }),
+              ],
             });
           }).pipe(Effect.provide(localRuntimeLayer));
 

@@ -98,7 +98,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     bindings: [
       UnsafeEval.local("__DISTILLED_UNSAFE_EVAL__"),
       DurableObjectNamespace.local({
-        name: "__DISTILLED_MODULE_RUNNER__",
+        binding: "__DISTILLED_MODULE_RUNNER__",
         className: "ModuleRunnerDO",
       }),
       Json.local("__DISTILLED_ENVIRONMENT__", {

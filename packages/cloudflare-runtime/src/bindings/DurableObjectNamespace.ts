@@ -9,7 +9,7 @@ export interface LocalDurableObjectNamespaceProps {
   /**
    * Name of the binding.
    */
-  readonly name: string;
+  readonly binding: string;
   /**
    * Class name of the Durable Object namespace to bind to.
    */
@@ -32,7 +32,7 @@ export interface LocalDurableObjectNamespaceProps {
  *   or `wrangler dev` process.
  */
 export const local = ({
-  name,
+  binding,
   className,
   scriptName,
 }: LocalDurableObjectNamespaceProps): BindingHook<DevRegistryProxy> =>
@@ -53,7 +53,7 @@ export const local = ({
         );
       }
       return Effect.succeed<WorkerdConfig.Worker_Binding>({
-        name,
+        name: binding,
         durableObjectNamespace: { className },
       });
     }
@@ -61,7 +61,7 @@ export const local = ({
       Effect.flatMap((proxy) => proxy.api.registerDurableObject(scriptName, className)),
       Effect.map(
         (durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
-          name,
+          name: binding,
           durableObjectNamespace,
         }),
       ),

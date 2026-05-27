@@ -35,11 +35,11 @@ export const HyperdriveLive = Layer.succeed(
   ),
 );
 
-export const local = (name: string, hyperdriveId: string): BindingHook<Hyperdrive> =>
+export const local = (binding: string, hyperdriveId: string): BindingHook<Hyperdrive> =>
   Plugin.use(Hyperdrive, (hyperdrive) =>
     hyperdrive.api[hyperdriveId]
       ? Effect.succeed({
-          name,
+          name: binding,
           wrapped: {
             moduleName: "cloudflare-runtime:hyperdrive",
             innerBindings: [{ name: "ORIGIN", json: JSON.stringify(hyperdrive.api[hyperdriveId]) }],
@@ -48,9 +48,9 @@ export const local = (name: string, hyperdriveId: string): BindingHook<Hyperdriv
       : Effect.fail(
           new ConfigError({
             subtag: "HyperdriveOriginMissing",
-            message: `No hyperdrive origin was provided for binding "${name}" (id: ${hyperdriveId}).`,
+            message: `No hyperdrive origin was provided for binding "${binding}" (id: ${hyperdriveId}).`,
             hint: `Add an entry for "${hyperdriveId}" to \`worker.hyperdrives\`.`,
-            detail: { bindingName: name, hyperdriveId },
+            detail: { binding, hyperdriveId },
           }),
         ),
   );

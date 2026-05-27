@@ -39,7 +39,7 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
         modules: [{ name: "main.js", type: "ESModule", content: RATE_LIMIT_SCRIPT }],
         bindings: [
           RateLimit.local({
-            name: "TESTRATE",
+            binding: "TESTRATE",
             namespaceId: 1,
             simple: { limit: 2, period: 60 },
           }),
@@ -69,7 +69,7 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
         modules: [{ name: "main.js", type: "ESModule", content: RATE_LIMIT_VALIDATION_SCRIPT }],
         bindings: [
           RateLimit.local({
-            name: "TESTRATE",
+            binding: "TESTRATE",
             namespaceId: 1,
             simple: { limit: 2, period: 60 },
           }),

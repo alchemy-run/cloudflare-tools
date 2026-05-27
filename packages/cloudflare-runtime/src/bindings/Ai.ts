@@ -1,14 +1,14 @@
 import { makeRemoteBinding } from "../remote-bindings/RemoteBindings.ts";
 
-export const remote = (name: string) =>
+export const remote = (binding: string) =>
   makeRemoteBinding(
     {
-      name,
+      name: binding,
       type: "ai",
       raw: true,
     },
     (service) => ({
-      name,
+      name: binding,
       wrapped: {
         moduleName: "cloudflare-internal:ai-api",
         innerBindings: [

@@ -8,7 +8,7 @@ export interface LocalServiceProps {
   /**
    * Name of the binding.
    */
-  readonly name: string;
+  readonly binding: string;
   /**
    * Name of the worker (as registered in the dev registry by another
    * `cloudflare-runtime` or `wrangler dev` process) to bind to.
@@ -31,14 +31,14 @@ export interface LocalServiceProps {
  * `cloudflare-runtime` or `wrangler dev` process.
  */
 export const local = ({
-  name,
+  binding,
   scriptName,
   entrypoint,
   props,
 }: LocalServiceProps): BindingHook<DevRegistryProxy> =>
   Plugin.use(DevRegistryProxy, (proxy) =>
     Effect.map(proxy.api.registerService(scriptName, entrypoint, props), (service) => ({
-      name,
+      name: binding,
       service,
     })),
   );

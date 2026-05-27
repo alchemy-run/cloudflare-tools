@@ -348,11 +348,11 @@ export const buildAssetConfigs = (
   return { assetsConfig, routerConfig };
 };
 
-export const local = (name: string): BindingHook<Assets> =>
+export const local = (binding: string): BindingHook<Assets> =>
   Plugin.use(Assets, (assets) =>
     assets.api.isConfigured
       ? Effect.succeed({
-          name,
+          name: binding,
           service: {
             name: "assets:worker",
           },
@@ -363,7 +363,7 @@ export const local = (name: string): BindingHook<Assets> =>
             message: "An assets binding cannot be used without worker.assets being specified.",
             hint: "Remove the assets binding or specify worker.assets in your worker config.",
             detail: {
-              name,
+              binding,
             },
           }),
         ),

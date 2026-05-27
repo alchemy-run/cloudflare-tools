@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import type { BindingHook } from "../PluginContext";
 
-export const local = (name: string, data: Uint8Array): BindingHook =>
+export const local = (binding: string, data: Uint8Array): BindingHook =>
   Effect.succeed({
-    name,
+    name: binding,
     data,
   });

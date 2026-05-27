@@ -1,9 +1,9 @@
 import * as Effect from "effect/Effect";
 import type { BindingHook } from "../PluginContext";
 
-export const local = (name: string): BindingHook =>
+export const local = (binding: string): BindingHook =>
   Effect.succeed({
-    name,
+    name: binding,
     json: JSON.stringify({
       id: crypto.randomUUID(),
       tag: "",

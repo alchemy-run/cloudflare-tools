@@ -1,10 +1,10 @@
 import { makeRemoteBinding } from "../remote-bindings/RemoteBindings.ts";
 
-export const remote = (name: string, bucketName: string, jurisdiction?: string) =>
+export const remote = (binding: string, bucketName: string, jurisdiction?: string) =>
   makeRemoteBinding(
-    { name, type: "r2_bucket", bucketName, jurisdiction, raw: true },
+    { name: binding, type: "r2_bucket", bucketName, jurisdiction, raw: true },
     (service) => ({
-      name,
+      name: binding,
       r2Bucket: service,
     }),
   );

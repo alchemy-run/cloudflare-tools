@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 
 export const RateLimitProps = Schema.Struct({
-  name: Schema.String,
+  binding: Schema.String,
   namespaceId: Schema.Number,
   simple: Schema.Struct({
     limit: Schema.Number.check(Schema.isGreaterThan(0)),

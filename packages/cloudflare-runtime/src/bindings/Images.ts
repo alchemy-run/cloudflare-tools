@@ -1,8 +1,8 @@
 import { makeRemoteBinding } from "../remote-bindings/RemoteBindings.ts";
 
-export const remote = (name: string) =>
-  makeRemoteBinding({ name, type: "images", raw: true }, (service) => ({
-    name,
+export const remote = (binding: string) =>
+  makeRemoteBinding({ name: binding, type: "images", raw: true }, (service) => ({
+    name: binding,
     wrapped: {
       moduleName: "cloudflare-internal:images-api",
       innerBindings: [

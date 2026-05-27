@@ -5,13 +5,13 @@ import * as Plugin from "../Plugin.ts";
 import type { BindingHook } from "../PluginContext.ts";
 
 export const local = (
-  name: string,
+  binding: string,
   handler: LoopbackServer.RouteHandler,
 ): BindingHook<Loopback.Loopback> =>
   Effect.map(
-    Plugin.use(Loopback.Loopback, (loopback) => loopback.api.route(name, handler)),
+    Plugin.use(Loopback.Loopback, (loopback) => loopback.api.route(binding, handler)),
     (service) => ({
-      name,
+      name: binding,
       service,
     }),
   );

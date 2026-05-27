@@ -26,7 +26,7 @@ export const RateLimitLive = Layer.succeed(
 
 export const local = (props: RateLimitProps): BindingHook<RateLimit> =>
   Plugin.useSync(RateLimit, () => ({
-    name: props.name,
+    name: props.binding,
     wrapped: {
       moduleName: "cloudflare-runtime:rate-limit",
       innerBindings: [

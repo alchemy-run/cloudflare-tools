@@ -91,7 +91,7 @@ describe("Workflows binding", () => {
 
         const persistDir = `${tmp}/workflows`;
         const names = yield* fs.readDirectory(persistDir);
-        expect(names).toContain("miniflare-workflows-MY_WORKFLOW");
+        expect(names).toContain(encodeURIComponent("MY_WORKFLOW"));
 
         const second = yield* runOnceAgainstStorage(tmp);
         expect(second).toBe(COMPLETE_STATUS);
@@ -229,10 +229,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
         yield* waitForStepOutput(fetch, id, "step-1-done");
 
         const pauseRes = yield* fetch(`/pause?id=${id}`);
-        const pauseData = (yield* Effect.promise(() => pauseRes.json())) as Record<
-          string,
-          unknown
-        >;
+        const pauseData = (yield* Effect.promise(() => pauseRes.json())) as Record<string, unknown>;
         expect(pauseData).toHaveProperty("status");
 
         yield* waitForStatus(fetch, id, "paused");
@@ -360,9 +357,7 @@ describe("Workflows binding cross-instance", () => {
             name: "cross-owner",
             compatibilityDate: "2026-03-09",
             compatibilityFlags: [],
-            modules: [
-              { name: "main.js", type: "ESModule", content: CROSS_INSTANCE_OWNER_SCRIPT },
-            ],
+            modules: [{ name: "main.js", type: "ESModule", content: CROSS_INSTANCE_OWNER_SCRIPT }],
             workflows: {
               CROSS_WORKFLOW: { className: "CrossWorkflow", name: "CROSS_WORKFLOW" },
             },

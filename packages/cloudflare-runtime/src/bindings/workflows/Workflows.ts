@@ -133,52 +133,50 @@ export const WorkflowsLive = Layer.effect(
         };
 
         const engineServices: Array<WorkerdConfig.Service> = ownedEntries.map(
-          ([bindingName, workflow]): WorkerdConfig.Service => {
-            const uniqueKey = `miniflare-workflows-${workflow.name}`;
-            const bindings: Array<WorkerdConfig.Worker_Binding> = [
-              {
-                name: "ENGINE",
-                durableObjectNamespace: { className: "Engine" },
-              },
-              {
-                name: "USER_WORKFLOW",
-                service: {
-                  name: workflow.scriptName ?? USER_WORKER_SERVICE_NAME,
-                  entrypoint: workflow.className,
+          ([bindingName, workflow]): WorkerdConfig.Service => ({
+            name: serviceNameForWorkflow(workflow.name),
+            worker: {
+              compatibilityDate: "2024-10-22",
+              compatibilityFlags: ["experimental", ...(workflow.compatibilityFlags ?? [])],
+              modules: formatInternalWorkerModules(WorkflowsBindingWorker),
+              durableObjectNamespaces: [
+                {
+                  className: "Engine",
+                  enableSql: true,
+                  uniqueKey: encodeURIComponent(workflow.name),
+                  preventEviction: true,
                 },
+              ],
+              durableObjectStorage: {
+                localDisk: WORKFLOWS_STORAGE_SERVICE_NAME,
               },
-              {
-                name: "BINDING_NAME",
-                json: JSON.stringify(bindingName),
-              },
-            ];
-            if (workflow.stepLimit !== undefined) {
-              bindings.push({
-                name: "STEP_LIMIT",
-                json: JSON.stringify(workflow.stepLimit),
-              });
-            }
-            return {
-              name: serviceNameForWorkflow(workflow.name),
-              worker: {
-                compatibilityDate: "2024-10-22",
-                compatibilityFlags: ["experimental", ...(workflow.compatibilityFlags ?? [])],
-                modules: formatInternalWorkerModules(WorkflowsBindingWorker),
-                durableObjectNamespaces: [
-                  {
-                    className: "Engine",
-                    enableSql: true,
-                    uniqueKey,
-                    preventEviction: true,
+              bindings: [
+                {
+                  name: "ENGINE",
+                  durableObjectNamespace: { className: "Engine" },
+                },
+                {
+                  name: "USER_WORKFLOW",
+                  service: {
+                    name: USER_WORKER_SERVICE_NAME,
+                    entrypoint: workflow.className,
                   },
-                ],
-                durableObjectStorage: {
-                  localDisk: WORKFLOWS_STORAGE_SERVICE_NAME,
                 },
-                bindings,
-              },
-            };
-          },
+                {
+                  name: "BINDING_NAME",
+                  json: JSON.stringify(bindingName),
+                },
+                ...(workflow.stepLimit !== undefined
+                  ? [
+                      {
+                        name: "STEP_LIMIT",
+                        json: JSON.stringify(workflow.stepLimit),
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          }),
         );
 
         return {
@@ -224,7 +222,9 @@ const wrapBinding = (
  * - Otherwise the binding routes through the dev-registry proxy to the
  *   owner instance, so engine state lives in exactly one process.
  */
-export const local = (bindingName: string): PluginContext.BindingHook<Workflows | DevRegistryProxy> =>
+export const local = (
+  bindingName: string,
+): PluginContext.BindingHook<Workflows | DevRegistryProxy> =>
   PluginContext.use((context) =>
     Effect.gen(function* () {
       const workflows = yield* context.get(Workflows);

@@ -141,6 +141,20 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
                 // New Node.js built-in modules are only published with the `node:` prefix.
                 ...["node:sea", "node:sqlite", "node:test", "node:test/reporters"],
               ],
+              ...(this.meta.rolldownVersion
+                ? {
+                    rolldownOptions: {
+                      plugins: [
+                        // In Vite 8, `require` calls are not automatically replaced when
+                        // the format is ESM and `platform` is `neutral`.
+                        esmExternalRequirePlugin({
+                          external: [NODE_BUILTIN_MODULES_REGEXP],
+                          skipDuplicateCheck: true,
+                        }),
+                      ],
+                    },
+                  }
+                : {}),
             },
           };
         },

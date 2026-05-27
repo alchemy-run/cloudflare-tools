@@ -299,3 +299,118 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
     { timeout: 30_000 },
   );
 });
+
+// Cross-instance test: a workflow defined by one `Runtime` (the owner) is
+// invoked from a workflow binding declared in a *different* `Runtime` (the
+// consumer). The consumer must NOT host its own Engine — instead, its
+// wrapped binding is routed through the dev-registry proxy to the owner.
+//
+// This test runs both runtimes in-process by nesting two `Effect.provide(
+// localRuntimeLayer)` blocks. They communicate via the on-disk dev
+// registry, which we point at a temp dir via MINIFLARE_REGISTRY_PATH.
+
+const CROSS_INSTANCE_OWNER_SCRIPT = `
+import { WorkflowEntrypoint } from "cloudflare:workers";
+export class CrossWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    const first = await step.do("step-1", async () => "from-owner");
+    return { ok: true, payload: first };
+  }
+}
+export default {
+  async fetch() {
+    // Owner exposes no HTTP API; the consumer drives the workflow.
+    return new Response("owner-alive");
+  },
+};
+`;
+
+const CROSS_INSTANCE_CONSUMER_SCRIPT = `
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const id = url.searchParams.get("id") ?? "cross-instance-test";
+    if (url.pathname === "/create") {
+      const instance = await env.CROSS_WORKFLOW.create({ id });
+      return Response.json({ id: instance.id });
+    }
+    if (url.pathname === "/status") {
+      const instance = await env.CROSS_WORKFLOW.get(id);
+      return Response.json(await instance.status());
+    }
+    return new Response("not found", { status: 404 });
+  },
+};
+`;
+
+describe("Workflows binding cross-instance", () => {
+  it.effect(
+    "consumer binding routes to the owner's engine via the dev registry",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const registryPath = yield* fs.makeTempDirectoryScoped({
+          prefix: "workflows-cross-registry-",
+        });
+        process.env.MINIFLARE_REGISTRY_PATH = registryPath;
+
+        yield* Effect.gen(function* () {
+          // Owner: defines the WorkflowEntrypoint class and hosts the Engine.
+          yield* startTestWorker({
+            name: "cross-owner",
+            compatibilityDate: "2026-03-09",
+            compatibilityFlags: [],
+            modules: [
+              { name: "main.js", type: "ESModule", content: CROSS_INSTANCE_OWNER_SCRIPT },
+            ],
+            workflows: {
+              CROSS_WORKFLOW: { className: "CrossWorkflow", name: "CROSS_WORKFLOW" },
+            },
+            bindings: [Workflows.local("CROSS_WORKFLOW")],
+          });
+
+          // Consumer: declares the binding with `scriptName` pointing at
+          // the owner. It does NOT define `CrossWorkflow`, so its Workflows
+          // plugin must skip engine creation and route through the proxy.
+          const { fetch } = yield* Effect.gen(function* () {
+            return yield* startTestWorker({
+              name: "cross-consumer",
+              compatibilityDate: "2026-03-09",
+              compatibilityFlags: [],
+              modules: [
+                {
+                  name: "main.js",
+                  type: "ESModule",
+                  content: CROSS_INSTANCE_CONSUMER_SCRIPT,
+                },
+              ],
+              workflows: {
+                CROSS_WORKFLOW: {
+                  className: "CrossWorkflow",
+                  name: "CROSS_WORKFLOW",
+                  scriptName: "cross-owner",
+                },
+              },
+              bindings: [Workflows.local("CROSS_WORKFLOW")],
+            });
+          }).pipe(Effect.provide(localRuntimeLayer));
+
+          const id = "cross-instance-1";
+          const createRes = yield* fetch(`/create?id=${id}`);
+          expect(createRes.status).toBe(200);
+
+          const deadline = Date.now() + 15_000;
+          let final: Record<string, unknown> = {};
+          while (Date.now() < deadline) {
+            const res = yield* fetch(`/status?id=${id}`);
+            final = (yield* Effect.promise(() => res.json())) as Record<string, unknown>;
+            if (final["status"] === "complete") break;
+            yield* Effect.sleep("100 millis");
+          }
+          expect(final["status"]).toBe("complete");
+          expect(final["output"]).toEqual({ ok: true, payload: "from-owner" });
+        }).pipe(Effect.provide(localRuntimeLayer));
+      }).pipe(Effect.provide(NodeServices.layer)),
+    { timeout: 60_000 },
+  );
+});

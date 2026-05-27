@@ -147,3 +147,72 @@ export class ExternalServiceProxy extends WorkerEntrypoint<Env, Props> {
     }
   }
 }
+
+interface WorkflowProxyProps {
+  scriptName: string;
+  workflowName: string;
+}
+
+function workflowNotFoundMessage(scriptName: string, workflowName: string): string {
+  return `Workflow "${workflowName}" defined in worker "${scriptName}" not found. Make sure the worker is running locally and exports the workflow.`;
+}
+
+function resolveWorkflow(props: WorkflowProxyProps, env: Env): Fetcher | null {
+  const target = resolveTarget(props.scriptName);
+  if (!target || !target.debugPortAddress) {
+    return null;
+  }
+  const serviceName = target.workflowServices?.[props.workflowName];
+  if (!serviceName) {
+    return null;
+  }
+  const client = env.DEV_REGISTRY_DEBUG_PORT.connect(target.debugPortAddress);
+  return client.getEntrypoint(serviceName, "WorkflowBinding");
+}
+
+/**
+ * Proxy entrypoint that forwards `WorkflowBinding` RPCs to a workflow's
+ * Engine living in another `cloudflare-runtime`/`wrangler dev` process.
+ * Resolves the remote workerd service via the dev registry's
+ * `workflowServices` map so we connect directly to the workflow service
+ * (rather than the user worker).
+ */
+export class ExternalWorkflowProxy extends WorkerEntrypoint<Env, WorkflowProxyProps> {
+  _fetcher: Fetcher | null = null;
+
+  constructor(ctx: ExecutionContext<WorkflowProxyProps>, env: Env) {
+    super(ctx, env);
+    this._fetcher = resolveWorkflow(ctx.props, env);
+
+    return new Proxy(this, {
+      get(target, prop) {
+        if (Reflect.has(target, prop)) {
+          return Reflect.get(target, prop);
+        }
+        if (typeof prop === "string" && HANDLER_RESERVED_KEYS.has(prop)) {
+          return undefined;
+        }
+        // Re-resolve on each call: the owner's debugPortAddress can change
+        // (e.g. owner restarts), and we don't want to cache a dead fetcher.
+        const fetcher = resolveWorkflow(ctx.props, env);
+        if (!fetcher) {
+          throw new Error(
+            workflowNotFoundMessage(ctx.props.scriptName, ctx.props.workflowName),
+          );
+        }
+        return Reflect.get(fetcher, prop);
+      },
+    });
+  }
+
+  fetch(request: Request): Promise<Response> | Response {
+    const fetcher = resolveWorkflow(this.ctx.props, this.env);
+    if (!fetcher) {
+      return new Response(
+        workflowNotFoundMessage(this.ctx.props.scriptName, this.ctx.props.workflowName),
+        { status: 503 },
+      );
+    }
+    return fetcher.fetch(request);
+  }
+}

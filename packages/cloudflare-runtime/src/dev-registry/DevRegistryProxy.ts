@@ -46,6 +46,25 @@ export class DevRegistryProxy extends Plugin.Service<
       scriptName: string,
       className: string,
     ) => Effect.Effect<WorkerdConfig.Worker_DurableObjectNamespace>;
+    /**
+     * Record that this worker owns the given workflow and hosts its
+     * `WorkflowBinding` entrypoint at `serviceName`. Used to populate the
+     * `workflowServices` field on this worker's dev-registry entry so that
+     * other instances can route their bindings here.
+     */
+    readonly registerOwnedWorkflow: (
+      workflowName: string,
+      serviceName: string,
+    ) => Effect.Effect<void>;
+    /**
+     * Record an external workflow binding referencing `scriptName`/
+     * `workflowName` so the proxy worker is configured to forward
+     * `WorkflowBinding` RPCs to the owning instance via the debug port.
+     */
+    readonly registerExternalWorkflow: (
+      scriptName: string,
+      workflowName: string,
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/DevRegistryProxy") {}
 
@@ -60,6 +79,14 @@ export const DevRegistryProxyLive = Layer.effect(
         // Per-worker accumulator. The plugin builder runs once per
         // `Runtime.start`, so each worker gets its own externals map.
         const externals: ExternalServiceMap = new Map();
+        // Workflows we own and that other instances are allowed to route to
+        // via this worker's dev-registry entry.
+        const ownedWorkflows = new Map<string, string>();
+        // Workflows we consume that live in another instance. Tracked
+        // separately from `externals` because resolution goes through a
+        // dedicated proxy entrypoint that resolves by workflow name, not
+        // service entrypoint.
+        const externalWorkflows = new Set<string>();
         const start = Effect.fn(function* (
           ports: Workerd.WorkerdPorts,
         ): Effect.fn.Return<void, never, Scope.Scope> {
@@ -74,6 +101,8 @@ export const DevRegistryProxyLive = Layer.effect(
               // worker IS the default entrypoint.
               defaultEntrypointService: USER_WORKER_SERVICE_NAME,
               userWorkerService: USER_WORKER_SERVICE_NAME,
+              workflowServices:
+                ownedWorkflows.size > 0 ? Object.fromEntries(ownedWorkflows) : undefined,
             },
           });
           if (externals.size === 0) {
@@ -97,7 +126,7 @@ export const DevRegistryProxyLive = Layer.effect(
           return entry;
         };
         const defer = Effect.gen(function* () {
-          if (externals.size === 0) {
+          if (externals.size === 0 && externalWorkflows.size === 0) {
             return {};
           }
           const initialRegistry = yield* devRegistry.getRegistry();
@@ -169,6 +198,26 @@ export const DevRegistryProxyLive = Layer.effect(
                   serviceName: SERVICE_DEV_REGISTRY_PROXY,
                 };
               }),
+            registerOwnedWorkflow: (workflowName, serviceName) =>
+              Effect.sync(() => {
+                ownedWorkflows.set(workflowName, serviceName);
+              }),
+            registerExternalWorkflow: (scriptName, workflowName) =>
+              Effect.sync(() => {
+                // Ensure the proxy worker is built. `entrypoints` is unused
+                // for workflows (we resolve by workflow name in the proxy),
+                // but the proxy worker is only created when externals are
+                // non-empty, so we mark this script as having dependents.
+                getOrCreate(scriptName);
+                externalWorkflows.add(scriptName);
+                return {
+                  name: SERVICE_DEV_REGISTRY_PROXY,
+                  entrypoint: "ExternalWorkflowProxy",
+                  props: {
+                    json: JSON.stringify({ scriptName, workflowName }),
+                  },
+                };
+              }),
           },
         };
       }),
@@ -188,8 +237,8 @@ const buildWorkerModules = (
     }
   }
   const main = [
-    `import { ExternalServiceProxy, setRegistry, createProxyDurableObjectClass } from "./${proxyWorkerEntryName}";`,
-    `export { ExternalServiceProxy };`,
+    `import { ExternalServiceProxy, ExternalWorkflowProxy, setRegistry, createProxyDurableObjectClass } from "./${proxyWorkerEntryName}";`,
+    `export { ExternalServiceProxy, ExternalWorkflowProxy };`,
     `setRegistry(${JSON.stringify(initialRegistry)});`,
     `export default {`,
     `  async fetch(request) {`,

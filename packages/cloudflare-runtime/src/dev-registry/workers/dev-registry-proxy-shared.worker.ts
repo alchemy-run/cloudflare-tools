@@ -32,6 +32,13 @@ export interface RegistryEntry {
   debugPortAddress: string;
   defaultEntrypointService: string;
   userWorkerService: string;
+  /**
+   * Map of workflow name to the workerd service name that hosts the
+   * workflow's `WorkflowBinding` entrypoint in the remote process.
+   * Consumers route their workflow bindings through the proxy to this
+   * service via the debug port. See {@link DevRegistryTypes.shared.ts}.
+   */
+  workflowServices?: Record<string, string>;
 }
 
 let registry = new Map<string, RegistryEntry>();

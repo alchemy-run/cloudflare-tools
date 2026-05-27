@@ -19,4 +19,16 @@ export type WorkerDefinition = {
    * workers it bypasses the Assets proxy (whether built-in or userland)
    */
   userWorkerService: string;
+  /**
+   * Map of workflow binding name to the workerd service name that hosts the
+   * workflow's Engine + `WorkflowBinding` entrypoint in this worker's
+   * process. Other instances can use this to route their workflow bindings
+   * through the dev-registry proxy, ensuring only one process hosts the
+   * Engine for a given workflow.
+   *
+   * The key matches `WorkflowEntry.name` (the workflow identifier shared
+   * across instances), and the value is opaque to consumers — they just
+   * forward it back into the debug port.
+   */
+  workflowServices?: Record<string, string>;
 };

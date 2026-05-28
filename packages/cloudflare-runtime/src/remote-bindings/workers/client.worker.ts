@@ -39,7 +39,9 @@ export function makeFetch(bindingName: string, extraHeaders?: Headers) {
     for (const [name, value] of request.headers) {
       // The `Upgrade` header needs to be special-cased to prevent:
       //   TypeError: Worker tried to return a WebSocket in a response to a request which did not contain the header "Upgrade: websocket"
-      if (name === "upgrade") {
+      // `MF-Dispatch-Namespace-Options` is consumed by the remote bindings
+      // preview endpoint and must be forwarded verbatim.
+      if (name === "upgrade" || name === "mf-dispatch-namespace-options") {
         proxiedHeaders.set(name, value);
       } else {
         proxiedHeaders.set(`MF-Header-${name}`, value);

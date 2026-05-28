@@ -68,7 +68,11 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
+    "@databases/escape-identifier": "^1.0.3",
+    "@databases/sql": "^3.3.0",
+    "@databases/validate-unicode": "^1.0.0",
     "@distilled.cloud/test-utils": "workspace:*",
+    "@rocicorp/zero": "^1.5.0",
     "mysql2": "^3.22.3",
     "vite": "catalog:",
     "vitest": "catalog:"

@@ -20,7 +20,7 @@ interface BuildFixtureOptions {
   pluginOptions?: CloudflarePluginOptions;
   plugins?: Array<RolldownPluginOption>;
   inputOptions?: Omit<InputOptions, "input" | "plugins">;
-  generateOptions?: Omit<OutputOptions, "file" | "format" | "sourcemap">;
+  outputOptions?: Omit<OutputOptions, "dir">;
 }
 
 export interface BuiltFixture {
@@ -33,19 +33,22 @@ export async function buildFixture(options: BuildFixtureOptions): Promise<BuiltF
   const fixture = normalizeFixturePath(options.fixture);
   const bundle = await rolldown({
     input: fixture,
-    ...(options.inputOptions ?? {}),
     plugins: [
       ...(options.plugins ?? []),
       cloudflare(options.pluginOptions ?? DEFAULT_PLUGIN_OPTIONS),
     ],
+    ...options.inputOptions,
   });
 
   try {
     const output = await bundle.write({
-      file: defaultOutputPath(fixture),
-      format: "esm",
-      sourcemap: true,
-      ...(options.generateOptions ?? {}),
+      dir: path.join(
+        "out",
+        path.basename(options.fixture) === "index.ts"
+          ? path.dirname(options.fixture)
+          : options.fixture,
+      ),
+      ...options.outputOptions,
     });
     return {
       fixture,
@@ -59,12 +62,4 @@ export async function buildFixture(options: BuildFixtureOptions): Promise<BuiltF
 
 function normalizeFixturePath(fixture: string): string {
   return path.isAbsolute(fixture) ? fixture : path.join("test", "fixtures", fixture);
-}
-
-function defaultOutputPath(fixture: string): string {
-  const fixtureName =
-    path.basename(path.dirname(fixture)) === "fixtures"
-      ? path.basename(fixture, path.extname(fixture))
-      : path.basename(path.dirname(fixture));
-  return path.join("out", fixtureName, "index.js");
 }

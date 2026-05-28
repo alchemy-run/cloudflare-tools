@@ -1,4 +1,5 @@
 export * from "./additional-modules.js";
+export * from "./cjs-default-interop.js";
 export * from "./cloudflare-externals.js";
 export * from "./nodejs-compat.js";
 export * from "./options.js";

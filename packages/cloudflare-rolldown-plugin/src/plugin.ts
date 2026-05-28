@@ -2,6 +2,7 @@ import type * as rolldown from "rolldown";
 import type { CloudflarePluginOptions } from "./options.js";
 import {
   additionalModulesPlugin,
+  cjsDefaultInteropPlugin,
   cloudflareExternalsPlugin,
   nodejsAlsPlugin,
   nodejsImportWarningPlugin,
@@ -23,6 +24,7 @@ const cloudflare: CloudflarePlugin = (options = {}) => {
     virtualModulesPlugin.rolldown(options),
     wasmInitPlugin.rolldown(options),
     additionalModulesPlugin.rolldown(options),
+    cjsDefaultInteropPlugin.rolldown(options),
   ];
 };
 

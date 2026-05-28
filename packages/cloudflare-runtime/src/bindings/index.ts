@@ -15,6 +15,7 @@ export * as RateLimit from "./rate-limit/index.ts";
 export * as Service from "./Service.ts";
 export * as Text from "./Text.ts";
 export * as UnsafeEval from "./UnsafeEval.ts";
+export * as Vectorize from "./Vectorize.ts";
 export * as VersionMetadata from "./VersionMetadata.ts";
 export * as WasmModule from "./WasmModule.ts";
 export * as WorkerLoader from "./WorkerLoader.ts";

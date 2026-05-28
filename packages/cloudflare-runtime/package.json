@@ -52,6 +52,7 @@
     "./bindings/Service": "./dist/node/bindings/Service.mjs",
     "./bindings/Text": "./dist/node/bindings/Text.mjs",
     "./bindings/UnsafeEval": "./dist/node/bindings/UnsafeEval.mjs",
+    "./bindings/Vectorize": "./dist/node/bindings/Vectorize.mjs",
     "./bindings/VersionMetadata": "./dist/node/bindings/VersionMetadata.mjs",
     "./bindings/WasmModule": "./dist/node/bindings/WasmModule.mjs",
     "./bindings/WorkerLoader": "./dist/node/bindings/WorkerLoader.mjs",

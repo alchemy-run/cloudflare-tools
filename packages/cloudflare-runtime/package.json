@@ -56,6 +56,8 @@
     "./bindings/rate-limit": "./dist/node/bindings/rate-limit/index.mjs",
     "./bindings/rate-limit/RateLimit": "./dist/node/bindings/rate-limit/RateLimit.mjs",
     "./bindings/rate-limit/RateLimitProps": "./dist/node/bindings/rate-limit/RateLimitProps.shared.mjs",
+    "./bindings/send-email": "./dist/node/bindings/send-email/index.mjs",
+    "./bindings/send-email/SendEmail": "./dist/node/bindings/send-email/SendEmail.mjs",
     "./bindings/Service": "./dist/node/bindings/Service.mjs",
     "./bindings/Text": "./dist/node/bindings/Text.mjs",
     "./bindings/UnsafeEval": "./dist/node/bindings/UnsafeEval.mjs",

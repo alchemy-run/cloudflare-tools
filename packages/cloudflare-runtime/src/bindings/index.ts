@@ -18,6 +18,7 @@ export * as MtlsCertificate from "./MtlsCertificate.ts";
 export * as Pipelines from "./Pipelines.ts";
 export * as R2Bucket from "./R2Bucket.ts";
 export * as RateLimit from "./rate-limit/index.ts";
+export * as SendEmail from "./send-email/index.ts";
 export * as Service from "./Service.ts";
 export * as Text from "./Text.ts";
 export * as UnsafeEval from "./UnsafeEval.ts";

@@ -7,13 +7,17 @@ import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
 import { createDefaultContext, startServer, type ServerHandle } from "./dev-server.js";
 import type { CloudflareVitePluginOptions } from "./plugin.js";
+import { handleWebSocket } from "./websockets.js";
 
 let context: Context.Context<RuntimeServices> | undefined;
 
 export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
   let handle: ServerHandle | undefined;
   let isServerRestarting = false;
+  let removeUpgradeListener: (() => void) | undefined;
   const close = async () => {
+    removeUpgradeListener?.();
+    removeUpgradeListener = undefined;
     await handle?.close();
     handle = undefined;
   };
@@ -92,6 +96,9 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       if (!input) {
         // If there is no input, we are in SPA mode, so we don't need to route requests to the server.
         return;
+      }
+      if (server.httpServer) {
+        removeUpgradeListener = handleWebSocket(server.httpServer, address);
       }
       return () => {
         server.middlewares.use((req, res) => {

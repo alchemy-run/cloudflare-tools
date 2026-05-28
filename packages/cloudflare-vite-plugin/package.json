@@ -37,8 +37,8 @@
     "build": "tsdown",
     "build:clean": "rm -rf dist && bun run build",
     "dev": "tsdown --watch",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest --passWithNoTests",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "bun run build:clean",
     "typecheck": "tsc --noEmit"
   },
@@ -50,10 +50,12 @@
     "@distilled.cloud/build-utils": "workspace:*",
     "@distilled.cloud/vendor-workers-shared": "workspace:*",
     "@effect/platform-node": "catalog:effect",
+    "@types/ws": "^8.18.1",
     "rolldown": "catalog:",
     "tsdown": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "ws": "^8.21.0"
   },
   "peerDependencies": {
     "@distilled.cloud/cloudflare": "catalog:",

@@ -17,7 +17,7 @@ export class Runtime extends Context.Service<
   {
     readonly start: <B extends BindingHooks>(
       worker: RuntimeWorker<B>,
-    ) => Effect.Effect<string, RuntimeError, BindingRequirements<B> | Scope.Scope>;
+    ) => Effect.Effect<URL, RuntimeError, BindingRequirements<B> | Scope.Scope>;
   }
 >()("cloudflare-runtime/Runtime") {}
 
@@ -74,7 +74,7 @@ export const RuntimeLive = Layer.effect(
           { "debug-port": "127.0.0.1:0" },
         );
         yield* context.start(ports);
-        return `http://127.0.0.1:${ports[SOCKET_HTTP]}`;
+        return new URL(`http://127.0.0.1:${ports[SOCKET_HTTP]}`);
       }),
     });
   }),

@@ -14,7 +14,7 @@ const main = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
   const workerProxy = yield* WorkerProxy.WorkerProxy;
   const proxyInstance = yield* workerProxy.serve(0);
-  const upstreamAddress = yield* runtime.start({
+  const upstreamUrl = yield* runtime.start({
     name: "test",
     compatibilityDate: "2026-01-01",
     compatibilityFlags: [],
@@ -30,7 +30,7 @@ const main = Effect.gen(function* () {
       },
     ],
   });
-  yield* proxyInstance.set(new URL(upstreamAddress));
+  yield* proxyInstance.set(upstreamUrl);
   console.log(proxyInstance.url.href);
   const res = yield* Effect.promise(async () => {
     const res = await fetch(new URL("/", proxyInstance.url));
@@ -46,7 +46,6 @@ const main = Effect.gen(function* () {
 const services = RuntimeServices.layerRuntime({
   api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! },
 }).pipe(
-  Layer.merge(RuntimeServices.layerLocalProxy()),
   Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
 );
 

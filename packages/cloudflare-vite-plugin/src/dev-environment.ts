@@ -16,7 +16,7 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
     this.transport = transport;
   }
 
-  async connect(address: string) {
+  async connect(address: string | URL) {
     const url = new URL(address);
     url.protocol = "ws";
     url.pathname = INIT_PATH;

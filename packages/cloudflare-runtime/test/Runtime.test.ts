@@ -27,11 +27,12 @@ layer(localRuntimeLayer)("Runtime", (it) => {
           bindings: [],
           modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
         });
-        expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-        const hello = yield* Effect.promise(() => fetch(`${url}/hello`));
+        expect(url).toBeInstanceOf(URL);
+        expect(url.href).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
+        const hello = yield* Effect.promise(() => fetch(new URL("/hello", url)));
         expect(hello.status).toBe(200);
         expect(yield* Effect.promise(() => hello.text())).toBe("hello");
-        const echo = yield* Effect.promise(() => fetch(`${url}/echo`, { method: "POST" }));
+        const echo = yield* Effect.promise(() => fetch(new URL("/echo", url), { method: "POST" }));
         expect(yield* Effect.promise(() => echo.text())).toBe("POST");
       }),
     { timeout: 30_000 },

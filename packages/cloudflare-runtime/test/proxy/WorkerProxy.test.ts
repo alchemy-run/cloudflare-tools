@@ -1,10 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "@effect/vitest";
+import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Net from "node:net";
 import * as Internet from "../../src/globals/Internet.ts";
 import * as WorkerProxy from "../../src/proxy/WorkerProxy.ts";
+import { ConfigError } from "../../src/RuntimeError.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
 
 const services = WorkerProxy.WorkerProxyLive.pipe(
@@ -70,6 +72,30 @@ const serveUpstream = (esModule: string) =>
     return new URL(`http://127.0.0.1:${ports.http}`);
   });
 
+/** Binds a server to `port` for the lifetime of the surrounding scope. */
+const occupy = (port: number, host = "127.0.0.1") =>
+  Effect.acquireRelease(
+    Effect.callback<Net.Server>((resume) => {
+      const server = Net.createServer();
+      server.once("error", (err) => resume(Effect.die(err)));
+      server.listen(port, host, () => resume(Effect.succeed(server)));
+    }),
+    (server) =>
+      Effect.callback<void>((resume) => {
+        server.close(() => resume(Effect.void));
+      }),
+  );
+
+/** Picks a currently-free port by binding to `0` and immediately releasing it. */
+const getFreePort = Effect.callback<number>((resume) => {
+  const server = Net.createServer();
+  server.once("error", (err) => resume(Effect.die(err)));
+  server.listen(0, "127.0.0.1", () => {
+    const { port } = server.address() as Net.AddressInfo;
+    server.close(() => resume(Effect.succeed(port)));
+  });
+});
+
 layer(services)((it) => {
   it.effect(
     "proxies an HTTP request/response to the upstream worker once a target is set",
@@ -77,7 +103,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const upstream = yield* serveUpstream(HTTP_WORKER);
-        const instance = yield* proxy.serve(0);
+        const instance = yield* proxy.serve();
         yield* instance.set(upstream);
 
         const echo = yield* Effect.promise(() =>
@@ -108,7 +134,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const upstream = yield* serveUpstream(HTTP_WORKER);
-        const instance = yield* proxy.serve(0);
+        const instance = yield* proxy.serve();
         yield* instance.set(upstream);
 
         const headers = yield* Effect.promise(() =>
@@ -133,7 +159,7 @@ layer(services)((it) => {
         const second = yield* serveUpstream(
           `export default { fetch: () => new Response("second") };`,
         );
-        const instance = yield* proxy.serve(0);
+        const instance = yield* proxy.serve();
 
         yield* instance.set(first);
         const a = yield* Effect.promise(() => fetch(instance.url).then((res) => res.text()));
@@ -152,7 +178,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const upstream = yield* serveUpstream(HTTP_WORKER);
-        const instance = yield* proxy.serve(0);
+        const instance = yield* proxy.serve();
 
         // Fire the request *before* any target is set. The proxy should park it
         // in its queue rather than failing.
@@ -184,7 +210,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const upstream = yield* serveUpstream(WS_WORKER);
-        const instance = yield* proxy.serve(0);
+        const instance = yield* proxy.serve();
         yield* instance.set(upstream);
 
         const wsUrl = new URL(instance.url);
@@ -201,11 +227,130 @@ layer(services)((it) => {
   );
 
   it.effect(
+    "uses the localhost hostname and a random port by default",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const instance = yield* proxy.serve();
+        expect(instance.url.hostname).toBe("localhost");
+        expect(Number(instance.url.port)).toBeGreaterThan(0);
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "serves on the requested port when it is available",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+        const port = yield* getFreePort;
+
+        const instance = yield* proxy.serve({ port });
+        expect(instance.url.port).toBe(String(port));
+
+        yield* instance.set(upstream);
+        const body = yield* Effect.promise(() =>
+          fetch(new URL("/echo", instance.url), { method: "POST", body: "hi" }).then((res) =>
+            res.text(),
+          ),
+        );
+        expect(body).toBe("echo:hi");
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "falls back to the next available port when the requested port is in use",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const blocker = yield* occupy(0);
+        const taken = (blocker.address() as Net.AddressInfo).port;
+
+        const instance = yield* proxy.serve({ port: taken });
+        expect(Number(instance.url.port)).toBeGreaterThan(taken);
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "serves on the exact requested port when strictPort is set and it is free",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const port = yield* getFreePort;
+
+        const instance = yield* proxy.serve({ port, strictPort: true });
+        expect(instance.url.port).toBe(String(port));
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "fails when strictPort is set and the requested port is in use",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const blocker = yield* occupy(0);
+        const taken = (blocker.address() as Net.AddressInfo).port;
+
+        const error = yield* proxy.serve({ port: taken, strictPort: true }).pipe(Effect.flip);
+        assert(error instanceof ConfigError);
+        expect(Workerd.isAddressInUseError(error)).toBe(true);
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "serves on a custom host when provided",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+
+        const instance = yield* proxy.serve({ host: "0.0.0.0" });
+        expect(instance.url.hostname).toBe("0.0.0.0");
+
+        yield* instance.set(upstream);
+        const body = yield* Effect.promise(() =>
+          fetch(new URL("/echo", instance.url), { method: "POST", body: "host" }).then((res) =>
+            res.text(),
+          ),
+        );
+        expect(body).toBe("echo:host");
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "starts many proxies concurrently requesting the same port without collisions",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const basePort = yield* getFreePort;
+
+        // All instances request the same starting port at once. The non-strict
+        // port-selection retry should hand each one a distinct, available port.
+        const count = 25;
+        const instances = yield* Effect.all(
+          Array.from({ length: count }, () => proxy.serve({ port: basePort })),
+          { concurrency: "unbounded" },
+        );
+
+        const ports = instances.map((instance) => instance.url.port);
+        expect(ports.every((port) => Number(port) >= basePort)).toBe(true);
+        expect(new Set(ports).size).toBe(count);
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
     "rejects controller requests with a missing or invalid authorization token",
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const instance = yield* proxy.serve(0);
+        const instance = yield* proxy.serve();
         const controllerUrl = new URL("/cdn-cgi/proxy/controller", instance.url);
 
         const noAuth = yield* Effect.promise(() =>

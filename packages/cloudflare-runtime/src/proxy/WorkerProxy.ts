@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as ProxyWorker from "worker:./WorkerProxy.worker.ts";
 import * as Internet from "../globals/Internet.ts";
-import { findAvailablePort } from "../internal/find-available-port.ts";
+import { findAvailablePort, MAX_PORT } from "../internal/find-available-port.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
@@ -14,9 +14,29 @@ import * as Workerd from "../workerd/Workerd.ts";
 export class WorkerProxy extends Context.Service<
   WorkerProxy,
   {
-    readonly serve: (port: number) => Effect.Effect<WorkerProxyInstance, RuntimeError, Scope.Scope>;
+    readonly serve: (
+      options?: ServeOptions,
+    ) => Effect.Effect<WorkerProxyInstance, RuntimeError, Scope.Scope>;
   }
 >()("cloudflare-runtime/proxy/WorkerProxy") {}
+
+export interface ServeOptions {
+  /**
+   * The port to serve the proxy on. If not provided, a random port will be chosen.
+   * @default 0
+   */
+  readonly port?: number;
+  /**
+   * Whether to throw an error if the port is not available.
+   * @default false
+   */
+  readonly strictPort?: boolean;
+  /**
+   * The host to serve the proxy on.
+   * @default "localhost"
+   */
+  readonly host?: string;
+}
 
 export interface WorkerProxyInstance {
   readonly url: URL;
@@ -30,14 +50,28 @@ export const WorkerProxyLive = Layer.effect(
     const workerd = yield* Workerd.Workerd;
     const internet = yield* Internet.Internet;
 
-    return WorkerProxy.of({
-      serve: Effect.fn("WorkerProxy.serve")(function* (port) {
-        const token = crypto.randomUUID();
-        const ports = yield* workerd.serve({
+    const normalizeOptions = Effect.fnUntraced(function* (options: ServeOptions) {
+      const host = options.host ?? "127.0.0.1";
+      const strictPort = options.strictPort ?? false;
+      return {
+        port:
+          options.port && !strictPort
+            ? yield* findAvailablePort(options.port, host)
+            : (options.port ?? 0),
+        host,
+        strictPort,
+        token: crypto.randomUUID(),
+      };
+    });
+    type ResolvedOptions = Effect.Success<ReturnType<typeof normalizeOptions>>;
+
+    const serve = ({ host, port, token }: ResolvedOptions) =>
+      workerd
+        .serve({
           sockets: [
             {
               name: "http",
-              address: `127.0.0.1:${yield* findAvailablePort(port, "127.0.0.1")}`,
+              address: `${host}:${port}`,
               service: { name: "proxy:worker" },
             },
           ],
@@ -62,8 +96,28 @@ export const WorkerProxyLive = Layer.effect(
             },
             internet,
           ],
-        });
-        const url = new URL(`http://localhost:${ports.http}`);
+        })
+        .pipe(
+          Effect.map(
+            (ports) => new URL(`http://${host === "127.0.0.1" ? "localhost" : host}:${ports.http}`),
+          ),
+        );
+
+    // The `findAvailablePort` function is lower overhead than `serve`, but it's best-effort.
+    // If there is a race condition, we may not be able to bind to the port, so we retry.
+    const serveWithRetry: typeof serve = (options) =>
+      serve(options).pipe(
+        Effect.catchIf(
+          (error) =>
+            Workerd.isAddressInUseError(error) && !options.strictPort && options.port <= MAX_PORT,
+          () => serveWithRetry({ ...options, port: options.port + 1 }),
+        ),
+      );
+
+    return WorkerProxy.of({
+      serve: Effect.fn("WorkerProxy.serve")(function* (options = {}) {
+        const resolved = yield* normalizeOptions(options);
+        const url = yield* serveWithRetry(resolved);
         return {
           url,
           set: Effect.fn("WorkerProxyInstance.set")(function* (upstream) {
@@ -72,7 +126,7 @@ export const WorkerProxyLive = Layer.effect(
                 method: "PUT",
                 headers: {
                   "Content-Type": "text/plain",
-                  Authorization: `Bearer ${token}`,
+                  Authorization: `Bearer ${resolved.token}`,
                 },
                 body: upstream.toString(),
               }),
@@ -90,7 +144,7 @@ export const WorkerProxyLive = Layer.effect(
               fetch(new URL("/cdn-cgi/proxy/controller", url), {
                 method: "DELETE",
                 headers: {
-                  Authorization: `Bearer ${token}`,
+                  Authorization: `Bearer ${resolved.token}`,
                 },
               }),
             );

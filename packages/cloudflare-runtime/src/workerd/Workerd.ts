@@ -182,6 +182,8 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
   });
 });
 
+const ADDRESS_IN_USE_SUBTAG = "WorkerdAddressInUse" as const;
+
 /**
  * Workerd writes failures to stderr in a few well-known shapes. This
  * classifier inspects the captured stderr and decides whether the failure
@@ -220,7 +222,7 @@ const classifyWorkerdError = (
   if (/Address already in use/i.test(text)) {
     const address = text.match(/toString\(\) = (\S+)/)?.[1];
     return new ConfigError({
-      subtag: "WorkerdAddressInUse",
+      subtag: ADDRESS_IN_USE_SUBTAG,
       message: address
         ? `The Workers runtime could not bind to ${address} (already in use).`
         : "The Workers runtime could not bind to the requested address (already in use).",
@@ -235,3 +237,6 @@ const classifyWorkerdError = (
     detail,
   });
 };
+
+export const isAddressInUseError = (error: ConfigError | SystemError): error is ConfigError =>
+  error._tag === "ConfigError" && error.subtag === ADDRESS_IN_USE_SUBTAG;

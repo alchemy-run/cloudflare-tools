@@ -96,7 +96,6 @@ export default {
 
 describe.skipIf(!accountId)("RemoteBindings (integration)", () => {
   const services = RuntimeServices.layerRuntime({ api: { accountId: accountId! } }).pipe(
-    Layer.merge(RuntimeServices.layerLocalProxy()),
     Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
   );
 

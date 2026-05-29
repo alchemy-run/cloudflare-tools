@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Internet from "../../src/globals/Internet.ts";
 import * as WorkerProxy from "../../src/proxy/WorkerProxy.ts";
@@ -141,6 +142,38 @@ layer(services)((it) => {
         yield* instance.set(second);
         const b = yield* Effect.promise(() => fetch(instance.url).then((res) => res.text()));
         expect(b).toBe("second");
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "queues a request received before the upstream is set and forwards it once ready",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+        const instance = yield* proxy.serve(0);
+
+        // Fire the request *before* any target is set. The proxy should park it
+        // in its queue rather than failing.
+        const pending = yield* Effect.forkChild(
+          Effect.promise(() =>
+            fetch(new URL("/echo", instance.url), { method: "POST", body: "queued" }).then(
+              async (res) => ({ status: res.status, body: await res.text() }),
+            ),
+          ),
+          { startImmediately: true },
+        );
+
+        // Give the request time to reach the proxy and be parked in the queue.
+        // Uses a real timer rather than the Effect TestClock so it resolves
+        // under `it.effect`.
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 500)));
+
+        yield* instance.set(upstream);
+
+        const result = yield* Fiber.join(pending);
+        expect(result).toEqual({ status: 200, body: "echo:queued" });
       }),
     { timeout: 30_000 },
   );

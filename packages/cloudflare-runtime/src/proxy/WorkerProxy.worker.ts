@@ -32,6 +32,7 @@ export class WorkerProxy extends DurableObject<Env> {
     switch (request.method) {
       case "PUT": {
         this.target = await extractTargetFromRequest(request);
+        this.processRequestQueue();
         return new Response(null, { status: 204 });
       }
       case "DELETE": {

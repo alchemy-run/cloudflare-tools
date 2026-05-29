@@ -5,16 +5,16 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { KvNamespace } from "../dist/bindings/index.mjs";
-import * as LocalProxy from "../dist/proxy/LocalProxy.mjs";
-import * as Runtime from "../dist/Runtime.mjs";
-import * as RuntimeServices from "../dist/RuntimeServices.mjs";
+import { KvNamespace } from "../dist/node/bindings/index.mjs";
+import * as WorkerProxy from "../dist/node/proxy/WorkerProxy.mjs";
+import * as Runtime from "../dist/node/Runtime.mjs";
+import * as RuntimeServices from "../dist/node/RuntimeServices.mjs";
 
 const main = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
-  const localProxy = yield* LocalProxy.LocalProxy;
-  const proxyAddress = yield* localProxy.registerWorker("test");
-  const address = yield* runtime.start({
+  const workerProxy = yield* WorkerProxy.WorkerProxy;
+  const proxyInstance = yield* workerProxy.serve(0);
+  const upstreamAddress = yield* runtime.start({
     name: "test",
     compatibilityDate: "2026-01-01",
     compatibilityFlags: [],
@@ -30,10 +30,10 @@ const main = Effect.gen(function* () {
       },
     ],
   });
-  yield* localProxy.setLocalAddress("test", address);
-  console.log(proxyAddress);
+  yield* proxyInstance.set(new URL(upstreamAddress));
+  console.log(proxyInstance.url.href);
   const res = yield* Effect.promise(async () => {
-    const res = await fetch(new URL("/", proxyAddress));
+    const res = await fetch(new URL("/", proxyInstance.url));
     return {
       status: res.status,
       body: await res.text(),

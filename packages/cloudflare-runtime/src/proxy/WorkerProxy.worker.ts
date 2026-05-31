@@ -14,8 +14,6 @@ export default {
 
 export class WorkerProxy extends DurableObject<Env> {
   target?: URL;
-  requestQueue = new Map<Request, PromiseWithResolvers<Response>>();
-  retryRequestQueue = new Map<Request, PromiseWithResolvers<Response>>();
 
   async fetch(request: Request) {
     try {
@@ -32,7 +30,6 @@ export class WorkerProxy extends DurableObject<Env> {
     switch (request.method) {
       case "PUT": {
         this.target = await extractTargetFromRequest(request);
-        this.processRequestQueue();
         return new Response(null, { status: 204 });
       }
       case "DELETE": {
@@ -50,33 +47,17 @@ export class WorkerProxy extends DurableObject<Env> {
   }
 
   private async handleUserWorkerRequest(request: Request): Promise<Response> {
-    const promise = Promise.withResolvers<Response>();
-    this.requestQueue.set(request, promise);
-    this.processRequestQueue();
-    return await promise.promise;
-  }
-
-  private async processRequestQueue() {
-    for (const [request, promise] of this.getOrderedRequestQueue()) {
+    while (true) {
       try {
-        this.requestQueue.delete(request);
-        this.retryRequestQueue.delete(request);
-        const response = await this.routeUserWorkerRequest(request);
-        promise.resolve(response);
+        return await this.routeUserWorkerRequest(request);
       } catch (cause) {
         const error = ProxyError.from(cause);
-        if (error.retryable) {
-          this.retryRequestQueue.set(request, promise);
-        } else {
-          promise.resolve(error.toResponse());
+        if (!error.retryable) {
+          return error.toResponse();
         }
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
-  }
-
-  private *getOrderedRequestQueue() {
-    yield* this.retryRequestQueue;
-    yield* this.requestQueue;
   }
 
   private async routeUserWorkerRequest(request: Request): Promise<Response> {

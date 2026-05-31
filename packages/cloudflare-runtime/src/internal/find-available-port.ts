@@ -21,7 +21,7 @@ export const findAvailablePort = /* @__PURE__ */ Effect.fn(function* (port: numb
   });
 });
 
-const isPortAvailable = (port: number, host?: string) =>
+export const isPortAvailable = (port: number, host?: string) =>
   Effect.callback<boolean>((resume) => {
     const server = Net.createServer();
     server.once("error", (e: NodeJS.ErrnoException) => {
@@ -31,4 +31,23 @@ const isPortAvailable = (port: number, host?: string) =>
       server.close(() => resume(Effect.succeed(true)));
     });
     server.listen(port, host);
+  });
+
+// Bind an ephemeral port (`:0`) and return the one the OS assigned.
+export const allocatePort = (host = "127.0.0.1") =>
+  Effect.callback<number, SystemError>((resume) => {
+    const server = Net.createServer();
+    server.once("error", (cause) => {
+      resume(
+        new SystemError({
+          subtag: "PortAllocationFailed",
+          message: `Failed to allocate an ephemeral port on ${host}.`,
+          cause,
+        }),
+      );
+    });
+    server.listen(0, host, () => {
+      const { port } = server.address() as Net.AddressInfo;
+      server.close(() => resume(Effect.succeed(port)));
+    });
   });

@@ -5,22 +5,18 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
-import * as NodeStream from "node:stream";
+import * as NodeFs from "node:fs";
+import * as NodeNet from "node:net";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
+import { allocatePort, isPortAvailable } from "../internal/find-available-port.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
 import * as workerd from "./internal/workerd.ts";
 
-type ControlMessage =
-  | {
-      event: "listen";
-      socket: string;
-      port: number;
-    }
-  | {
-      event: "listen-inspector";
-      port: number;
-    };
+// Distinguishes the temp config files written by concurrent `serve` calls.
+let configSeq = 0;
 
 export interface WorkerdPorts {
   [socket: string]: number;
@@ -90,87 +86,160 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (config, args) {
+        // Pre-assign a concrete loopback port for each ":0" socket and
+        // port-valued arg instead of letting workerd pick ephemeral ports and
+        // report them back over the control fd (fd 3): under Bun, child_process
+        // intermittently drops that extra pipe, leaving the worker up but
+        // unaddressable with no "Started" log and no error. We poll the port for
+        // readiness instead, which removes the dependency on fd 3.
+        const ports: WorkerdPorts = {};
+        const sockets: NonNullable<Config["sockets"]> = [];
+        for (const socket of config.sockets ?? []) {
+          if (typeof socket.address === "string" && socket.address.endsWith(":0")) {
+            const port = yield* allocatePort();
+            if (socket.name) ports[socket.name] = port;
+            sockets.push({ ...socket, address: `127.0.0.1:${port}` });
+          } else {
+            // Concrete sockets (e.g. the proxy's fixed :1337) keep their address,
+            // but we still record the port so the returned shape is unchanged.
+            const port = portOf(socket.address);
+            if (socket.name && port !== undefined) ports[socket.name] = port;
+            sockets.push(socket);
+          }
+        }
+
+        const resolvedArgs: Record<string, string | number | boolean> = { ...(args ?? {}) };
+        for (const key of ["debug-port", "inspector-addr"] as const) {
+          const value = resolvedArgs[key];
+          if (typeof value !== "string") continue;
+          if (value.endsWith(":0")) {
+            const port = yield* allocatePort();
+            ports[key] = port;
+            resolvedArgs[key] = `127.0.0.1:${port}`;
+          } else {
+            const port = portOf(value);
+            if (port !== undefined) ports[key] = port;
+          }
+        }
+
+        const resolvedConfig: Config = { ...config, sockets };
+        const httpSocket = sockets.find((socket) => socket.name === "http") ?? sockets[0];
+        const readinessPort = httpSocket ? portOf(httpSocket.address) : undefined;
+        // Whether the readiness port is free *before* we spawn. If it is, a later
+        // TCP connect confirms our worker is listening. If it is already taken (a
+        // concrete address colliding with another process), workerd can't bind it
+        // and will exit, so we must not connect-probe — that would answer from
+        // the other listener and falsely report ready.
+        const readinessPortFree =
+          readinessPort === undefined
+            ? undefined
+            : yield* isPortAvailable(readinessPort, "127.0.0.1");
+
+        // Pass the config as a file rather than over stdin: the same spawn race
+        // can drop the stdin pipe, leaving workerd to read EOF, get no config,
+        // and exit 1 within milliseconds. A file path has no such dependency.
+        const configPath = NodePath.join(
+          NodeOs.tmpdir(),
+          `workerd-config-${process.pid}-${configSeq++}.bin`,
+        );
+        yield* Effect.promise(() =>
+          NodeFs.promises.writeFile(configPath, Buffer.from(serializeConfig(resolvedConfig))),
+        );
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            try {
+              NodeFs.rmSync(configPath, { force: true });
+            } catch {
+              // Best effort; the OS reclaims tmpdir entries eventually.
+            }
+          }),
+        );
+
         const [handle, kill] = yield* spawn(
           workerd.bin,
           [
             "serve",
             "--binary",
             "--experimental",
-            "--control-fd=3",
-            ...Object.entries(args ?? {}).map(([key, value]) =>
+            ...Object.entries(resolvedArgs).map(([key, value]) =>
               typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
             ),
-            "-",
+            configPath,
           ],
           {
-            stdio: ["pipe", "inherit", "pipe", "pipe"],
+            stdio: ["ignore", "inherit", "pipe"],
           },
         );
         yield* Effect.addFinalizer(() => kill);
-        const controlMessages = yield* Effect.callback<
-          Array<ControlMessage>,
-          ConfigError | SystemError
-        >((resume) => {
-          const count =
-            (config.sockets?.length ?? 0) +
-            (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
-            (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
 
-          if (
-            !handle.stdin ||
-            !handle.stderr ||
-            !(handle.stdio[3] instanceof NodeStream.Readable)
-          ) {
-            return resume(
-              new SystemError({
-                subtag: "WorkerdSpawn",
-                message:
-                  "The Workers runtime (workerd) process did not have a stdin, stderr, or control fd.",
-              }),
-            );
-          }
-
+        // Readiness: poll the assigned HTTP port until workerd accepts a
+        // connection, failing fast if the process exits first.
+        yield* Effect.callback<void, ConfigError | SystemError>((resume) => {
           let stderr = "";
-          let control = "";
+          let settled = false;
+          let pollTimer: NodeJS.Timeout | undefined;
+          let deadline: NodeJS.Timeout | undefined;
 
           const onStderr = (data: Buffer) => {
             stderr += data.toString();
           };
-          const onControl = (data: Buffer) => {
-            control += data.toString();
-            const messages = control
-              .split("\n")
-              .filter((line) => line.trim() !== "")
-              .map((line) => JSON.parse(line) as ControlMessage);
-            if (messages.length === count) {
-              removeListeners();
-              resume(Effect.succeed(messages));
-            }
-          };
-          const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-            removeListeners();
-            resume(classifyWorkerdError(stderr, code, signal));
-          };
-          const removeListeners = () => {
+          const cleanup = () => {
+            clearTimeout(pollTimer);
+            clearTimeout(deadline);
             handle.stderr?.off("data", onStderr);
-            handle.stdio[3]?.off("data", onControl);
-            handle.off("exit", onExit);
+            handle.off("close", onExit);
           };
+          const settle = (effect: Effect.Effect<void, ConfigError | SystemError>) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resume(effect);
+          };
+          // Use "close" (not "exit") so workerd's stderr is fully drained
+          // before we classify the failure — on "exit" the final chunk can
+          // still be in flight, which would mislabel an "address in use" bind
+          // failure (ConfigError) as a generic SystemError.
+          const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+            settle(classifyWorkerdError(stderr, code, signal));
+          const probe = () => {
+            if (readinessPort === undefined) {
+              // No port to confirm a listen against; staying up is our only signal.
+              settle(Effect.void);
+              return;
+            }
+            if (readinessPortFree === false) {
+              // A pre-existing listener owns the port; wait for workerd's bind
+              // failure on exit rather than connecting to the other process.
+              return;
+            }
+            const socket = NodeNet.connect(readinessPort, "127.0.0.1");
+            socket.once("connect", () => {
+              socket.destroy();
+              settle(Effect.void);
+            });
+            socket.once("error", () => {
+              socket.destroy();
+              pollTimer = setTimeout(probe, 50);
+            });
+          };
+
           handle.stderr?.on("data", onStderr);
-          handle.stdio[3]?.on("data", onControl);
-          handle.on("exit", onExit);
+          handle.on("close", onExit);
+          deadline = setTimeout(
+            () =>
+              settle(
+                new SystemError({
+                  subtag: "WorkerdStartTimeout",
+                  message: "The Workers runtime (workerd) did not start listening in time.",
+                }),
+              ),
+            30_000,
+          );
 
-          handle.stdin?.write(Buffer.from(serializeConfig(config)));
-          handle.stdin?.end();
+          probe();
 
-          return Effect.sync(removeListeners);
+          return Effect.sync(cleanup);
         });
-        const ports: WorkerdPorts = {};
-        for (const message of controlMessages) {
-          if (message.event === "listen") {
-            ports[message.socket] = message.port;
-          }
-        }
         return ports;
       },
       (effect) =>
@@ -181,6 +250,12 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
     ),
   });
 });
+
+// Extract the numeric port from a `host:port` address string.
+const portOf = (address: string | undefined): number | undefined => {
+  const port = Number(String(address).split(":").pop());
+  return Number.isFinite(port) ? port : undefined;
+};
 
 const ADDRESS_IN_USE_SUBTAG = "WorkerdAddressInUse" as const;
 

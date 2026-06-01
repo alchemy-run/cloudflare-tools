@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Net from "node:net";
+import { allocatePort } from "../src/internal/find-available-port.ts";
 import * as Workerd from "../src/workerd/Workerd.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
@@ -236,5 +237,97 @@ layer(services)((it) => {
         expect(free).toBe(true);
       }),
     { timeout: 60_000 },
+  );
+
+  it.effect(
+    "starts many workers concurrently, each addressable on its own port",
+    () =>
+      Effect.gen(function* () {
+        const workerd = yield* Workerd.Workerd;
+        // The startup race this guards against scales with worker count: under
+        // Bun, child_process intermittently dropped the control fd (worker came
+        // up unaddressable, no "Started" log, no error) or stdin (workerd read
+        // EOF and exited 1). Pre-allocated ports + TCP readiness polling remove
+        // both fds, so every concurrently-spawned worker must come up listening.
+        const count = 10;
+        const results = yield* Effect.all(
+          Array.from({ length: count }, (_, i) =>
+            workerd
+              .serve({
+                sockets: [{ name: "http", address: "127.0.0.1:0", service: { name: "test" } }],
+                services: [
+                  {
+                    name: "test",
+                    worker: {
+                      compatibilityDate: "2026-03-10",
+                      modules: [
+                        {
+                          name: "main.js",
+                          esModule: `export default { fetch: () => new Response("worker-${i}") };`,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              })
+              .pipe(Effect.map((ports) => ({ index: i, port: ports.http }))),
+          ),
+          { concurrency: "unbounded" },
+        );
+
+        // Each worker came up on a distinct, real port — none dropped silently.
+        const ports = results.map((result) => result.port);
+        expect(ports.every((port) => typeof port === "number" && port > 0)).toBe(true);
+        expect(new Set(ports).size).toBe(count);
+
+        // And each is actually listening and serving its own worker.
+        const bodies = yield* Effect.all(
+          results.map(({ index, port }) =>
+            Effect.promise(() => fetch(`http://127.0.0.1:${port}/`).then((res) => res.text())).pipe(
+              Effect.map((body) => ({ index, body })),
+            ),
+          ),
+        );
+        for (const { index, body } of bodies) {
+          expect(body).toBe(`worker-${index}`);
+        }
+      }).pipe(Effect.scoped),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "honors a concrete pre-assigned socket address and returns its port unchanged",
+    () =>
+      Effect.gen(function* () {
+        const workerd = yield* Workerd.Workerd;
+        const port = yield* allocatePort("127.0.0.1");
+
+        // A non-":0" address must be passed through untouched, with its port
+        // still reported back so the returned shape is unchanged.
+        const ports = yield* workerd.serve({
+          sockets: [{ name: "http", address: `127.0.0.1:${port}`, service: { name: "test" } }],
+          services: [
+            {
+              name: "test",
+              worker: {
+                compatibilityDate: "2026-03-10",
+                modules: [
+                  {
+                    name: "main.js",
+                    esModule: "export default { fetch: () => new Response('ok') };",
+                  },
+                ],
+              },
+            },
+          ],
+        });
+        expect(ports.http).toBe(port);
+
+        const body = yield* Effect.promise(() =>
+          fetch(`http://127.0.0.1:${port}/`).then((res) => res.text()),
+        );
+        expect(body).toBe("ok");
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
   );
 });

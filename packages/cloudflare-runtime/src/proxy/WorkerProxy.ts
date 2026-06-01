@@ -56,7 +56,7 @@ export const WorkerProxyLive = Layer.effect(
       return {
         port:
           options.port && options.strictPort
-            ? yield* Port.check(options.port).pipe(Effect.as(options.port))
+            ? yield* Port.check(options.port)
             : yield* Port.find(options.port ?? 0),
         host,
         strictPort,

@@ -4,10 +4,14 @@ import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 
 export const MAX_PORT = 65535;
 
-const WILDCARD_HOSTS: Set<string> = new Set([
+const HOSTS: Set<string> = new Set([
   "0.0.0.0",
   "::",
   "0000:0000:0000:0000:0000:0000:0000:0000",
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "0000:0000:0000:0000:0000:0000:0000:0001",
 ]);
 
 export const find = /* @__PURE__ */ Effect.fn(function* (port: number) {
@@ -32,7 +36,7 @@ export const find = /* @__PURE__ */ Effect.fn(function* (port: number) {
 });
 
 export const check = (port: number) =>
-  Effect.forEach(WILDCARD_HOSTS, (host) => bind(port, host)).pipe(Effect.as(true as const));
+  Effect.forEach(HOSTS, (host) => bind(port, host)).pipe(Effect.as(port));
 
 const bind = (port: number, host: string = "localhost") =>
   Effect.callback<number, ConfigError>((resume) => {

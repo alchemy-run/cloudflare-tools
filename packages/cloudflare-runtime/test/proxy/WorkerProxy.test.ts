@@ -182,6 +182,66 @@ layer(services)((it) => {
   );
 
   it.effect(
+    "handles many queued requests when the upstream is set",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+        const instance = yield* proxy.serve();
+
+        // Enqueue many requests before the upstream is set, so they're queued.
+        const responses = yield* Effect.all(
+          Array.from({ length: 25 }, (_, i) =>
+            Effect.forkChild(
+              Effect.promise(() =>
+                fetch(new URL("/echo", instance.url), { method: "POST", body: `queued${i}` }).then(
+                  async (res) => ({ status: res.status, body: await res.text() }),
+                ),
+              ),
+              { startImmediately: true },
+            ),
+          ),
+        );
+
+        // Wait several seconds, during which requests should be queued.
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5000)));
+
+        yield* instance.set(upstream);
+
+        const result = yield* Fiber.joinAll(responses);
+        expect(result).toEqual(
+          Array.from({ length: 25 }, (_, i) => ({ status: 200, body: `echo:queued${i}` })),
+        );
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "returns immediately when the upstream fails with a non-retryable error",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const instance = yield* proxy.serve();
+        const deadPort = yield* Port.find(0);
+
+        // Point the proxy at an address with nothing listening. The fetch fails
+        // with a non-retryable 502, which the per-request loop must surface
+        // immediately rather than spin on retries.
+        yield* instance.set(new URL(`http://127.0.0.1:${deadPort}`));
+
+        const result = yield* Effect.promise(() =>
+          fetch(new URL("/echo", instance.url), { method: "POST", body: "x" }).then((res) => ({
+            status: res.status,
+            retryAfter: res.headers.get("retry-after"),
+          })),
+        );
+        expect(result.status).toBe(502);
+        expect(result.retryAfter).toBeNull();
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
     "proxies a websocket connection to the upstream worker",
     () =>
       Effect.gen(function* () {

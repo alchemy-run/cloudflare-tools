@@ -57,20 +57,21 @@ export class WorkerProxy extends DurableObject<Env> {
   }
 
   private async processRequestQueue() {
+    const target = this.target;
+    if (!target) return;
     for (const [request, promise] of this.getOrderedRequestQueue()) {
-      try {
-        this.requestQueue.delete(request);
-        this.retryRequestQueue.delete(request);
-        const response = await this.routeUserWorkerRequest(request);
-        promise.resolve(response);
-      } catch (cause) {
-        const error = ProxyError.from(cause);
-        if (error.retryable) {
-          this.retryRequestQueue.set(request, promise);
-        } else {
-          promise.resolve(error.toResponse());
-        }
-      }
+      this.requestQueue.delete(request);
+      this.retryRequestQueue.delete(request);
+      void this.routeUserWorkerRequest(request, target)
+        .then(promise.resolve)
+        .catch((cause) => {
+          const error = ProxyError.from(cause);
+          if (error.retryable) {
+            this.retryRequestQueue.set(request, promise);
+          } else {
+            promise.resolve(error.toResponse());
+          }
+        });
     }
   }
 
@@ -79,16 +80,8 @@ export class WorkerProxy extends DurableObject<Env> {
     yield* this.requestQueue;
   }
 
-  private async routeUserWorkerRequest(request: Request): Promise<Response> {
+  private async routeUserWorkerRequest(request: Request, target: URL): Promise<Response> {
     const original = new URL(request.url);
-    const target = this.target;
-    if (!target) {
-      throw new ProxyError({
-        message: "Worker address not yet available",
-        status: 503,
-        retryable: true,
-      });
-    }
     try {
       const proxied = new URL(original.pathname + original.search, target);
       const headers = new Headers(request.headers);
@@ -101,7 +94,7 @@ export class WorkerProxy extends DurableObject<Env> {
         redirect: "manual",
       });
     } catch (error) {
-      if (!this.target || this.target === target) {
+      if (!this.target || this.target.href === target.href) {
         throw new ProxyError({
           message: `Failed to fetch worker (upstream address: ${target})`,
           status: 502,

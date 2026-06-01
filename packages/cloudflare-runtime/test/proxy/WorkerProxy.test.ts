@@ -205,6 +205,63 @@ layer(services)((it) => {
   );
 
   it.effect(
+    "keeps retrying a parked request across many backoff iterations until ready",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+        const instance = yield* proxy.serve();
+
+        // Fire the request before any target exists, then leave it parked far
+        // longer than a single backoff (50ms) — long enough that the old
+        // queue-driven retry would have spun the microtask loop into an
+        // out-of-memory abort. The per-request loop must instead keep yielding
+        // and retrying, then resolve cleanly once the target is finally set.
+        const pending = yield* Effect.forkChild(
+          Effect.promise(() =>
+            fetch(new URL("/echo", instance.url), { method: "POST", body: "late" }).then(
+              async (res) => ({ status: res.status, body: await res.text() }),
+            ),
+          ),
+          { startImmediately: true },
+        );
+
+        // ~40 backoff iterations before the target appears.
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 2_000)));
+        yield* instance.set(upstream);
+
+        const result = yield* Fiber.join(pending);
+        expect(result).toEqual({ status: 200, body: "echo:late" });
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "returns immediately when the upstream fails with a non-retryable error",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const instance = yield* proxy.serve();
+        const deadPort = yield* getFreePort;
+
+        // Point the proxy at an address with nothing listening. The fetch fails
+        // with a non-retryable 502, which the per-request loop must surface
+        // immediately rather than spin on retries.
+        yield* instance.set(new URL(`http://127.0.0.1:${deadPort}`));
+
+        const result = yield* Effect.promise(() =>
+          fetch(new URL("/echo", instance.url), { method: "POST", body: "x" }).then((res) => ({
+            status: res.status,
+            retryAfter: res.headers.get("retry-after"),
+          })),
+        );
+        expect(result.status).toBe(502);
+        expect(result.retryAfter).toBeNull();
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
     "proxies a websocket connection to the upstream worker",
     () =>
       Effect.gen(function* () {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Port from "../src/Port.ts";
-import { occupyPort } from "./helpers/occupy-port.ts";
+import * as Port from "../../src/internal/Port.ts";
+import { occupyPort } from "../helpers/occupy-port.ts";
 
 describe("Port.find", () => {
   it.effect("returns a free port when the requested port is 0", () =>

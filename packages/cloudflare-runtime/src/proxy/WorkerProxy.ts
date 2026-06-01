@@ -5,7 +5,7 @@ import type * as Scope from "effect/Scope";
 import * as ProxyWorker from "worker:./WorkerProxy.worker.ts";
 import * as Internet from "../globals/Internet.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
-import * as Port from "../internal/Port.ts";
+import * as Port from "../Port.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../workerd/Config.ts";

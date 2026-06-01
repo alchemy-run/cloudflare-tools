@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Net from "node:net";
-import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
+import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 
 export const MAX_PORT = 65535;
 

@@ -84,6 +84,7 @@
     "./globals/Storage": "./dist/node/globals/Storage.mjs",
     "./Plugin": "./dist/node/Plugin.mjs",
     "./PluginContext": "./dist/node/PluginContext.mjs",
+    "./Port": "./dist/node/Port.mjs",
     "./proxy": "./dist/node/proxy/index.mjs",
     "./proxy/WorkerProxy": "./dist/node/proxy/WorkerProxy.mjs",
     "./remote-bindings": "./dist/node/remote-bindings/index.mjs",

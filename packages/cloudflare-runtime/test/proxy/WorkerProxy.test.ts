@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Internet from "../../src/globals/Internet.ts";
-import * as Port from "../../src/internal/Port.ts";
+import * as Port from "../../src/Port.ts";
 import * as WorkerProxy from "../../src/proxy/WorkerProxy.ts";
 import { ConfigError } from "../../src/RuntimeError.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";

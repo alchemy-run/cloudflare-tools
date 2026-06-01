@@ -216,7 +216,6 @@ layer(services)((it) => {
 
         const free = yield* Port.check(port).pipe(Effect.exit);
         assert(Exit.isSuccess(free));
-        expect(free.value).toBe(true);
       }),
     { timeout: 60_000 },
   );

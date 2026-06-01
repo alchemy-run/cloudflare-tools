@@ -55,10 +55,9 @@ const bind = (port: number, host: string = "localhost") =>
         ),
       );
     });
-    server.once("listening", () => {
+    server.listen({ port, host, exclusive: true }, () => {
       const { port } = server.address() as Net.AddressInfo;
       server.close(() => resume(Effect.succeed(port)));
     });
-    server.listen(port, host);
     return Effect.sync(() => server.close());
   });

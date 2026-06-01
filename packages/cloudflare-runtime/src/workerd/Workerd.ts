@@ -9,8 +9,8 @@ import * as NodeFs from "node:fs";
 import * as NodeNet from "node:net";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
+import { allocatePort, isPortAvailable } from "../internal/Port.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
-import { allocatePort, isPortAvailable } from "../internal/find-available-port.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
 import * as workerd from "./internal/workerd.ts";
@@ -67,21 +67,14 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
           handle.off("spawn", onSpawn);
           resume(Effect.succeed([handle, kill]));
         };
-        const onStderr = (data: Buffer) => {
-          const lines = data.toString().split("\n");
-          for (const line of lines) {
-            if (line.includes("CODE_MOVED for unknown code block")) continue;
-            console.error(line);
-          }
-        };
         handle.once("error", onError);
         handle.once("spawn", onSpawn);
-        handle.stderr?.on("data", onStderr);
         return Effect.sync(() => {
           handle.kill("SIGKILL");
         });
       },
     );
+
   return Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
@@ -161,6 +154,7 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
             "serve",
             "--binary",
             "--experimental",
+            "--verbose",
             ...Object.entries(resolvedArgs).map(([key, value]) =>
               typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
             ),
@@ -257,7 +251,7 @@ const portOf = (address: string | undefined): number | undefined => {
   return Number.isFinite(port) ? port : undefined;
 };
 
-const ADDRESS_IN_USE_SUBTAG = "WorkerdAddressInUse" as const;
+const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
 
 /**
  * Workerd writes failures to stderr in a few well-known shapes. This

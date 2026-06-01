@@ -4,8 +4,8 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as ProxyWorker from "worker:./WorkerProxy.worker.ts";
 import * as Internet from "../globals/Internet.ts";
-import { findAvailablePort, MAX_PORT } from "../internal/find-available-port.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
+import * as Port from "../internal/Port.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../workerd/Config.ts";
@@ -55,9 +55,9 @@ export const WorkerProxyLive = Layer.effect(
       const strictPort = options.strictPort ?? false;
       return {
         port:
-          options.port && !strictPort
-            ? yield* findAvailablePort(options.port, host)
-            : (options.port ?? 0),
+          options.port && options.strictPort
+            ? yield* Port.check(options.port)
+            : yield* Port.find(options.port ?? 0),
         host,
         strictPort,
         token: crypto.randomUUID(),
@@ -109,7 +109,9 @@ export const WorkerProxyLive = Layer.effect(
       serve(options).pipe(
         Effect.catchIf(
           (error) =>
-            Workerd.isAddressInUseError(error) && !options.strictPort && options.port <= MAX_PORT,
+            Workerd.isAddressInUseError(error) &&
+            !options.strictPort &&
+            options.port <= Port.MAX_PORT,
           () => serveWithRetry({ ...options, port: options.port + 1 }),
         ),
       );

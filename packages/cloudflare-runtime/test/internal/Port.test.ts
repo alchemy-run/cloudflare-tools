@@ -1,11 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Net from "node:net";
-import {
-  allocatePort,
-  findAvailablePort,
-  isPortAvailable,
-} from "../../src/internal/find-available-port.ts";
+import * as Port from "../../src/internal/Port.ts";
+import { occupyPort } from "../helpers/occupy-port.ts";
 
 const occupy = (port: number, host: string) =>
   Effect.acquireRelease(
@@ -20,38 +17,45 @@ const occupy = (port: number, host: string) =>
       }),
   );
 
-describe("findAvailablePort", () => {
+describe("Port.find", () => {
+  it.effect("returns a free port when the requested port is 0", () =>
+    Effect.gen(function* () {
+      const port = yield* Port.find(0);
+      expect(port).toBeGreaterThanOrEqual(0);
+    }),
+  );
+
   it.effect("returns the requested port when free", () =>
     Effect.gen(function* () {
-      const port = yield* findAvailablePort(0, "127.0.0.1");
-      expect(port).toBeGreaterThanOrEqual(0);
+      const selected = yield* Port.find(0);
+      const port = yield* Port.find(selected);
+      expect(port).toBe(selected);
     }),
   );
 
   it.effect("skips a port in use and returns the next available one", () =>
     Effect.gen(function* () {
-      const occupied = yield* occupy(0, "127.0.0.1");
-      const occupiedPort = (occupied.address() as Net.AddressInfo).port;
-      const next = yield* findAvailablePort(occupiedPort, "127.0.0.1");
-      expect(next).toBeGreaterThan(occupiedPort);
-    }).pipe(Effect.scoped),
+      const occupied = yield* occupyPort(0);
+      const next = yield* Port.find(occupied.port);
+      expect(next).toBeGreaterThan(occupied.port);
+    }),
   );
 });
 
-describe("isPortAvailable", () => {
+describe("Port.isPortAvailable", () => {
   it.effect("reports a free port as available and an occupied one as not", () =>
     Effect.gen(function* () {
       const occupied = yield* occupy(0, "127.0.0.1");
       const occupiedPort = (occupied.address() as Net.AddressInfo).port;
-      expect(yield* isPortAvailable(occupiedPort, "127.0.0.1")).toBe(false);
+      expect(yield* Port.isPortAvailable(occupiedPort, "127.0.0.1")).toBe(false);
     }).pipe(Effect.scoped),
   );
 });
 
-describe("allocatePort", () => {
+describe("Port.allocatePort", () => {
   it.effect("returns a free, bindable ephemeral port", () =>
     Effect.gen(function* () {
-      const port = yield* allocatePort("127.0.0.1");
+      const port = yield* Port.allocatePort("127.0.0.1");
       expect(port).toBeGreaterThan(0);
       expect(port).toBeLessThanOrEqual(65535);
       // allocatePort releases the socket before resolving, so the port it hands
@@ -63,10 +67,8 @@ describe("allocatePort", () => {
 
   it.effect("hands out distinct ports to concurrent allocations", () =>
     Effect.gen(function* () {
-      // Each allocation holds its socket open until the OS has assigned a port,
-      // so concurrent callers can never be handed the same one.
       const ports = yield* Effect.all(
-        Array.from({ length: 10 }, () => allocatePort("127.0.0.1")),
+        Array.from({ length: 10 }, () => Port.allocatePort("127.0.0.1")),
         { concurrency: "unbounded" },
       );
       expect(new Set(ports).size).toBe(ports.length);

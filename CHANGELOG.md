@@ -1,8 +1,15 @@
 # Changelog
 
+## [v0.10.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.2) (2026-06-01)
+
+### Bug Fixes
+
+- **runtime**: only process request queue when target is set - by @john-royal in [#34](https://github.com/alchemy-run/cloudflare-tools/pull/34) [(18331e4)](https://github.com/alchemy-run/cloudflare-tools/commit/18331e4afb0633a0f6a6a3414c9b690768234d92)
+- **runtime**: improve port conflict detection - by @john-royal in [#33](https://github.com/alchemy-run/cloudflare-tools/pull/33) [(8fe7f36)](https://github.com/alchemy-run/cloudflare-tools/commit/8fe7f36ee7fdde7e348c6abece8db040fecd1b01)
+
 ## [v0.10.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.1) (2026-05-29)
 
-*No significant changes*
+_No significant changes_
 
 ## [v0.10.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.0) (2026-05-29)
 

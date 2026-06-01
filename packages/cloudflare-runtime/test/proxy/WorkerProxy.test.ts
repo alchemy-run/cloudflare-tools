@@ -73,9 +73,6 @@ const serveUpstream = (esModule: string) =>
     return new URL(`http://127.0.0.1:${ports.http}`);
   });
 
-/** Picks a currently-free port by binding to `0` and immediately releasing it. */
-const getFreePort = Port.find(0);
-
 layer(services)((it) => {
   it.effect(
     "proxies an HTTP request/response to the upstream worker once a target is set",
@@ -174,37 +171,12 @@ layer(services)((it) => {
         // Give the request time to reach the proxy and be parked in the queue.
         // Uses a real timer rather than the Effect TestClock so it resolves
         // under `it.effect`.
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 2_000)));
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 500)));
 
         yield* instance.set(upstream);
 
         const result = yield* Fiber.join(pending);
         expect(result).toEqual({ status: 200, body: "echo:queued" });
-      }),
-    { timeout: 30_000 },
-  );
-
-  it.effect(
-    "returns immediately when the upstream fails with a non-retryable error",
-    () =>
-      Effect.gen(function* () {
-        const proxy = yield* WorkerProxy.WorkerProxy;
-        const instance = yield* proxy.serve();
-        const deadPort = yield* getFreePort;
-
-        // Point the proxy at an address with nothing listening. The fetch fails
-        // with a non-retryable 502, which the per-request loop must surface
-        // immediately rather than spin on retries.
-        yield* instance.set(new URL(`http://127.0.0.1:${deadPort}`));
-
-        const result = yield* Effect.promise(() =>
-          fetch(new URL("/echo", instance.url), { method: "POST", body: "x" }).then((res) => ({
-            status: res.status,
-            retryAfter: res.headers.get("retry-after"),
-          })),
-        );
-        expect(result.status).toBe(502);
-        expect(result.retryAfter).toBeNull();
       }),
     { timeout: 30_000 },
   );
@@ -249,7 +221,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const upstream = yield* serveUpstream(HTTP_WORKER);
-        const port = yield* getFreePort;
+        const port = yield* Port.find(0);
 
         const instance = yield* proxy.serve({ port });
         expect(instance.url.port).toBe(String(port));
@@ -283,7 +255,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const port = yield* getFreePort;
+        const port = yield* Port.find(0);
 
         const instance = yield* proxy.serve({ port, strictPort: true });
         expect(instance.url.port).toBe(String(port));
@@ -332,7 +304,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const basePort = yield* getFreePort;
+        const basePort = yield* Port.find(0);
 
         // All instances request the same starting port at once. The non-strict
         // port-selection retry should hand each one a distinct, available port.

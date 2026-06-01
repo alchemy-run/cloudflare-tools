@@ -66,4 +66,7 @@ const bind = (port: number, host: string = "localhost") =>
 export const allocatePort = (host = "127.0.0.1") => bind(0, host);
 
 export const isPortAvailable = (port: number, host = "127.0.0.1") =>
-  bind(port, host).pipe(Effect.as(true), Effect.orElseSucceed(() => false));
+  bind(port, host).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  );

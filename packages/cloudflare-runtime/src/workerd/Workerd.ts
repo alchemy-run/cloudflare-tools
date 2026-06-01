@@ -182,7 +182,7 @@ export const WorkerdLive = Layer.sync(Workerd, () => {
   });
 });
 
-const ADDRESS_IN_USE_SUBTAG = "WorkerdAddressInUse" as const;
+const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
 
 /**
  * Workerd writes failures to stderr in a few well-known shapes. This

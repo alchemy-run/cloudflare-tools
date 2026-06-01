@@ -1,9 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
-import * as Net from "node:net";
+import * as Port from "../src/internal/Port.ts";
 import * as Workerd from "../src/workerd/Workerd.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
@@ -130,7 +131,7 @@ layer(services)((it) => {
         })
         .pipe(Effect.flip);
       assert.equal(error._tag, "ConfigError");
-      expect(error.subtag).toBe("WorkerdAddressInUse");
+      expect(error.subtag).toBe("AddressInUse");
       assert(Predicate.hasProperty(error.detail, "stderr"));
       // "*** Fatal uncaught kj::Exception: kj/async-io-unix.c++:945: failed: ::bind(sockfd, &addr.generic, addrlen): Address already in use; toString() = 127.0.0.1:61328\n" +
       //    "stack: 10505b7f7 10505b5db 10505a073 10277aadb 10277b2eb 10277bd2f 10277cf2f 1026f3d57 105086dff 105087127 10508599f 10508575f 1026e08db 18c753da3"
@@ -212,28 +213,10 @@ layer(services)((it) => {
 
         // Wait until we can bind to the port ourselves. If workerd is still
         // alive, listen() fails with EADDRINUSE. Try for up to 30 polls.
-        const tryBind = () =>
-          Effect.callback<boolean>((resume) => {
-            const server = Net.createServer();
-            const settle = (free: boolean) => {
-              server.removeAllListeners();
-              server.close();
-              resume(Effect.succeed(free));
-            };
-            server.once("error", () => settle(false));
-            server.once("listening", () => {
-              server.close(() => settle(true));
-            });
-            server.listen(port, "127.0.0.1");
-          });
-        let free = false;
-        for (let i = 0; i < 30; i++) {
-          free = yield* tryBind();
-          if (free) break;
-          // Use real time even under TestClock (`it.effect`).
-          yield* Effect.promise(() => new Promise((r) => setTimeout(r, 200)));
-        }
-        expect(free).toBe(true);
+
+        const free = yield* Port.check(port).pipe(Effect.exit);
+        assert(Exit.isSuccess(free));
+        expect(free.value).toBe(true);
       }),
     { timeout: 60_000 },
   );

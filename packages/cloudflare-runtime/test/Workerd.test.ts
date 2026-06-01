@@ -211,8 +211,7 @@ layer(services)((it) => {
           expect(yield* Effect.promise(() => response.text())).toBe("ok");
         }).pipe(Effect.scoped);
 
-        // Wait until we can bind to the port ourselves. If workerd is still
-        // alive, listen() fails with EADDRINUSE. Try for up to 30 polls.
+        // Wait until we can bind to the port ourselves.
 
         const free = yield* Port.check(port).pipe(Effect.exit);
         assert(Exit.isSuccess(free));

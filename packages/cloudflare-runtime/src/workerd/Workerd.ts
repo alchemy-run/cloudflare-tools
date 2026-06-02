@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
@@ -49,47 +50,53 @@ const make = (
     args: Array<string>,
     config: Buffer,
   ) => Effect.Effect<ProcessHandle, ConfigError | SystemError>,
-) => {
-  return Workerd.of({
+) =>
+  Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
-    serve: Effect.fn("Workerd.serve")(function* (config, args) {
-      const handle = yield* spawn(
-        workerd.bin,
-        [
-          "serve",
-          "--binary",
-          "--experimental",
-          "--control-fd=3",
-          ...Object.entries(args ?? {}).map(([key, value]) =>
-            typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
-          ),
-          "-",
-        ],
-        Buffer.from(serializeConfig(config)),
-      );
-      const unregister = exitHook(() => handle.kill());
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          handle.kill();
-          unregister();
-        }),
-      );
-      const count =
-        (config.sockets?.length ?? 0) +
-        (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
-        (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
-      const control = yield* Effect.raceAllFirst([handle.control(count), handle.error()]);
-      yield* handle.pipe();
-      const ports: WorkerdPorts = {};
-      for (const message of control) {
-        if (message.event === "listen") {
-          ports[message.socket] = message.port;
+    serve: Effect.fn("Workerd.serve")(
+      function* (config, args) {
+        const handle = yield* spawn(
+          workerd.bin,
+          [
+            "serve",
+            "--binary",
+            "--experimental",
+            "--control-fd=3",
+            ...Object.entries(args ?? {}).map(([key, value]) =>
+              typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
+            ),
+            "-",
+          ],
+          Buffer.from(serializeConfig(config)),
+        );
+        const unregister = exitHook(() => handle.kill());
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            handle.kill();
+            unregister();
+          }),
+        );
+        const count =
+          (config.sockets?.length ?? 0) +
+          (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
+          (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
+        const control = yield* Effect.raceAllFirst([handle.control(count), handle.error()]);
+        yield* handle.pipe();
+        const ports: WorkerdPorts = {};
+        for (const message of control) {
+          if (message.event === "listen") {
+            ports[message.socket] = message.port;
+          }
         }
-      }
-      return ports;
-    }),
+        return ports;
+      },
+      Effect.retry({
+        while: (error) => error._tag === "SystemError",
+        schedule: Schedule.exponential(50),
+        times: 3,
+      }),
+    ),
   });
-};
 
 const makeBun = () =>
   make((command, args, config) =>

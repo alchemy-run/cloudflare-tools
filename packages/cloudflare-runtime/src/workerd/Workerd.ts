@@ -142,7 +142,17 @@ const makeBun = () =>
             };
             void stream().catch(identity);
           }),
-        pipe: () => Effect.void,
+        pipe: () =>
+          Effect.promise((signal) =>
+            child.stderr.pipeTo(
+              new WritableStream({
+                write(chunk) {
+                  console.error(chunk);
+                },
+              }),
+              { signal },
+            ),
+          ).pipe(Effect.ignore, Effect.forkScoped),
         kill: () => child.kill("SIGKILL"),
       })),
     ),
@@ -220,7 +230,20 @@ const makeNode = () =>
               child.off("exit", onError);
             });
           }),
-        pipe: () => Effect.void,
+        pipe: () => {
+          const log = (chunk: Buffer) => {
+            console.error(chunk.toString());
+          };
+          return Effect.acquireRelease(
+            Effect.sync(() => {
+              child.stderr?.on("data", log);
+            }),
+            () =>
+              Effect.sync(() => {
+                child.stderr?.off("data", log);
+              }),
+          );
+        },
         kill: () => child.kill("SIGKILL"),
       })),
     ),

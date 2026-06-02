@@ -1,6 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as WorkerProxy from "../src/proxy/WorkerProxy.ts";
 import * as Runtime from "../src/Runtime.ts";
+import * as PortHelpers from "./helpers/port.ts";
 import { localRuntimeLayer } from "./helpers/runtime.ts";
 
 const HELLO_SCRIPT = `
@@ -58,5 +60,39 @@ layer(localRuntimeLayer)("Runtime", (it) => {
         .pipe(Effect.flip);
       expect(error._tag).toBe("ConfigError");
     }),
+  );
+  it.effect(
+    "starts many workers concurrently, including proxy",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const basePort = yield* PortHelpers.find(0);
+
+        const start = (index: number) =>
+          Effect.gen(function* () {
+            const instance = yield* proxy.serve({ port: basePort });
+            const worker = yield* runtime.start({
+              name: `smoke-${index}`,
+              compatibilityDate: "2026-03-10",
+              compatibilityFlags: [],
+              bindings: [],
+              modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
+            });
+            yield* instance.set(worker);
+            return instance.url;
+          });
+
+        const count = 25;
+        const urls = yield* Effect.all(
+          Array.from({ length: count }, (_, index) => start(index)),
+          { concurrency: "unbounded" },
+        );
+        urls.forEach((url) => {
+          expect(Number(url.port)).toBeGreaterThanOrEqual(basePort);
+        });
+        expect(new Set(urls).size).toBe(count);
+      }),
+    { timeout: 30_000 },
   );
 });

@@ -1,26 +1,14 @@
 import { exitHook } from "@alchemy.run/node-utils/exit-hook";
+import { Deferred } from "effect";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
-import * as NodeStream from "node:stream";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
 import * as workerd from "./internal/workerd.ts";
-
-type ControlMessage =
-  | {
-      event: "listen";
-      socket: string;
-      port: number;
-    }
-  | {
-      event: "listen-inspector";
-      port: number;
-    };
 
 export interface WorkerdPorts {
   [socket: string]: number;
@@ -37,157 +25,250 @@ export class Workerd extends Context.Service<
   }
 >()("cloudflare-runtime/workerd/Workerd") {}
 
-export const WorkerdLive = Layer.sync(Workerd, () => {
-  const spawn = (
+type ControlMessage =
+  | {
+      event: "listen";
+      socket: string;
+      port: number;
+    }
+  | {
+      event: "listen-inspector";
+      port: number;
+    };
+
+const make = <T>(
+  spawn: (
     command: string,
     args: Array<string>,
-    spawnOptions: NodeChildProcess.SpawnOptions,
-  ) =>
-    Effect.callback<readonly [NodeChildProcess.ChildProcess, Effect.Effect<void>], SystemError>(
-      (resume) => {
-        const handle = NodeChildProcess.spawn(command, args, spawnOptions);
-        const onError = (error: Error) => {
-          handle.off("error", onError);
-          handle.off("spawn", onSpawn);
-          resume(
-            Effect.fail(
-              new SystemError({
-                subtag: "WorkerdSpawn",
-                message: "Failed to spawn the Workers runtime (workerd) process.",
-                cause: error,
-              }),
-            ),
-          );
-        };
-        const onSpawn = () => {
-          const unregister = exitHook(() => {
-            handle.kill("SIGKILL");
-          });
-          const kill = Effect.sync(() => {
-            handle.kill("SIGKILL");
-            unregister();
-          });
-          handle.off("error", onError);
-          handle.off("spawn", onSpawn);
-          resume(Effect.succeed([handle, kill]));
-        };
-        handle.once("error", onError);
-        handle.once("spawn", onSpawn);
-        return Effect.sync(() => {
-          handle.kill("SIGKILL");
-        });
-      },
-    );
-
-  const pipeStderr = (handle: NodeChildProcess.ChildProcess) => {
-    const onData = (data: Buffer) => {
-      process.stderr.write(data);
-    };
-    return Effect.acquireRelease(
-      Effect.sync(() => {
-        handle.stderr?.on("data", onData);
-      }),
-      () =>
-        Effect.sync(() => {
-          handle.stderr?.off("data", onData);
-        }),
-    );
-  };
+    config: Buffer,
+  ) => Effect.Effect<T, ConfigError | SystemError>,
+  options: {
+    control: (handle: T, count: number) => Effect.Effect<Array<ControlMessage>, SystemError>;
+    error: (handle: T) => Effect.Effect<never, ConfigError | SystemError>;
+    pipe: (handle: T) => Effect.Effect<void, never, Scope.Scope>;
+    kill: (handle: T) => void;
+  },
+) => {
   return Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
-    serve: Effect.fn("Workerd.serve")(
-      function* (config, args) {
-        const [handle, kill] = yield* spawn(
-          workerd.bin,
-          [
-            "serve",
-            "--binary",
-            "--experimental",
-            "--control-fd=3",
-            ...Object.entries(args ?? {}).map(([key, value]) =>
-              typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
-            ),
-            "-",
-          ],
-          {
-            stdio: ["pipe", "inherit", "pipe", "pipe"],
-          },
-        );
-        yield* Effect.addFinalizer(() => kill);
-        const controlMessages = yield* Effect.callback<
-          Array<ControlMessage>,
-          ConfigError | SystemError
-        >((resume) => {
-          const count =
-            (config.sockets?.length ?? 0) +
-            (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
-            (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
+    serve: Effect.fn("Workerd.serve")(function* (config, args) {
+      const handle = yield* spawn(
+        workerd.bin,
+        [
+          "serve",
+          "--binary",
+          "--experimental",
+          "--control-fd=3",
+          ...Object.entries(args ?? {}).map(([key, value]) =>
+            typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
+          ),
+          "-",
+        ],
+        Buffer.from(serializeConfig(config)),
+      );
+      const unregister = exitHook(() => options.kill(handle));
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          options.kill(handle);
+          unregister();
+        }),
+      );
+      const count =
+        (config.sockets?.length ?? 0) +
+        (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
+        (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
+      const control = yield* Effect.raceAllFirst([
+        options.control(handle, count),
+        options.error(handle),
+      ]);
+      yield* options.pipe(handle);
+      const ports: WorkerdPorts = {};
+      for (const message of control) {
+        if (message.event === "listen") {
+          ports[message.socket] = message.port;
+        }
+      }
+      return ports;
+    }),
+  });
+};
 
-          if (
-            !handle.stdin ||
-            !handle.stderr ||
-            !(handle.stdio[3] instanceof NodeStream.Readable)
-          ) {
+const makeBun = () =>
+  make(
+    (command, args, config) =>
+      Effect.sync(() =>
+        Bun.spawn({
+          cmd: [command, ...args],
+          stdio: [config, "inherit", "pipe", "pipe"],
+          killSignal: "SIGKILL",
+        }),
+      ),
+    {
+      // control: (child, count) => {
+      //   const deferred = Deferred.makeUnsafe<Array<ControlMessage>, SystemError>();
+      //   return Effect.tryPromise(async (signal) => {
+      //     if (!child.stdio[3]) {
+      //       return Deferred.doneUnsafe(
+      //         deferred,
+      //         new SystemError({
+      //           subtag: "WorkerdSpawn",
+      //           message: "The workerd process did not have a control fd.",
+      //         }),
+      //       );
+      //     }
+      //     const file = Bun.file(child.stdio[3]!);
+      //     let lines = "";
+      //     for await (const chunk of file
+      //       .stream()
+      //       .pipeThrough(new TextDecoderStream(), { signal })) {
+      //       lines += chunk;
+      //       const messages = lines
+      //         .split("\n")
+      //         .filter((line) => line.trim() !== "")
+      //         .map((line) => JSON.parse(line) as ControlMessage);
+      //       if (messages.length === count) {
+      //         return Deferred.doneUnsafe(deferred, Effect.succeed(messages));
+      //       }
+      //     }
+      //   }).pipe(
+      //     Effect.ignore,
+      //     Effect.flatMap(() => Deferred.await(deferred)),
+      //   );
+      // },
+      control: (child, count) =>
+        Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
+          if (!child.stdio[3]) {
             return resume(
               new SystemError({
                 subtag: "WorkerdSpawn",
-                message:
-                  "The Workers runtime (workerd) process did not have a stdin, stderr, or control fd.",
+                message: "The workerd process did not have a control fd.",
               }),
             );
           }
-
-          let stderr = "";
-          let control = "";
-
-          const onStderr = (data: Buffer) => {
-            stderr += data.toString();
+          const file = Bun.file(child.stdio[3]);
+          const stream = async () => {
+            let lines = "";
+            for await (const chunk of file.stream().pipeThrough(new TextDecoderStream(), {
+              signal,
+            })) {
+              lines += chunk;
+              const messages = lines
+                .split("\n")
+                .filter((line) => line.trim() !== "")
+                .map((line) => JSON.parse(line) as ControlMessage);
+              if (messages.length === count) {
+                return resume(Effect.succeed(messages));
+              }
+            }
           };
-          const onControl = (data: Buffer) => {
-            control += data.toString();
-            const messages = control
+          void stream();
+        }),
+      error: (child) => {
+        const deferred = Deferred.makeUnsafe<never, ConfigError | SystemError>();
+        return Effect.tryPromise(async (signal) => {
+          let lines = "";
+          for await (const chunk of child.stderr.pipeThrough(new TextDecoderStream(), {
+            signal,
+          })) {
+            lines += chunk;
+          }
+          Deferred.doneUnsafe(
+            deferred,
+            classifyWorkerdError(lines, child.exitCode, child.signalCode),
+          );
+        }).pipe(
+          Effect.ignore,
+          Effect.flatMap(() => Deferred.await(deferred)),
+        );
+      },
+      pipe: () => Effect.void,
+      kill: (child) => child.kill("SIGKILL"),
+    },
+  );
+
+const makeNode = () =>
+  make(
+    (command, args, config) =>
+      Effect.callback<NodeChildProcess.ChildProcess, SystemError>((resume) => {
+        const child = NodeChildProcess.spawn(command, args, {
+          stdio: ["pipe", "inherit", "pipe", "pipe"],
+          killSignal: "SIGKILL",
+        });
+        child.on("error", (error) => {
+          resume(
+            new SystemError({
+              subtag: "WorkerdSpawn",
+              message: "Failed to spawn the Workers runtime (workerd) process.",
+              cause: error,
+            }),
+          );
+        });
+        child.on("spawn", () => {
+          child.stdin?.on("finish", () => {
+            resume(Effect.succeed(child));
+          });
+          child.stdin?.write(config);
+          child.stdin?.end();
+        });
+        return Effect.sync(() => {
+          child.kill("SIGKILL");
+        });
+      }),
+    {
+      control: (child, count) =>
+        Effect.callback<Array<ControlMessage>, SystemError>((resume) => {
+          if (!child.stdio[3]) {
+            return resume(
+              new SystemError({
+                subtag: "WorkerdSpawn",
+                message: "The workerd process did not have a control fd.",
+              }),
+            );
+          }
+          let lines = "";
+          const onData = (data: Buffer) => {
+            lines += data.toString();
+            const messages = lines
               .split("\n")
               .filter((line) => line.trim() !== "")
               .map((line) => JSON.parse(line) as ControlMessage);
             if (messages.length === count) {
-              removeListeners();
-              resume(Effect.succeed(messages));
+              return resume(Effect.succeed(messages));
             }
           };
-          const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-            removeListeners();
-            resume(classifyWorkerdError(stderr, code, signal));
-          };
-          const removeListeners = () => {
-            handle.stderr?.off("data", onStderr);
-            handle.stdio[3]?.off("data", onControl);
-            handle.off("exit", onExit);
-          };
-          handle.stderr?.on("data", onStderr);
-          handle.stdio[3]?.on("data", onControl);
-          handle.on("exit", onExit);
-
-          handle.stdin?.write(Buffer.from(serializeConfig(config)));
-          handle.stdin?.end();
-
-          return Effect.sync(removeListeners);
-        });
-        yield* pipeStderr(handle);
-        const ports: WorkerdPorts = {};
-        for (const message of controlMessages) {
-          if (message.event === "listen") {
-            ports[message.socket] = message.port;
-          }
-        }
-        return ports;
-      },
-      (effect) =>
-        Effect.retry(effect, {
-          while: (error) => error._tag === "SystemError",
-          schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(3)),
+          child.stdio[3].on("data", onData);
+          return Effect.sync(() => {
+            child.stdio[3]?.off("data", onData);
+          });
         }),
-    ),
-  });
+      error: (child) =>
+        Effect.callback<never, ConfigError | SystemError>((resume) => {
+          let lines = "";
+          const onData = (data: Buffer) => {
+            lines += data.toString();
+          };
+          const onError = () => {
+            resume(classifyWorkerdError(lines, child.exitCode, child.signalCode));
+          };
+          child.stderr?.on("data", onData);
+          child.stderr?.on("end", onError);
+          child.on("exit", onError);
+          return Effect.sync(() => {
+            child.stderr?.off("data", onData);
+            child.stderr?.off("end", onError);
+            child.off("exit", onError);
+          });
+        }),
+      pipe: () => Effect.void,
+      kill: (child) => child.kill("SIGKILL"),
+    },
+  );
+
+export const WorkerdLive = Layer.sync(Workerd, () => {
+  if (typeof Bun !== "undefined") {
+    return makeBun();
+  }
+  return makeNode();
 });
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;

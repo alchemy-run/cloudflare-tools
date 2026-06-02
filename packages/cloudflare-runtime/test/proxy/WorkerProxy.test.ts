@@ -72,7 +72,7 @@ const serveUpstream = (esModule: string) =>
     return new URL(`http://127.0.0.1:${ports.http}`);
   });
 
-layer(services)((it) => {
+layer(services, { excludeTestServices: true })((it) => {
   it.effect(
     "proxies an HTTP request/response to the upstream worker once a target is set",
     () =>

@@ -16,7 +16,7 @@ export default {
 };
 `;
 
-layer(localRuntimeLayer)("Runtime", (it) => {
+layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
   it.effect(
     "starts a worker and returns an http://127.0.0.1:<port> URL",
     () =>

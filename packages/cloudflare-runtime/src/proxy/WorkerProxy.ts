@@ -49,6 +49,7 @@ export const WorkerProxyLive = Layer.effect(
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
     const internet = yield* Internet.Internet;
+    const ports = yield* Port.make({ cache: true });
 
     const normalizeOptions = Effect.fnUntraced(function* (options: ServeOptions) {
       const host = options.host ?? "127.0.0.1";
@@ -56,8 +57,8 @@ export const WorkerProxyLive = Layer.effect(
       return {
         port:
           options.port && options.strictPort
-            ? yield* Port.check(options.port)
-            : yield* Port.find(options.port ?? 0),
+            ? yield* ports.check(options.port)
+            : yield* ports.find(options.port ?? 0),
         host,
         strictPort,
         token: crypto.randomUUID(),
@@ -106,7 +107,8 @@ export const WorkerProxyLive = Layer.effect(
     // The `findAvailablePort` function is lower overhead than `serve`, but it's best-effort.
     // If there is a race condition, we may not be able to bind to the port, so we retry.
     const serveWithRetry: typeof serve = (options) =>
-      serve(options).pipe(
+      ports.reserve(options.port).pipe(
+        Effect.flatMap(() => serve(options)),
         Effect.catchIf(
           (error) =>
             Workerd.isAddressInUseError(error) &&

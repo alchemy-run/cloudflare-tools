@@ -4,11 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Internet from "../../src/globals/Internet.ts";
-import * as Port from "../../src/internal/Port.ts";
 import * as WorkerProxy from "../../src/proxy/WorkerProxy.ts";
 import { ConfigError } from "../../src/RuntimeError.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
-import { occupyPort } from "../helpers/occupy-port.ts";
+import * as PortHelpers from "../helpers/port.ts";
 
 const services = WorkerProxy.WorkerProxyLive.pipe(
   Layer.provideMerge(Layer.mergeAll(Workerd.WorkerdLive, Internet.InternetLive)),
@@ -222,7 +221,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const instance = yield* proxy.serve();
-        const deadPort = yield* Port.find(0);
+        const deadPort = yield* PortHelpers.find(0);
 
         // Point the proxy at an address with nothing listening. The fetch fails
         // with a non-retryable 502, which the per-request loop must surface
@@ -281,7 +280,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const upstream = yield* serveUpstream(HTTP_WORKER);
-        const port = yield* Port.find(0);
+        const port = yield* PortHelpers.find(0);
 
         const instance = yield* proxy.serve({ port });
         expect(instance.url.port).toBe(String(port));
@@ -302,7 +301,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const blocker = yield* occupyPort(0);
+        const blocker = yield* PortHelpers.occupy(0);
 
         const instance = yield* proxy.serve({ port: blocker.port });
         expect(Number(instance.url.port)).toBeGreaterThan(blocker.port);
@@ -315,7 +314,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const port = yield* Port.find(0);
+        const port = yield* PortHelpers.find(0);
 
         const instance = yield* proxy.serve({ port, strictPort: true });
         expect(instance.url.port).toBe(String(port));
@@ -328,7 +327,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const blocker = yield* occupyPort(0);
+        const blocker = yield* PortHelpers.occupy(0);
         const error = yield* proxy
           .serve({ port: blocker.port, strictPort: true })
           .pipe(Effect.flip);
@@ -364,7 +363,7 @@ layer(services)((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const basePort = yield* Port.find(0);
+        const basePort = yield* PortHelpers.find(0);
 
         // All instances request the same starting port at once. The non-strict
         // port-selection retry should hand each one a distinct, available port.

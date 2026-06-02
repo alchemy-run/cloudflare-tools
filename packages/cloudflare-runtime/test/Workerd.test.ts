@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
-import * as Port from "../src/internal/Port.ts";
 import * as Workerd from "../src/workerd/Workerd.ts";
+import * as PortHelpers from "./helpers/port.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
@@ -213,7 +213,7 @@ layer(services)((it) => {
 
         // Wait until we can bind to the port ourselves.
 
-        const free = yield* Port.check(port).pipe(Effect.exit);
+        const free = yield* PortHelpers.check(port).pipe(Effect.exit);
         assert(Exit.isSuccess(free));
       }),
     { timeout: 60_000 },

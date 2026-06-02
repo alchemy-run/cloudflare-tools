@@ -22,6 +22,7 @@ import * as Workerd from "../../src/workerd/Workerd.ts";
  */
 export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
   Layer.provideMerge(RuntimeServices.layerLocalBindings()),
+  Layer.provideMerge(RuntimeServices.layerProxy()),
   Layer.provide(Globals.GlobalsLive),
   Layer.provideMerge(RuntimeServices.layerLoopback()),
   Layer.provide(Storage.layerTemp()),

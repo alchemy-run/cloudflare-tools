@@ -1,7 +1,6 @@
 import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
@@ -38,9 +37,15 @@ type ControlMessage =
     };
 
 interface ProcessHandle {
+  /** Writes the config to the process's stdin. This can be omitted if the config is passed as an argument to the process. */
+  readonly configure?: () => Effect.Effect<void, SystemError>;
+  /** Waits for the process to listen on the given number of sockets. */
   readonly control: (count: number) => Effect.Effect<Array<ControlMessage>, SystemError>;
+  /** Resumes with an error if the process fails to start. */
   readonly error: () => Effect.Effect<never, ConfigError | SystemError>;
+  /** Pipes the process's stderr to the console. Called after initialization is complete. */
   readonly pipe: () => Effect.Effect<void, never, Scope.Scope>;
+  /** Kills the process. */
   readonly kill: () => void;
 }
 
@@ -69,6 +74,7 @@ const make = (
           ],
           Buffer.from(serializeConfig(config)),
         );
+        // Scope finalizers may not run if the parent exits, so we use an exit hook to ensure we always kill the process.
         const unregister = exitHook(() => handle.kill());
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
@@ -76,6 +82,9 @@ const make = (
             unregister();
           }),
         );
+        if (handle.configure) {
+          yield* handle.configure();
+        }
         const count =
           (config.sockets?.length ?? 0) +
           (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
@@ -92,7 +101,7 @@ const make = (
       },
       Effect.retry({
         while: (error) => error._tag === "SystemError",
-        schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(5)),
+        schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(3)),
       }),
     ),
   });
@@ -118,7 +127,7 @@ const makeBun = () =>
               );
             }
             const file = Bun.file(child.stdio[3]);
-            const stream = async () => {
+            const collect = async () => {
               let lines = "";
               for await (const chunk of file.stream().pipeThrough(new TextDecoderStream(), {
                 signal,
@@ -133,32 +142,38 @@ const makeBun = () =>
                 }
               }
             };
-            void stream().catch(identity);
+            // Ignore errors here and let the error callback handle it instead.
+            // Errors here are a symptom; the error callback reports the actual cause.
+            void collect().catch(() => null);
           }),
         error: () =>
           Effect.callback<never, ConfigError | SystemError>((resume, signal) => {
-            const stream = async () => {
-              let lines = "";
+            const collect = async () => {
+              let stderr = "";
               for await (const chunk of child.stderr.pipeThrough(new TextDecoderStream(), {
                 signal,
               })) {
-                lines += chunk;
+                stderr += chunk;
               }
-              return resume(classifyWorkerdError(lines, child.exitCode, child.signalCode));
+              return stderr;
             };
-            void stream().catch(identity);
+            void collect()
+              .catch(() => "Bun child process stderr is empty.")
+              .then((stderr) =>
+                resume(classifyWorkerdError(stderr, child.exitCode, child.signalCode)),
+              );
           }),
         pipe: () =>
           Effect.promise((signal) =>
             child.stderr.pipeTo(
               new WritableStream({
                 write(chunk) {
-                  console.error(chunk);
+                  process.stderr.write(chunk);
                 },
               }),
               { signal },
             ),
-          ).pipe(Effect.ignore, Effect.forkScoped),
+          ).pipe(Effect.forkScoped),
         kill: () => child.kill("SIGKILL"),
       })),
     ),
@@ -171,7 +186,11 @@ const makeNode = () =>
         stdio: ["pipe", "inherit", "pipe", "pipe"],
         killSignal: "SIGKILL",
       });
-      child.on("error", (error) => {
+      const onSpawn = () => {
+        resume(Effect.succeed(child));
+        child.off("error", onError);
+      };
+      const onError = (error: unknown) => {
         resume(
           new SystemError({
             subtag: "WorkerdSpawn",
@@ -179,22 +198,40 @@ const makeNode = () =>
             cause: error,
           }),
         );
-      });
-      child.on("spawn", () => {
-        child.stdin?.on("finish", () => {
-          resume(Effect.succeed(child));
-        });
-        child.stdin?.write(config);
-        child.stdin?.end();
-      });
+      };
+      child.once("spawn", onSpawn);
+      child.once("error", onError);
       return Effect.sync(() => {
         child.kill("SIGKILL");
+        child.off("spawn", onSpawn);
+        child.off("error", onError);
       });
     }).pipe(
       Effect.map((child) => ({
+        configure: () =>
+          Effect.callback((resume) => {
+            const onError = (
+              cause: unknown,
+              message: string = "Failed to write to the workerd process stdin.",
+            ) => {
+              resume(new SystemError({ subtag: "WorkerdSpawn", message, cause }));
+            };
+            if (!child.stdin) {
+              return onError(undefined, "The workerd process did not have a stdin.");
+            }
+            child.stdin.on("error", onError);
+            child.stdin.end(config, () => {
+              resume(Effect.void);
+              child.stdin?.off("error", onError);
+            });
+            return Effect.sync(() => {
+              child.stdin?.off("error", onError);
+            });
+          }),
         control: (count) =>
-          Effect.callback<Array<ControlMessage>, SystemError>((resume) => {
-            if (!child.stdio[3]) {
+          Effect.callback((resume) => {
+            const pipe = child.stdio[3];
+            if (!pipe) {
               return resume(
                 new SystemError({
                   subtag: "WorkerdSpawn",
@@ -203,6 +240,12 @@ const makeNode = () =>
               );
             }
             let lines = "";
+            const onEnd = () => {
+              pipe.off("data", onData);
+              if ("closed" in pipe && !pipe.closed) {
+                pipe.destroy();
+              }
+            };
             const onData = (data: Buffer) => {
               lines += data.toString();
               const messages = lines
@@ -210,35 +253,46 @@ const makeNode = () =>
                 .filter((line) => line.trim() !== "")
                 .map((line) => JSON.parse(line) as ControlMessage);
               if (messages.length === count) {
+                onEnd();
                 return resume(Effect.succeed(messages));
               }
             };
-            child.stdio[3].on("data", onData);
-            return Effect.sync(() => {
-              child.stdio[3]?.off("data", onData);
-            });
+            // We intentionally don't listen for `end` or `error` because:
+            // - workerd doesn't close the pipe itself; we have to do it ourselves when we have all our messages
+            // - errors from here are a symptom and don't tell us what's actually wrong, so we let the error callback handle it
+            pipe.on("data", onData);
+            return Effect.sync(onEnd);
           }),
         error: () =>
-          Effect.callback<never, ConfigError | SystemError>((resume) => {
-            let lines = "";
+          Effect.callback((resume) => {
+            let stderr = "";
             const onData = (data: Buffer) => {
-              lines += data.toString();
+              stderr += data.toString();
             };
             const onError = () => {
-              resume(classifyWorkerdError(lines, child.exitCode, child.signalCode));
+              resume(
+                classifyWorkerdError(
+                  stderr || "Node child process stderr is empty.",
+                  child.exitCode,
+                  child.signalCode,
+                ),
+              );
             };
-            child.stderr?.on("data", onData);
-            child.stderr?.on("end", onError);
-            child.on("exit", onError);
+            if (!child.stderr) {
+              return onError();
+            }
+            child.stderr.on("data", onData);
+            child.stderr.on("end", onError);
+            child.stderr.on("error", onError);
             return Effect.sync(() => {
               child.stderr?.off("data", onData);
               child.stderr?.off("end", onError);
-              child.off("exit", onError);
+              child.stderr?.off("error", onError);
             });
           }),
         pipe: () => {
           const log = (chunk: Buffer) => {
-            console.error(chunk.toString());
+            process.stderr.write(chunk);
           };
           return Effect.acquireRelease(
             Effect.sync(() => {
@@ -255,12 +309,9 @@ const makeNode = () =>
     ),
   );
 
-export const WorkerdLive = Layer.sync(Workerd, () => {
-  if (typeof Bun !== "undefined") {
-    return makeBun();
-  }
-  return makeNode();
-});
+export const WorkerdLive = Layer.sync(Workerd, () =>
+  typeof globalThis.Bun !== "undefined" ? makeBun() : makeNode(),
+);
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
 

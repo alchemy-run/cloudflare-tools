@@ -6,8 +6,18 @@ import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 export const MAX_PORT = 65535;
 
 export interface Ports {
-  readonly find: (port: number) => Effect.Effect<number, ConfigError>;
+  /**
+   * Finds an available port starting from the given one.
+   */
+  readonly find: (port: number) => Effect.Effect<number>;
+  /**
+   * Checks if a port is available and reserves it if it is; returns an error otherwise.
+   */
   readonly check: (port: number) => Effect.Effect<number, ConfigError>;
+  /**
+   * Marks a port as occupied for the lifetime of the cache, preventing it from being assigned to another worker.
+   * Note that this is best-effort; the caller should include retry logic to handle race conditions.
+   */
   readonly reserve: (port: number) => Effect.Effect<void>;
 }
 
@@ -22,6 +32,7 @@ const HOSTS: Set<string> = new Set([
 ]);
 
 interface PortsOptions {
+  /** Prevents redundant lookups and helps with race conditions; should only be disabled for testing. */
   readonly cache: boolean;
 }
 
@@ -54,26 +65,28 @@ export const make = (options: PortsOptions) =>
         ),
       {
         capacity: options.cache ? Infinity : 0,
-        timeToLive: (exit) =>
-          !options.cache || (exit._tag === "Success" && exit.value) ? 0 : "30 seconds",
+        // Cache for 30 seconds if the port is *not* available to prevent redundant lookups.
+        // If a port *is* available, we don't cache it since it will likely be claimed shortly after lookup.
+        timeToLive: (exit) => (exit._tag === "Success" && exit.value ? 0 : "30 seconds"),
       },
     );
-    const setPortOccupied = (port: number) => Cache.set(cache, port, false);
+    const reserve = (port: number) => Cache.set(cache, port, false);
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {
-          return yield* bind(port).pipe(Effect.tap(setPortOccupied));
+          return yield* bind(port).pipe(Effect.tap(reserve));
         }
         const start = port;
         while (port <= MAX_PORT) {
           const available = yield* Cache.get(cache, port);
           if (available) {
-            yield* setPortOccupied(port);
+            yield* reserve(port);
             return port;
           }
           yield* Effect.logDebug(`Port ${port} is not available, trying ${port + 1}...`);
           port++;
         }
+        // This should essentially never happen, so it's a `die` rather than a `fail`.
         return yield* Effect.die(
           new SystemError({
             subtag: "PortExhausted",
@@ -86,9 +99,9 @@ export const make = (options: PortsOptions) =>
       check: (port) =>
         Cache.get(cache, port).pipe(
           Effect.flatMap((available) =>
-            available ? Effect.succeed(port) : Effect.fail(addressInUseError(port)),
+            available ? reserve(port).pipe(Effect.as(port)) : Effect.fail(addressInUseError(port)),
           ),
         ),
-      reserve: (port) => setPortOccupied(port),
+      reserve,
     } as Ports;
   });

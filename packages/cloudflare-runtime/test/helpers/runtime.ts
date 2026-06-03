@@ -42,7 +42,9 @@ export const startTestWorker = <B extends BindingHooks>(worker: RuntimeWorker<B>
   Effect.gen(function* () {
     const runtime = yield* Runtime.Runtime;
     const baseUrl = yield* runtime.start(worker);
-    const fetchAt = (path: string, init?: RequestInit) =>
-      Effect.promise(() => fetch(new URL(path, baseUrl), init));
-    return { baseUrl, fetch: fetchAt };
+    const fetch = (path: string, init?: RequestInit) =>
+      Effect.promise(() => globalThis.fetch(new URL(path, baseUrl), init));
+    const fetchText = (path: string, init?: RequestInit) =>
+      fetch(path, init).pipe(Effect.flatMap((res) => Effect.promise(() => res.text())));
+    return { baseUrl, fetch, fetchText };
   });

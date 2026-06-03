@@ -92,8 +92,7 @@ const make = (
       },
       Effect.retry({
         while: (error) => error._tag === "SystemError",
-        schedule: Schedule.exponential(50),
-        times: 3,
+        schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(5)),
       }),
     ),
   });

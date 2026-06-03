@@ -46,15 +46,17 @@ export const make = (options: PortsOptions) =>
         });
         return Effect.sync(() => server.close());
       });
-    const cache = yield* Cache.make({
-      lookup: (port: number) =>
+    const cache = yield* Cache.makeWith(
+      (port: number) =>
         Effect.forEach(HOSTS, (host) => bind(port, host)).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         ),
-      capacity: options.cache ? Infinity : 0,
-      timeToLive: "30 seconds",
-    });
+      {
+        capacity: options.cache ? Infinity : 0,
+        timeToLive: (exit) => (exit._tag === "Success" && exit.value ? 0 : "30 seconds"),
+      },
+    );
     const setPortOccupied = (port: number) => Cache.set(cache, port, true);
     return {
       find: Effect.fn(function* (port) {

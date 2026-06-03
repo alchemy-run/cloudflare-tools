@@ -107,8 +107,7 @@ export const WorkerProxyLive = Layer.effect(
     // The `findAvailablePort` function is lower overhead than `serve`, but it's best-effort.
     // If there is a race condition, we may not be able to bind to the port, so we retry.
     const serveWithRetry: typeof serve = (options) =>
-      ports.reserve(options.port).pipe(
-        Effect.flatMap(() => serve(options)),
+      serve(options).pipe(
         Effect.catchIf(
           (error) =>
             Workerd.isAddressInUseError(error) &&

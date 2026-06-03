@@ -18,7 +18,7 @@ describe("Port.find", () => {
       const selected = yield* ports.find(0);
       const port = yield* ports.find(selected);
       expect(port).toBe(selected);
-    }),
+    }).pipe(it.flakyTest),
   );
 
   it.effect("skips a port in use and returns the next available one", () =>

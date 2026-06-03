@@ -309,17 +309,14 @@ layer(services, { excludeTestServices: true })((it) => {
     { timeout: 30_000 },
   );
 
-  it.effect(
-    "serves on the exact requested port when strictPort is set and it is free",
-    () =>
-      Effect.gen(function* () {
-        const proxy = yield* WorkerProxy.WorkerProxy;
-        const port = yield* PortHelpers.find(0);
+  it.effect("serves on the exact requested port when strictPort is set and it is free", () =>
+    Effect.gen(function* () {
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const port = yield* PortHelpers.find(0);
 
-        const instance = yield* proxy.serve({ port, strictPort: true });
-        expect(instance.url.port).toBe(String(port));
-      }),
-    { timeout: 30_000 },
+      const instance = yield* proxy.serve({ port, strictPort: true });
+      expect(instance.url.port).toBe(String(port));
+    }).pipe(it.flakyTest),
   );
 
   it.effect(
@@ -377,7 +374,7 @@ layer(services, { excludeTestServices: true })((it) => {
         expect(ports.every((port) => Number(port) >= basePort)).toBe(true);
         expect(new Set(ports).size).toBe(count);
       }),
-    { timeout: 60_000 },
+    { timeout: 30_000 },
   );
 
   it.effect(

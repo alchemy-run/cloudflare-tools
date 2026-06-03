@@ -54,10 +54,11 @@ export const make = (options: PortsOptions) =>
         ),
       {
         capacity: options.cache ? Infinity : 0,
-        timeToLive: (exit) => (exit._tag === "Success" && exit.value ? 0 : "30 seconds"),
+        timeToLive: (exit) =>
+          !options.cache || (exit._tag === "Success" && exit.value) ? 0 : "30 seconds",
       },
     );
-    const setPortOccupied = (port: number) => Cache.set(cache, port, true);
+    const setPortOccupied = (port: number) => Cache.set(cache, port, false);
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {

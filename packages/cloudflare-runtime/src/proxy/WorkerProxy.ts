@@ -114,7 +114,10 @@ export const WorkerProxyLive = Layer.effect(
             Workerd.isAddressInUseError(error) &&
             !options.strictPort &&
             options.port <= Port.MAX_PORT,
-          () => serveWithRetry({ ...options, port: options.port + 1 }),
+          () =>
+            Effect.flatMap(ports.find(options.port + 1), (port) =>
+              serveWithRetry({ ...options, port }),
+            ),
         ),
       );
 

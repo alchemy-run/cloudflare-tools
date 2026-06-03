@@ -53,7 +53,7 @@ export const make = (options: PortsOptions) =>
           Effect.orElseSucceed(() => false),
         ),
       capacity: options.cache ? Infinity : 0,
-      timeToLive: "10 seconds",
+      timeToLive: "30 seconds",
     });
     const setPortOccupied = (port: number) => Cache.set(cache, port, true);
     return {

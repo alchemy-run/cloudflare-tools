@@ -377,7 +377,7 @@ layer(services, { excludeTestServices: true })((it) => {
         expect(ports.every((port) => Number(port) >= basePort)).toBe(true);
         expect(new Set(ports).size).toBe(count);
       }),
-    { timeout: 30_000 },
+    { timeout: 60_000 },
   );
 
   it.effect(

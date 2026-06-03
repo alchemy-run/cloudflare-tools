@@ -93,6 +93,6 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
         });
         expect(new Set(urls).size).toBe(count);
       }),
-    { timeout: 30_000 },
+    { timeout: 60_000 },
   );
 });

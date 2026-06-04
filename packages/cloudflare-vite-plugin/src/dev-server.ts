@@ -90,8 +90,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
 ) {
   const runtime = yield* Runtime;
+  const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
-    name: options.worker?.name ?? "vite-dev",
+    name,
     modules: makeWorkerModules(options),
     compatibilityDate: options.compatibilityDate ?? "2026-05-12",
     compatibilityFlags: options.compatibilityFlags ?? [],
@@ -106,9 +107,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         entryId: entry.id,
         entryName: entry.name,
       }),
-      Loopback.local(
-        "__DISTILLED_INVOKE_MODULE__",
-        Effect.gen(function* () {
+      Loopback.local({
+        binding: "__DISTILLED_INVOKE_MODULE__",
+        name: `vite:invoke-module:${name}`,
+        handler: Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
           const targetEnvironment = Headers.get(request.headers, ENVIRONMENT_NAME_HEADER).pipe(
             Option.getOrThrow,
@@ -120,7 +122,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
           );
           return HttpServerResponse.jsonUnsafe(result);
         }),
-      ),
+      }),
       ...(options.worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [

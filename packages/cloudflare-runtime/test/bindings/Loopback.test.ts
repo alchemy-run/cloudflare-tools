@@ -19,9 +19,13 @@ layer(localRuntimeLayer)("Loopback binding", (it) => {
         compatibilityDate: "2026-03-10",
         compatibilityFlags: [],
         bindings: [
-          Loopback.local("LOOPBACK", (_req, res) => {
-            res.writeHead(200, { "content-type": "text/plain" });
-            res.end("loopback-ok");
+          Loopback.local({
+            binding: "LOOPBACK",
+            name: "test-route",
+            handler: (_req, res) => {
+              res.writeHead(200, { "content-type": "text/plain" });
+              res.end("loopback-ok");
+            },
           }),
         ],
         modules: [{ name: "main.js", type: "ESModule", content: SCRIPT }],

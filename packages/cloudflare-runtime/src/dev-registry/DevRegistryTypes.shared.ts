@@ -31,4 +31,15 @@ export type WorkerDefinition = {
    * forward it back into the debug port.
    */
   workflowServices?: Record<string, string>;
+  /**
+   * Map of queue name to the workerd service name that hosts the queue's
+   * broker object-entry in this worker's process. Producers in other
+   * instances route their `send()`/`sendBatch()` calls through the
+   * dev-registry proxy to this service via the debug port, so a single
+   * process owns the broker (and consumer) for a given queue.
+   *
+   * The key is the logical queue name (shared across instances); the value
+   * is opaque to consumers — they forward it back into the debug port.
+   */
+  queueServices?: Record<string, string>;
 };

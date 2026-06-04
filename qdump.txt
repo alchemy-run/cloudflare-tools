@@ -1,0 +1,26 @@
+
+ RUN  v4.1.8 /Users/john/Developer/Alchemy/distilled-cloudflare
+
+ ❯ packages/cloudflare-runtime/test/bindings/queues/_debug.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/cloudflare-runtime/test/bindings/queues/_debug.test.ts [ packages/cloudflare-runtime/test/bindings/queues/_debug.test.ts ]
+Error: Cannot find package 'worker:./broker.worker.ts' imported from /Users/john/Developer/Alchemy/distilled-cloudflare/packages/cloudflare-runtime/src/bindings/queues/Queues.ts
+ ❯ packages/cloudflare-runtime/src/bindings/queues/Queues.ts:3:1
+      1| import * as Effect from "effect/Effect";
+      2| import * as Layer from "effect/Layer";
+      3| import * as BrokerWorker from "worker:./broker.worker.ts";
+       | ^
+      4| import * as QueueEntryWorker from "worker:./queue-entry.worker.ts";
+      5| import { USER_WORKER_SERVICE_NAME } from "../../dev-registry/Constants…
+ ❯ packages/cloudflare-runtime/test/bindings/queues/_debug.test.ts:3:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  15:32:47
+   Duration  129ms (transform 14ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)
+

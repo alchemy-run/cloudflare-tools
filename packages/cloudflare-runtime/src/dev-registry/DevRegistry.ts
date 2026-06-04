@@ -39,11 +39,14 @@ export class DevRegistry extends Context.Service<
     ) => Effect.Effect<void, never, Scope.Scope>;
     /**
      * Subscribe to changes to the registry. The `onUpdate` callback fires
-     * whenever a file belonging to one of `services` changes. The subscription
-     * is removed when the calling scope closes.
+     * whenever a file belonging to one of `services` changes, or whenever the
+     * set of workers providing one of the watched `queueNames` (via their
+     * `queueServices`) changes. The subscription is removed when the calling
+     * scope closes.
      */
     readonly subscribe: (
       services: ExternalServiceMap,
+      queueNames: ReadonlySet<string>,
       onUpdate: (registry: WorkerRegistry) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
   }
@@ -70,6 +73,7 @@ export const DevRegistryLive = Layer.effect(
     const registeredWorkers = new Set<string>();
     interface Subscriber {
       readonly services: ExternalServiceMap;
+      readonly queueNames: ReadonlySet<string>;
       readonly onUpdate: (registry: WorkerRegistry) => void;
     }
     const subscribers = new Set<Subscriber>();
@@ -119,11 +123,28 @@ export const DevRegistryLive = Layer.effect(
       const previousRegistry = JSON.parse(previousJSON) as WorkerRegistry;
       previousJSON = json;
       for (const subscriber of subscribers) {
+        let changed = false;
         for (const [service] of subscriber.services) {
           if (JSON.stringify(registry[service]) !== JSON.stringify(previousRegistry[service])) {
-            subscriber.onUpdate(registry);
+            changed = true;
             break;
           }
+        }
+        if (!changed && subscriber.queueNames.size > 0) {
+          const signature = (reg: WorkerRegistry) =>
+            JSON.stringify(
+              [...subscriber.queueNames].map((queue) =>
+                Object.values(reg)
+                  .map((definition) => definition.queueServices?.[queue])
+                  .filter((service) => service !== undefined),
+              ),
+            );
+          if (signature(registry) !== signature(previousRegistry)) {
+            changed = true;
+          }
+        }
+        if (changed) {
+          subscriber.onUpdate(registry);
         }
       }
     };
@@ -182,8 +203,8 @@ export const DevRegistryLive = Layer.effect(
         );
         refresh();
       }),
-      subscribe: Effect.fn(function* (services, onUpdate) {
-        if (services.size === 0) {
+      subscribe: Effect.fn(function* (services, queueNames, onUpdate) {
+        if (services.size === 0 && queueNames.size === 0) {
           return;
         }
         yield* fs.makeDirectory(registryPath, { recursive: true }).pipe(Effect.ignore);
@@ -193,7 +214,11 @@ export const DevRegistryLive = Layer.effect(
         if (subscribers.size === 0) {
           previousJSON = JSON.stringify(readWorkerRegistrySync(registryPath));
         }
-        const subscriber: Subscriber = { services: new Map(services), onUpdate };
+        const subscriber: Subscriber = {
+          services: new Map(services),
+          queueNames: new Set(queueNames),
+          onUpdate,
+        };
         subscribers.add(subscriber);
         yield* Effect.addFinalizer(() => Effect.sync(() => subscribers.delete(subscriber)));
       }),

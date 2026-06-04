@@ -35,6 +35,13 @@ export interface RegistryEntry {
    * service via the debug port. See {@link DevRegistryTypes.shared.ts}.
    */
   workflowServices?: Record<string, string>;
+  /**
+   * Map of queue name to the workerd service name that hosts the queue's
+   * broker object-entry in the remote process. Producers route their queue
+   * bindings through the proxy to this service via the debug port. See
+   * {@link DevRegistryTypes.shared.ts}.
+   */
+  queueServices?: Record<string, string>;
 }
 
 let registry = new Map<string, RegistryEntry>();
@@ -64,6 +71,24 @@ export function resolveTarget(service: string): RegistryEntry | undefined {
  */
 export function hasRegistryEntry(service: string): boolean {
   return registry.has(service);
+}
+
+/**
+ * Resolve the instance that consumes (and hosts the broker for) the given
+ * queue. Scans every registered worker for a `queueServices` entry matching
+ * the queue name. Returns the debug port address and the broker object-entry
+ * service name, or `undefined` if no consumer is currently registered.
+ */
+export function resolveQueueConsumer(
+  queueName: string,
+): { debugPortAddress: string; serviceName: string } | undefined {
+  for (const entry of registry.values()) {
+    const serviceName = entry.queueServices?.[queueName];
+    if (serviceName && entry.debugPortAddress) {
+      return { debugPortAddress: entry.debugPortAddress, serviceName };
+    }
+  }
+  return undefined;
 }
 
 /**

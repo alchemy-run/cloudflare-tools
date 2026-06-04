@@ -1,5 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as DevRegistry from "../../src/dev-registry/DevRegistry.ts";
@@ -30,6 +32,20 @@ export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
   Layer.provide(Workerd.WorkerdLive),
   Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
 );
+
+const temporaryRegistryLayer = (prefix: string) =>
+  ConfigProvider.layer(
+    FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) => fs.makeTempDirectoryScoped({ prefix })),
+      Effect.map((path) => ConfigProvider.fromUnknown({ MINIFLARE_REGISTRY_PATH: path })),
+    ),
+  );
+
+export const localRuntimeWith = (options: { temporaryRegistryPrefix: string }) =>
+  localRuntimeLayer.pipe(
+    Layer.provide(temporaryRegistryLayer(options.temporaryRegistryPrefix)),
+    Layer.provide(NodeServices.layer),
+  );
 
 /**
  * Start a worker via the `Runtime` and return helpers bound to its base URL.

@@ -65,6 +65,22 @@ export class DevRegistryProxy extends Plugin.Service<
       scriptName: string,
       workflowName: string,
     ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    /**
+     * Record that this worker consumes (and hosts the broker for) the given
+     * queue at `serviceName`. Populates the `queueServices` field on this
+     * worker's dev-registry entry so producers in other instances can route
+     * their queue bindings here.
+     */
+    readonly registerOwnedQueue: (queueName: string, serviceName: string) => Effect.Effect<void>;
+    /**
+     * Record a producer binding for a queue consumed by another instance, so
+     * the proxy worker forwards `send()`/`sendBatch()` calls to the owning
+     * instance's broker via the debug port. Returns the `ExternalQueueProxy`
+     * designator to use as the `queue` binding target.
+     */
+    readonly registerExternalQueue: (
+      queueName: string,
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/DevRegistryProxy") {}
 
@@ -87,6 +103,12 @@ export const DevRegistryProxyLive = Layer.effect(
         // dedicated proxy entrypoint that resolves by workflow name, not
         // service entrypoint.
         const externalWorkflows = new Set<string>();
+        // Queues this worker consumes (and hosts the broker for), published in
+        // this worker's dev-registry entry as `queueServices`.
+        const ownedQueues = new Map<string, string>();
+        // Queues consumed by another instance that this worker produces to.
+        // The proxy worker resolves the consumer dynamically by queue name.
+        const externalQueues = new Set<string>();
         const start = Effect.fn(function* (
           ports: Workerd.WorkerdPorts,
         ): Effect.fn.Return<void, never, Scope.Scope> {
@@ -103,9 +125,10 @@ export const DevRegistryProxyLive = Layer.effect(
               userWorkerService: USER_WORKER_SERVICE_NAME,
               workflowServices:
                 ownedWorkflows.size > 0 ? Object.fromEntries(ownedWorkflows) : undefined,
+              queueServices: ownedQueues.size > 0 ? Object.fromEntries(ownedQueues) : undefined,
             },
           });
-          if (externals.size === 0) {
+          if (externals.size === 0 && externalQueues.size === 0) {
             return;
           }
           const devRegistryPort = ports[SOCKET_DEV_REGISTRY];
@@ -113,7 +136,7 @@ export const DevRegistryProxyLive = Layer.effect(
             return;
           }
           const pushUrl = `http://127.0.0.1:${devRegistryPort}/`;
-          yield* devRegistry.subscribe(externals, (registry) => {
+          yield* devRegistry.subscribe(externals, externalQueues, (registry) => {
             void Effect.runPromise(http.post(pushUrl, { body: HttpBody.jsonUnsafe(registry) }));
           });
         });
@@ -126,7 +149,7 @@ export const DevRegistryProxyLive = Layer.effect(
           return entry;
         };
         const defer = Effect.gen(function* () {
-          if (externals.size === 0 && externalWorkflows.size === 0) {
+          if (externals.size === 0 && externalWorkflows.size === 0 && externalQueues.size === 0) {
             return {};
           }
           const initialRegistry = yield* devRegistry.getRegistry();
@@ -218,6 +241,21 @@ export const DevRegistryProxyLive = Layer.effect(
                   },
                 };
               }),
+            registerOwnedQueue: (queueName, serviceName) =>
+              Effect.sync(() => {
+                ownedQueues.set(queueName, serviceName);
+              }),
+            registerExternalQueue: (queueName) =>
+              Effect.sync(() => {
+                externalQueues.add(queueName);
+                return {
+                  name: SERVICE_DEV_REGISTRY_PROXY,
+                  entrypoint: "ExternalQueueProxy",
+                  props: {
+                    json: JSON.stringify({ queueName }),
+                  },
+                };
+              }),
           },
         };
       }),
@@ -237,8 +275,8 @@ const buildWorkerModules = (
     }
   }
   const main = [
-    `import { ExternalServiceProxy, ExternalWorkflowProxy, setRegistry, createProxyDurableObjectClass } from "./${proxyWorkerEntryName}";`,
-    `export { ExternalServiceProxy, ExternalWorkflowProxy };`,
+    `import { ExternalServiceProxy, ExternalWorkflowProxy, ExternalQueueProxy, setRegistry, createProxyDurableObjectClass } from "./${proxyWorkerEntryName}";`,
+    `export { ExternalServiceProxy, ExternalWorkflowProxy, ExternalQueueProxy };`,
     `setRegistry(${JSON.stringify(initialRegistry)});`,
     `export default {`,
     `  async fetch(request) {`,

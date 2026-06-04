@@ -17,6 +17,7 @@ export * as Loopback from "./Loopback.ts";
 export * as Media from "./Media.ts";
 export * as MtlsCertificate from "./MtlsCertificate.ts";
 export * as Pipelines from "./Pipelines.ts";
+export * as Queue from "./queue/index.ts";
 export * as R2Bucket from "./R2Bucket.ts";
 export * as RateLimit from "./rate-limit/index.ts";
 export * as SendEmail from "./send-email/index.ts";

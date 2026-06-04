@@ -4,6 +4,7 @@ import {
   Assets,
   DispatchNamespace,
   Hyperdrive,
+  Queue,
   RateLimit,
   SendEmail,
   Workflows,
@@ -52,6 +53,7 @@ export const layerLocalBindings = () =>
     DevRegistryProxy.DevRegistryProxyLive,
     DispatchNamespace.DispatchNamespaceLive,
     Hyperdrive.HyperdriveLive,
+    Queue.QueueLive,
     RateLimit.RateLimitLive,
     SendEmail.SendEmailLive,
     Workflows.WorkflowsLive,
@@ -64,6 +66,7 @@ export type BindingServices =
   | DispatchNamespace.DispatchNamespace
   | Hyperdrive.Hyperdrive
   | Loopback.Loopback
+  | Queue.Queue
   | RateLimit.RateLimit
   | RemoteBindings.RemoteBindings
   | SendEmail.SendEmail

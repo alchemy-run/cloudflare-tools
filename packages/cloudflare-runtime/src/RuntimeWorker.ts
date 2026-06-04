@@ -1,4 +1,5 @@
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
+import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { BindingHook } from "./PluginContext.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
@@ -10,11 +11,18 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly assets?: Assets;
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  /**
+   * Queues this worker consumes via its `queue()` handler. Each consumed
+   * queue gets an in-memory broker hosted in this worker's process; producers
+   * (local or in other dev instances) deliver to it.
+   */
+  readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;
 
 export type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
+export type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 
 export type Module =
   | {

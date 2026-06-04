@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { USER_WORKER_SERVICE_NAME } from "../Constants.shared.ts";
 import type { WorkerdDebugPortConnector } from "./dev-registry-proxy-shared.worker.ts";
 import {
+  resolveQueueConsumer,
   resolveTarget,
   tailEventsReplacer,
   tailEventsReviver,
@@ -145,6 +146,37 @@ export class ExternalServiceProxy extends WorkerEntrypoint<Env, Props> {
         }": ${e instanceof Error ? e.message : String(e)}`,
       );
     }
+  }
+}
+
+interface QueueProxyProps {
+  queueName: string;
+}
+
+/**
+ * Proxy entrypoint that forwards a producer's `send()`/`sendBatch()` calls to
+ * the queue's broker living in another `cloudflare-runtime`/`wrangler dev`
+ * process. workerd converts the queue binding into HTTP requests targeting
+ * this entrypoint; we resolve the consuming instance from the dev registry by
+ * queue name and forward the request over its debug port.
+ *
+ * If no consumer is currently registered we accept and drop the message
+ * (mirroring local Queues behaviour when a queue has no consumer), returning
+ * empty backlog metrics so the producer's `send()` resolves successfully.
+ */
+export class ExternalQueueProxy extends WorkerEntrypoint<Env, QueueProxyProps> {
+  fetch(request: Request): Promise<Response> | Response {
+    const { queueName } = this.ctx.props;
+    const target = resolveQueueConsumer(queueName);
+    if (!target) {
+      return Response.json({
+        metadata: {
+          metrics: { backlogCount: 0, backlogBytes: 0, oldestMessageTimestamp: 0 },
+        },
+      });
+    }
+    const client = this.env.DEV_REGISTRY_DEBUG_PORT.connect(target.debugPortAddress);
+    return client.getEntrypoint(target.serviceName).fetch(request);
   }
 }
 

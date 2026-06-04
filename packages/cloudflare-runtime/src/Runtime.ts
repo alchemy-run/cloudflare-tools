@@ -59,7 +59,7 @@ export const RuntimeLive = Layer.effect(
                   durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
                     className: namespace.className,
                     enableSql: namespace.sql,
-                    uniqueKey: namespace.uniqueKey,
+                    uniqueKey: namespace.uniqueKey ?? `${worker.name}-${namespace.className}`,
                     ephemeralLocal: namespace.ephemeralLocal,
                   })),
                   durableObjectStorage: {

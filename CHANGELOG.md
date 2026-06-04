@@ -1,5 +1,27 @@
 # Changelog
 
+## [v0.10.6](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.6) (2026-06-04)
+
+### Bug Fixes
+
+- **runtime**: cross-script do binding fails with some script names - by @john-royal [(9897fa1)](https://github.com/alchemy-run/cloudflare-tools/commit/9897fa1c4cdde39ca67560802f0bd054c10399f0)
+
+## [v0.10.5](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.5) (2026-06-04)
+
+_No significant changes_
+
+## [v0.10.4](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.4) (2026-06-03)
+
+### Bug Fixes
+
+- **runtime**: cross-script durable object bindings fail - by @john-royal in [#36](https://github.com/alchemy-run/cloudflare-tools/pull/36) [(d9dfb24)](https://github.com/alchemy-run/cloudflare-tools/commit/d9dfb240e9da3becd9945725036133eb66832fd8)
+
+## [v0.10.3](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.3) (2026-06-03)
+
+### Bug Fixes
+
+- **runtime**: improve spawner reliability in Bun - by @john-royal in [#35](https://github.com/alchemy-run/cloudflare-tools/pull/35) [(e31fe47)](https://github.com/alchemy-run/cloudflare-tools/commit/e31fe4771fc5d0ea656c72edfaafe74b5bb5843d)
+
 ## [v0.10.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.2) (2026-06-01)
 
 ### Bug Fixes

@@ -20,6 +20,12 @@ export interface LocalDurableObjectNamespaceProps {
    * style cross-process Durable Object access during local development.
    */
   readonly scriptName?: string;
+  /**
+   * If set and the referenced worker isn't the current one, the binding is
+   * routed through the dev-registry proxy. This enables service-binding
+   * style cross-process Durable Object access during local development.
+   */
+  readonly uniqueKey?: string;
 }
 
 /**
@@ -35,20 +41,33 @@ export const local = ({
   binding,
   className,
   scriptName,
+  uniqueKey,
 }: LocalDurableObjectNamespaceProps): BindingHook<DevRegistryProxy> =>
   PluginContext.use((context) => {
     if (scriptName === undefined || scriptName === context.worker.name) {
-      if (
-        !context.worker.durableObjectNamespaces?.find(
-          (namespace) => namespace.className === className,
-        )
-      ) {
+      const namespace = context.worker.durableObjectNamespaces?.find(
+        (namespace) => namespace.className === className,
+      );
+      if (!namespace) {
         return Effect.fail(
           new ConfigError({
             subtag: "DurableObjectNamespaceNotFound",
             message: `Durable object namespace ${className} not found`,
             hint: `Make sure the durable object namespace ${className} is defined in the worker config`,
-            detail: { className },
+            detail: {
+              className,
+              registeredClasses: context.worker.durableObjectNamespaces?.map(
+                (namespace) => namespace.className,
+              ),
+            },
+          }),
+        );
+      }
+      if (uniqueKey && namespace.uniqueKey !== uniqueKey) {
+        return Effect.fail(
+          new ConfigError({
+            subtag: "DurableObjectNamespaceUniqueKeyMismatch",
+            message: `Durable object namespace ${className} has unique key "${namespace.uniqueKey}" but "${uniqueKey}" was provided`,
           }),
         );
       }
@@ -58,7 +77,7 @@ export const local = ({
       });
     }
     return context.get(DevRegistryProxy).pipe(
-      Effect.flatMap((proxy) => proxy.api.registerDurableObject(scriptName, className)),
+      Effect.flatMap((proxy) => proxy.api.registerDurableObject(scriptName, className, uniqueKey)),
       Effect.map(
         (durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
           name: binding,

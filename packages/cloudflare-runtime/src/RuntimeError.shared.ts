@@ -13,7 +13,7 @@ export class ConfigError extends Schema.TaggedErrorClass<ConfigError>()("ConfigE
   message: Schema.String,
   hint: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.Unknown),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /**
@@ -27,7 +27,7 @@ export class SystemError extends Schema.TaggedErrorClass<SystemError>()("SystemE
   message: Schema.String,
   hint: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.Unknown),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /**
@@ -42,7 +42,7 @@ export class ApiError extends Schema.TaggedErrorClass<ApiError>()("ApiError", {
   message: Schema.String,
   hint: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.Unknown),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /**

@@ -13,7 +13,7 @@ import * as RuntimeServices from "../dist/node/RuntimeServices.mjs";
 const main = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;
   const workerProxy = yield* WorkerProxy.WorkerProxy;
-  const proxyInstance = yield* workerProxy.serve(0);
+  const proxyInstance = yield* workerProxy.serve({ port: 0 });
   const upstreamUrl = yield* runtime.start({
     name: "test",
     compatibilityDate: "2026-01-01",

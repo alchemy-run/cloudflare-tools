@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
-import * as Port from "../src/internal/Port.ts";
 import * as Workerd from "../src/workerd/Workerd.ts";
+import * as PortHelpers from "./helpers/port.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
@@ -213,9 +213,57 @@ layer(services)((it) => {
 
         // Wait until we can bind to the port ourselves.
 
-        const free = yield* Port.check(port).pipe(Effect.exit);
+        const free = yield* PortHelpers.check(port).pipe(Effect.exit);
         assert(Exit.isSuccess(free));
       }),
     { timeout: 60_000 },
+  );
+  it.effect(
+    "starts many workers concurrently",
+    () =>
+      Effect.gen(function* () {
+        const workerd = yield* Workerd.Workerd;
+
+        const count = 50;
+        const urls = yield* Effect.all(
+          Array.from({ length: count }, (_, index) =>
+            workerd
+              .serve({
+                sockets: [{ name: "http", address: "127.0.0.1:0", service: { name: "test" } }],
+                services: [
+                  {
+                    name: "test",
+                    worker: {
+                      compatibilityDate: "2026-03-10",
+                      modules: [
+                        {
+                          name: "main.js",
+                          esModule: `export default { fetch: () => new Response('${index}') };`,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              })
+              .pipe(
+                Effect.map((ports) => new URL(`http://127.0.0.1:${ports.http}`)),
+                Effect.flatMap((url) =>
+                  Effect.promise(() =>
+                    fetch(new URL("/", url)).then(async (res) => ({
+                      status: res.status,
+                      body: await res.text(),
+                    })),
+                  ),
+                ),
+              ),
+          ),
+          { concurrency: "unbounded" },
+        );
+        urls.forEach((url, index) => {
+          expect(url.status).toBe(200);
+          expect(url.body).toBe(index.toString());
+        });
+      }),
+    { timeout: 30_000 },
   );
 });

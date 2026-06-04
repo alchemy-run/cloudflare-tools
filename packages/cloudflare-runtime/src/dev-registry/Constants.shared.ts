@@ -1,3 +1,5 @@
+import * as Hash from "effect/Hash";
+
 /** Workerd socket name for the user HTTP entrypoint. */
 export const SOCKET_HTTP = "http";
 
@@ -25,5 +27,11 @@ export const USER_WORKER_SERVICE_NAME = "user";
  * dev-registry-proxy service. Must match between sides (caller's binding
  * and the proxy worker's namespace declaration).
  */
-export const getOutboundDoProxyClassName = (scriptName: string, className: string): string =>
-  `${scriptName}_${className}`;
+export const getOutboundDoProxyClassName = (scriptName: string, className: string): string => {
+  // Uses a hash of the script name and class name to ensure the class name is consistent and safe to use as a variable name.
+  const hash = Hash.string(`${scriptName}-${className}`);
+  // A hash can be a negative number, which is not safe to use in identifiers, so we convert it to positive and use a prefix to indicate the sign.
+  const abs = Math.abs(hash);
+  const prefix = hash < 0 ? 1 : 0;
+  return `ExternalDOProxy_${prefix}${abs}`;
+};

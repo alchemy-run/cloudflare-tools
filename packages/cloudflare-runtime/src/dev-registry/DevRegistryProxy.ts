@@ -45,6 +45,7 @@ export class DevRegistryProxy extends Plugin.Service<
     readonly registerDurableObject: (
       scriptName: string,
       className: string,
+      uniqueKey: string | undefined,
     ) => Effect.Effect<WorkerdConfig.Worker_DurableObjectNamespace>;
     /**
      * Record that this worker owns the given workflow and hosts its
@@ -95,6 +96,7 @@ export const DevRegistryProxyLive = Layer.effect(
         // Per-worker accumulator. The plugin builder runs once per
         // `Runtime.start`, so each worker gets its own externals map.
         const externals: ExternalServiceMap = new Map();
+        const externalDOs: Array<{ scriptName: string; className: string; uniqueKey: string }> = [];
         // Workflows we own and that other instances are allowed to route to
         // via this worker's dev-registry entry.
         const ownedWorkflows = new Map<string, string>();
@@ -153,12 +155,6 @@ export const DevRegistryProxyLive = Layer.effect(
             return {};
           }
           const initialRegistry = yield* devRegistry.getRegistry();
-          const externalDOs: Array<[string, string]> = [];
-          for (const [scriptName, { classNames }] of externals) {
-            for (const className of classNames) {
-              externalDOs.push([scriptName, className]);
-            }
-          }
           const proxyService: WorkerdConfig.Service = {
             name: SERVICE_DEV_REGISTRY_PROXY,
             worker: {
@@ -172,11 +168,11 @@ export const DevRegistryProxyLive = Layer.effect(
                 },
               ],
               durableObjectStorage: { inMemory: WorkerdConfig.kVoid },
-              durableObjectNamespaces: externalDOs.map(([scriptName, className]) => ({
+              durableObjectNamespaces: externalDOs.map(({ scriptName, className, uniqueKey }) => ({
                 className: getOutboundDoProxyClassName(scriptName, className),
                 // Must match the unique key that the target session uses for
                 // this DO so workerd produces identical IDs across sessions.
-                uniqueKey: `${scriptName}-${className}`,
+                uniqueKey,
               })),
             },
           };
@@ -213,9 +209,14 @@ export const DevRegistryProxyLive = Layer.effect(
                   },
                 };
               }),
-            registerDurableObject: (scriptName, className) =>
+            registerDurableObject: (scriptName, className, uniqueKey) =>
               Effect.sync(() => {
                 getOrCreate(scriptName).classNames.add(className);
+                externalDOs.push({
+                  scriptName,
+                  className,
+                  uniqueKey: uniqueKey ?? `${scriptName}-${className}`,
+                });
                 return {
                   className: getOutboundDoProxyClassName(scriptName, className),
                   serviceName: SERVICE_DEV_REGISTRY_PROXY,

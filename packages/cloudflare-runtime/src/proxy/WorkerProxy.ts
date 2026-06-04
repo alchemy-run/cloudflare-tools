@@ -49,6 +49,7 @@ export const WorkerProxyLive = Layer.effect(
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
     const internet = yield* Internet.Internet;
+    const ports = yield* Port.make({ cache: true });
 
     const normalizeOptions = Effect.fnUntraced(function* (options: ServeOptions) {
       const host = options.host ?? "127.0.0.1";
@@ -56,8 +57,8 @@ export const WorkerProxyLive = Layer.effect(
       return {
         port:
           options.port && options.strictPort
-            ? yield* Port.check(options.port)
-            : yield* Port.find(options.port ?? 0),
+            ? yield* ports.check(options.port)
+            : yield* ports.find(options.port ?? 0),
         host,
         strictPort,
         token: crypto.randomUUID(),
@@ -112,7 +113,10 @@ export const WorkerProxyLive = Layer.effect(
             Workerd.isAddressInUseError(error) &&
             !options.strictPort &&
             options.port <= Port.MAX_PORT,
-          () => serveWithRetry({ ...options, port: options.port + 1 }),
+          () =>
+            Effect.flatMap(ports.find(options.port + 1), (port) =>
+              serveWithRetry({ ...options, port }),
+            ),
         ),
       );
 

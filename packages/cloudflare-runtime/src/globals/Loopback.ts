@@ -19,6 +19,8 @@ export const LoopbackLive = Layer.effect(
   Effect.gen(function* () {
     const loopbackServer = yield* LoopbackServer.LoopbackServer;
 
+    let nextRouteId = 0;
+
     return Loopback.of({
       services: [
         {
@@ -61,13 +63,16 @@ export const LoopbackLive = Layer.effect(
         },
       ],
       api: {
-        route: (target, handler) =>
-          loopbackServer.route(target, handler).pipe(
+        route: (target, handler) => {
+          const unique = `${target}#${nextRouteId++}`;
+
+          return loopbackServer.route(unique, handler).pipe(
             Effect.map(() => ({
               name: "loopback:fetcher",
-              props: { json: JSON.stringify({ target }) },
+              props: { json: JSON.stringify({ target: unique }) },
             })),
-          ),
+          );
+        },
       },
     });
   }),

@@ -111,7 +111,7 @@ const makeBun = () =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
-        stdio: [config, "inherit", "pipe", "pipe"],
+        stdio: [config, "pipe", "pipe", "pipe"],
         killSignal: "SIGKILL",
       }),
     ).pipe(
@@ -165,14 +165,24 @@ const makeBun = () =>
           }),
         pipe: () =>
           Effect.promise((signal) =>
-            child.stderr.pipeTo(
-              new WritableStream({
-                write(chunk) {
-                  process.stderr.write(chunk);
-                },
-              }),
-              { signal },
-            ),
+            Promise.all([
+              child.stdout.pipeTo(
+                new WritableStream({
+                  write(chunk) {
+                    process.stdout.write(chunk);
+                  },
+                }),
+                { signal },
+              ),
+              child.stderr.pipeTo(
+                new WritableStream({
+                  write(chunk) {
+                    process.stderr.write(chunk);
+                  },
+                }),
+                { signal },
+              ),
+            ]),
           ).pipe(Effect.forkScoped),
         kill: () => child.kill("SIGKILL"),
       })),
@@ -181,32 +191,43 @@ const makeBun = () =>
 
 const makeNode = () =>
   make((command, args, config) =>
-    Effect.callback<NodeChildProcess.ChildProcess, SystemError>((resume) => {
-      const child = NodeChildProcess.spawn(command, args, {
-        stdio: ["pipe", "inherit", "pipe", "pipe"],
-        killSignal: "SIGKILL",
-      });
-      const onSpawn = () => {
-        resume(Effect.succeed(child));
-        child.off("error", onError);
-      };
-      const onError = (error: unknown) => {
-        resume(
-          new SystemError({
-            subtag: "WorkerdSpawn",
-            message: "Failed to spawn the Workers runtime (workerd) process.",
-            cause: error,
-          }),
-        );
-      };
-      child.once("spawn", onSpawn);
-      child.once("error", onError);
-      return Effect.sync(() => {
-        child.kill("SIGKILL");
-        child.off("spawn", onSpawn);
-        child.off("error", onError);
-      });
+    Effect.try({
+      try: () =>
+        NodeChildProcess.spawn(command, args, {
+          stdio: ["pipe", "pipe", "pipe", "pipe"],
+          killSignal: "SIGKILL",
+        }),
+      catch: (error) =>
+        new SystemError({
+          subtag: "WorkerdSpawn",
+          message: "Failed to spawn the Workers runtime (workerd) process.",
+          cause: error,
+        }),
     }).pipe(
+      Effect.tap((child) =>
+        Effect.callback<void, SystemError>((resume) => {
+          const onSpawn = () => {
+            child.off("error", onError);
+            resume(Effect.void);
+          };
+          const onError = (error: unknown) => {
+            resume(
+              new SystemError({
+                subtag: "WorkerdStart",
+                message: "Failed to start the Workers runtime (workerd) process.",
+                cause: error,
+              }),
+            );
+          };
+          child.once("spawn", onSpawn);
+          child.once("error", onError);
+          return Effect.sync(() => {
+            child.kill("SIGKILL");
+            child.off("spawn", onSpawn);
+            child.off("error", onError);
+          });
+        }),
+      ),
       Effect.map((child) => ({
         configure: () =>
           Effect.callback((resume) => {
@@ -278,9 +299,6 @@ const makeNode = () =>
                 ),
               );
             };
-            if (!child.stderr) {
-              return onError();
-            }
             child.stderr.on("data", onData);
             child.stderr.on("end", onError);
             child.stderr.on("error", onError);
@@ -291,16 +309,21 @@ const makeNode = () =>
             });
           }),
         pipe: () => {
-          const log = (chunk: Buffer) => {
+          const onStdout = (chunk: Buffer) => {
+            process.stdout.write(chunk);
+          };
+          const onStderr = (chunk: Buffer) => {
             process.stderr.write(chunk);
           };
           return Effect.acquireRelease(
             Effect.sync(() => {
-              child.stderr?.on("data", log);
+              child.stdout.on("data", onStdout);
+              child.stderr.on("data", onStderr);
             }),
             () =>
               Effect.sync(() => {
-                child.stderr?.off("data", log);
+                child.stdout.off("data", onStdout);
+                child.stderr.off("data", onStderr);
               }),
           );
         },

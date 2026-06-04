@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import * as Data from "effect/Data";
+import * as Schema from "effect/Schema";
 
 interface Env {
   PROXY: ColoLocalActorNamespace;
@@ -112,13 +112,13 @@ export class WorkerProxy extends DurableObject<Env> {
   }
 }
 
-class ProxyError extends Data.TaggedError("ProxyError")<{
-  message: string;
-  hint?: string;
-  retryable?: boolean;
-  status?: number;
-  cause?: unknown;
-}> {
+class ProxyError extends Schema.TaggedErrorClass<ProxyError>()("ProxyError", {
+  message: Schema.String,
+  hint: Schema.optional(Schema.String),
+  retryable: Schema.optional(Schema.Boolean),
+  status: Schema.optional(Schema.Number),
+  cause: Schema.optional(Schema.Defect({ includeStack: true })),
+}) {
   static from = (error: unknown) =>
     error instanceof ProxyError
       ? error
@@ -127,11 +127,13 @@ class ProxyError extends Data.TaggedError("ProxyError")<{
           cause: error,
         });
 
+  static encode = Schema.encodeSync(ProxyError);
+
   toResponse(): Response {
     return Response.json(
       {
         ok: false,
-        error: this.toJSON(),
+        error: ProxyError.encode(this),
       },
       { status: this.status ?? 500, headers: this.retryable ? { "retry-after": "0" } : undefined },
     );

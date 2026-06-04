@@ -1,4 +1,4 @@
-import { describe, expect, it, layer } from "@effect/vitest";
+import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Queue from "../../src/bindings/queue/Queue.ts";
 import { localRuntimeLayer, localRuntimeWith, startTestWorker } from "../helpers/runtime.ts";
@@ -98,204 +98,183 @@ const pollReceived = (
   });
 
 layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding", (it) => {
-  it.effect(
-    "delivers single messages and batches to the consumer",
-    () =>
-      Effect.gen(function* () {
-        const { fetch } = yield* startTestWorker({
-          name: "queues-basic",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "basic-queue" })],
-          queueConsumers: [{ queueName: "basic-queue", maxBatchTimeout: 0 }],
-        });
+  it.effect("delivers single messages and batches to the consumer", () =>
+    Effect.gen(function* () {
+      const { fetch } = yield* startTestWorker({
+        name: "queues-basic",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "basic-queue" })],
+        queueConsumers: [{ queueName: "basic-queue", maxBatchTimeout: 0 }],
+      });
 
-        yield* fetch("/send", {
-          method: "POST",
-          body: JSON.stringify({ binding: "QUEUE", body: "hello" }),
-        });
-        yield* fetch("/sendBatch", {
-          method: "POST",
-          body: JSON.stringify({ binding: "QUEUE", messages: [{ body: "a" }, { body: "b" }] }),
-        });
+      yield* fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", body: "hello" }),
+      });
+      yield* fetch("/sendBatch", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", messages: [{ body: "a" }, { body: "b" }] }),
+      });
 
-        const received = yield* pollReceived(fetch, (r) => r.length >= 3);
-        expect(received.length).toBe(3);
-        const bodies = received.map((message) => message.body).sort();
-        expect(bodies).toEqual(["a", "b", "hello"]);
-        for (const message of received) {
-          expect(message.queue).toBe("basic-queue");
-          expect(message.attempts).toBe(1);
-          expect(message.id).toMatch(/^[0-9a-f]{32}$/);
-        }
-      }),
-    { timeout: 30_000 },
+      const received = yield* pollReceived(fetch, (r) => r.length >= 3);
+      expect(received.length).toBe(3);
+      const bodies = received.map((message) => message.body).sort();
+      expect(bodies).toEqual(["a", "b", "hello"]);
+      for (const message of received) {
+        expect(message.queue).toBe("basic-queue");
+        expect(message.attempts).toBe(1);
+        expect(message.id).toMatch(/^[0-9a-f]{32}$/);
+      }
+    }),
   );
 
-  it.effect(
-    "supports text, json, bytes and v8 content types",
-    () =>
-      Effect.gen(function* () {
-        const { fetch } = yield* startTestWorker({
-          name: "queues-content-types",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "types-queue" })],
-          queueConsumers: [{ queueName: "types-queue", maxBatchTimeout: 0 }],
-        });
+  it.effect("supports text, json, bytes and v8 content types", () =>
+    Effect.gen(function* () {
+      const { fetch } = yield* startTestWorker({
+        name: "queues-content-types",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "types-queue" })],
+        queueConsumers: [{ queueName: "types-queue", maxBatchTimeout: 0 }],
+      });
 
-        yield* fetch("/sendTypes", { method: "POST" });
+      yield* fetch("/sendTypes", { method: "POST" });
 
-        const received = yield* pollReceived(fetch, (r) => r.length >= 4);
-        const bodies = received.map((message) => message.body);
-        expect(bodies).toContainEqual("msg-text");
-        expect(bodies).toContainEqual([{ message: "msg-json" }]);
-        expect(bodies).toContainEqual({ $type: "ArrayBuffer", value: [0, 1, 2, 3] });
-        expect(bodies).toContainEqual({ $type: "Date", value: 1600000000000 });
-      }),
-    { timeout: 30_000 },
+      const received = yield* pollReceived(fetch, (r) => r.length >= 4);
+      const bodies = received.map((message) => message.body);
+      expect(bodies).toContainEqual("msg-text");
+      expect(bodies).toContainEqual([{ message: "msg-json" }]);
+      expect(bodies).toContainEqual({ $type: "ArrayBuffer", value: [0, 1, 2, 3] });
+      expect(bodies).toContainEqual({ $type: "Date", value: 1600000000000 });
+    }),
   );
 
-  it.effect(
-    "retries a message until it is acked",
-    () =>
-      Effect.gen(function* () {
-        const { fetch } = yield* startTestWorker({
-          name: "queues-retry",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "retry-queue" })],
-          queueConsumers: [{ queueName: "retry-queue", maxBatchTimeout: 0, maxRetries: 2 }],
-        });
+  it.effect("retries a message until it is acked", () =>
+    Effect.gen(function* () {
+      const { fetch } = yield* startTestWorker({
+        name: "queues-retry",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "retry-queue" })],
+        queueConsumers: [{ queueName: "retry-queue", maxBatchTimeout: 0, maxRetries: 2 }],
+      });
 
-        yield* fetch("/send", {
-          method: "POST",
-          body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 2 } }),
-        });
+      yield* fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 2 } }),
+      });
 
-        const received = yield* pollReceived(fetch, (r) => r.some((m) => m.attempts === 2));
-        const attempts = received.map((message) => message.attempts).sort();
-        expect(attempts).toEqual([1, 2]);
-        // Same message id is redelivered on retry.
-        expect(new Set(received.map((message) => message.id)).size).toBe(1);
-      }),
-    { timeout: 30_000 },
+      const received = yield* pollReceived(fetch, (r) => r.some((m) => m.attempts === 2));
+      const attempts = received.map((message) => message.attempts).sort();
+      expect(attempts).toEqual([1, 2]);
+      // Same message id is redelivered on retry.
+      expect(new Set(received.map((message) => message.id)).size).toBe(1);
+    }),
   );
 
-  it.effect(
-    "moves messages to a dead letter queue after exhausting retries",
-    () =>
-      Effect.gen(function* () {
-        const { fetch } = yield* startTestWorker({
-          name: "queues-dlq",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "bad" })],
-          queueConsumers: [
-            { queueName: "bad", maxBatchTimeout: 0, maxRetries: 0, deadLetterQueue: "dlq" },
-            { queueName: "dlq", maxBatchTimeout: 0, maxRetries: 0 },
-          ],
-        });
+  it.effect("moves messages to a dead letter queue after exhausting retries", () =>
+    Effect.gen(function* () {
+      const { fetch } = yield* startTestWorker({
+        name: "queues-dlq",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "bad" })],
+        queueConsumers: [
+          { queueName: "bad", maxBatchTimeout: 0, maxRetries: 0, deadLetterQueue: "dlq" },
+          { queueName: "dlq", maxBatchTimeout: 0, maxRetries: 0 },
+        ],
+      });
 
-        yield* fetch("/send", {
-          method: "POST",
-          body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 99 } }),
-        });
+      yield* fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 99 } }),
+      });
 
-        const received = yield* pollReceived(fetch, (r) => r.some((m) => m.queue === "dlq"));
-        expect(received.some((message) => message.queue === "bad")).toBe(true);
-        expect(received.some((message) => message.queue === "dlq")).toBe(true);
-      }),
-    { timeout: 30_000 },
+      const received = yield* pollReceived(fetch, (r) => r.some((m) => m.queue === "dlq"));
+      expect(received.some((message) => message.queue === "bad")).toBe(true);
+      expect(received.some((message) => message.queue === "dlq")).toBe(true);
+    }),
   );
 
-  it.effect(
-    "applies a delivery delay to messages",
-    () =>
-      Effect.gen(function* () {
-        const { fetch } = yield* startTestWorker({
-          name: "queues-delay",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "delay-queue" })],
-          queueConsumers: [{ queueName: "delay-queue", maxBatchTimeout: 0 }],
-        });
+  it.effect("applies a delivery delay to messages", () =>
+    Effect.gen(function* () {
+      const { fetch } = yield* startTestWorker({
+        name: "queues-delay",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "delay-queue" })],
+        queueConsumers: [{ queueName: "delay-queue", maxBatchTimeout: 0 }],
+      });
 
-        yield* fetch("/send", {
-          method: "POST",
-          body: JSON.stringify({
-            binding: "QUEUE",
-            body: "delayed",
-            options: { delaySeconds: 1 },
-          }),
-        });
-        yield* fetch("/send", {
-          method: "POST",
-          body: JSON.stringify({ binding: "QUEUE", body: "immediate" }),
-        });
+      yield* fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({
+          binding: "QUEUE",
+          body: "delayed",
+          options: { delaySeconds: 1 },
+        }),
+      });
+      yield* fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", body: "immediate" }),
+      });
 
-        // The immediate message arrives well before the delayed one.
-        const afterImmediate = yield* pollReceived(fetch, (r) => r.length >= 1, 2_000);
-        expect(afterImmediate.map((message) => message.body)).toEqual(["immediate"]);
+      // The immediate message arrives well before the delayed one.
+      const afterImmediate = yield* pollReceived(fetch, (r) => r.length >= 1, 2_000);
+      expect(afterImmediate.map((message) => message.body)).toEqual(["immediate"]);
 
-        const all = yield* pollReceived(fetch, (r) => r.length >= 2, 5_000);
-        expect(all.map((message) => message.body).sort()).toEqual(["delayed", "immediate"]);
-      }),
-    { timeout: 30_000 },
+      const all = yield* pollReceived(fetch, (r) => r.length >= 2, 5_000);
+      expect(all.map((message) => message.body).sort()).toEqual(["delayed", "immediate"]);
+    }),
   );
 
-  it.effect(
-    "rejects messages that exceed the size limit",
-    () =>
-      Effect.gen(function* () {
-        const { fetch } = yield* startTestWorker({
-          name: "queues-size",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "size-queue" })],
-          queueConsumers: [{ queueName: "size-queue", maxBatchTimeout: 0 }],
-        });
+  it.effect("rejects messages that exceed the size limit", () =>
+    Effect.gen(function* () {
+      const { fetch } = yield* startTestWorker({
+        name: "queues-size",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "size-queue" })],
+        queueConsumers: [{ queueName: "size-queue", maxBatchTimeout: 0 }],
+      });
 
-        const res = yield* fetch("/send", {
-          method: "POST",
-          body: JSON.stringify({
-            binding: "QUEUE",
-            body: "x".repeat(128 * 1000 + 1),
-            options: { contentType: "text" },
-          }),
-        });
-        expect(res.status).toBe(500);
-        const { error } = (yield* Effect.promise(() => res.json())) as { error: string };
-        // workerd surfaces the broker's 413 to the producer as "Payload Too Large".
-        expect(error).toMatch(/Payload Too Large|exceeds limit/i);
-      }),
-    { timeout: 30_000 },
+      const res = yield* fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({
+          binding: "QUEUE",
+          body: "x".repeat(128 * 1000 + 1),
+          options: { contentType: "text" },
+        }),
+      });
+      expect(res.status).toBe(500);
+      const { error } = (yield* Effect.promise(() => res.json())) as { error: string };
+      // workerd surfaces the broker's 413 to the producer as "Payload Too Large".
+      expect(error).toMatch(/Payload Too Large|exceeds limit/i);
+    }),
   );
 });
 
-describe("Queues binding validation", () => {
-  it.effect(
-    "rejects a queue configured as its own dead letter queue",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* startTestWorker({
-          name: "queues-self-cycle",
-          compatibilityDate: "2024-11-20",
-          compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
-          bindings: [Queue.binding({ binding: "QUEUE", queueName: "loop" })],
-          queueConsumers: [{ queueName: "loop", deadLetterQueue: "loop" }],
-        }).pipe(Effect.flip);
-        expect(error._tag).toBe("ConfigError");
-        expect(String(JSON.stringify(error))).toContain("cannot be itself");
-      }).pipe(Effect.provide(localRuntimeLayer)),
-    { timeout: 30_000 },
+layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding validation", (it) => {
+  it.effect("rejects a queue configured as its own dead letter queue", () =>
+    Effect.gen(function* () {
+      const error = yield* startTestWorker({
+        name: "queues-self-cycle",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.binding({ binding: "QUEUE", queueName: "loop" })],
+        queueConsumers: [{ queueName: "loop", deadLetterQueue: "loop" }],
+      }).pipe(Effect.flip);
+      assert.equal(error._tag, "ConfigError");
+      expect(error.message).toContain("cannot be itself");
+    }),
   );
 });
 

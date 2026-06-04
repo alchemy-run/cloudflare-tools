@@ -10,14 +10,12 @@ import { ConfigError } from "../../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../../workerd/Config.ts";
 import type { QueueConsumer, QueueProducerEntry } from "./QueueOptions.shared.ts";
 import {
-  QUEUE_BROKER_BINDING,
-  QUEUE_BROKER_CLASS,
-  QUEUE_CONSUMER_BINDING,
-  QUEUE_NAME_BINDING,
-  QUEUE_PRODUCERS_BINDING,
-  QUEUE_USER_WORKER_BINDING,
-  queueDeadLetterBindingName,
-  queueServiceName,
+  BINDING_QUEUE_BROKER,
+  BINDING_QUEUE_CONSUMER,
+  BINDING_QUEUE_DLQ,
+  BINDING_QUEUE_NAME,
+  BINDING_QUEUE_PRODUCERS,
+  BINDING_QUEUE_USER_WORKER,
 } from "./QueueOptions.shared.ts";
 
 const BROKER_COMPATIBILITY_DATE = "2024-10-22";
@@ -45,6 +43,8 @@ export const QueueLive = Layer.succeed(
       const proxy = yield* ctx.get(DevRegistryProxy);
       const consumers = ctx.worker.queueConsumers ?? [];
       const producers: Array<QueueProducerEntry> = [];
+
+      const queueServiceName = (queueName: string): string => `queues:${queueName}`;
 
       for (const consumer of consumers) {
         if (
@@ -86,26 +86,26 @@ export const QueueLive = Layer.succeed(
             modules: formatInternalWorkerModules(QueueBrokerWorker),
             durableObjectNamespaces: [
               {
-                className: QUEUE_BROKER_CLASS,
+                className: "QueueBroker",
                 // Unique per queue so each broker gets an isolated DO namespace.
-                uniqueKey: `cloudflare-runtime-QueueBrokerObject-${consumer.queueName}`,
+                uniqueKey: `cloudflare-runtime-QueueBroker-${consumer.queueName}`,
                 preventEviction: true,
               },
             ],
             durableObjectStorage: { inMemory: WorkerdConfig.kVoid },
             bindings: [
               {
-                name: QUEUE_BROKER_BINDING,
-                durableObjectNamespace: { className: QUEUE_BROKER_CLASS },
+                name: BINDING_QUEUE_BROKER,
+                durableObjectNamespace: { className: "QueueBroker" },
               },
-              { name: QUEUE_USER_WORKER_BINDING, service: { name: USER_WORKER_SERVICE_NAME } },
-              { name: QUEUE_NAME_BINDING, text: consumer.queueName },
-              { name: QUEUE_CONSUMER_BINDING, json: JSON.stringify(consumer) },
-              { name: QUEUE_PRODUCERS_BINDING, json: JSON.stringify(producers) },
+              { name: BINDING_QUEUE_USER_WORKER, service: { name: USER_WORKER_SERVICE_NAME } },
+              { name: BINDING_QUEUE_NAME, text: consumer.queueName },
+              { name: BINDING_QUEUE_CONSUMER, json: JSON.stringify(consumer) },
+              { name: BINDING_QUEUE_PRODUCERS, json: JSON.stringify(producers) },
               ...(consumer.deadLetterQueue
                 ? [
                     {
-                      name: queueDeadLetterBindingName(consumer.deadLetterQueue),
+                      name: BINDING_QUEUE_DLQ(consumer.deadLetterQueue),
                       service: yield* queueConsumerServiceDesignator(consumer.deadLetterQueue),
                     },
                   ]

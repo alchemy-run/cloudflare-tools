@@ -131,6 +131,7 @@ jobs:
           set -euo pipefail
           PKG_NAME=$(node -p "require('./package.json').name")
           rm -f *.tgz
+          bun run ../../scripts/pr-package.ts ${SHORT_SHA}
           bun pm pack --destination .
           tgz=$(ls *.tgz)
           echo "Publishing ${PKG_NAME} (${tgz}) with tags ${TAGS}"

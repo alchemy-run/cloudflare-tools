@@ -74,10 +74,14 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "rolldown": "catalog:"
+    "rolldown": "catalog:",
+    "vite": "^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
     "rolldown": {
+      "optional": true
+    },
+    "vite": {
       "optional": true
     }
   }

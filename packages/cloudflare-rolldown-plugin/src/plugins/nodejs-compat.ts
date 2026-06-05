@@ -2,7 +2,6 @@ import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-p
 import assert from "node:assert";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { esmExternalRequirePlugin } from "rolldown/plugins";
 import { defineEnv } from "unenv";
 import { createPlugin } from "../factory.js";
 import { hasNodejsAls, hasNodejsCompat } from "../utils.js";
@@ -94,6 +93,7 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
       },
       rolldown: {
         async options(options) {
+          const { esmExternalRequirePlugin } = await import("rolldown/plugins");
           options.plugins = [
             esmExternalRequirePlugin({
               external: [...external],
@@ -116,6 +116,7 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         enforce: "pre",
         async configEnvironment(name) {
           if (name === "client") return;
+          const { esmExternalRequirePlugin } = await import("vite");
           return {
             resolve: {
               builtins: [...external],

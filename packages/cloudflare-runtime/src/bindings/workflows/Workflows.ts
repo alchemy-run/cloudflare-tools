@@ -70,6 +70,14 @@ export const WorkflowsLive = Layer.effect(
         const proxy = yield* ctx.get(DevRegistryProxy);
         const services: Array<WorkerdConfig.Service> = [];
         let hasWorkflows = false;
+        // A worker's bindings are registered concurrently, so two owned
+        // workflows would both observe `services.length === 0` and each push a
+        // `workflows:storage` service — workerd then rejects the config with
+        // "Config defines multiple services named workflows:storage". Guard the
+        // shared storage service with a flag set synchronously before the first
+        // `yield*`, so only one is created per worker no matter how the
+        // `register` calls interleave.
+        let storageRequested = false;
 
         return {
           defer: Effect.gen(function* () {
@@ -99,7 +107,8 @@ export const WorkflowsLive = Layer.effect(
                   workflow.workflowName,
                 );
               }
-              if (services.length === 0) {
+              if (!storageRequested) {
+                storageRequested = true;
                 services.push(yield* createStorageService());
               }
               const engineService = {

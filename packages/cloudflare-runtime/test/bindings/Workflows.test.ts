@@ -170,6 +170,65 @@ const startLifecycleWorker = () =>
     ],
   });
 
+// A single worker that owns two workflows. Each owned workflow contributes a
+// `workflows:<name>` Engine service plus a *shared* `workflows:storage`
+// service; the storage service must only be created once. Both `register`
+// calls run concurrently during binding resolution, so a naive
+// `services.length === 0` guard creates it twice and workerd fails to start
+// with "Config defines multiple services named workflows:storage".
+const TWO_WORKFLOWS_SCRIPT = `
+import { WorkflowEntrypoint } from "cloudflare:workers";
+export class AlphaWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    await step.do("alpha step", async () => "alpha-done");
+    return "alpha-output";
+  }
+}
+export class BetaWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    await step.do("beta step", async () => "beta-done");
+    return "beta-output";
+  }
+}
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/create") {
+      const alpha = await env.ALPHA_WORKFLOW.create({ id: "alpha" });
+      const beta = await env.BETA_WORKFLOW.create({ id: "beta" });
+      return Response.json({ alpha: alpha.id, beta: beta.id });
+    }
+    if (url.pathname === "/status") {
+      const id = url.searchParams.get("id");
+      const binding = id === "beta" ? env.BETA_WORKFLOW : env.ALPHA_WORKFLOW;
+      const instance = await binding.get(id);
+      return Response.json(await instance.status());
+    }
+    return new Response("not found", { status: 404 });
+  },
+};
+`;
+
+const startTwoWorkflowsWorker = () =>
+  startTestWorker({
+    name: "workflows-multi-test",
+    compatibilityDate: "2026-03-09",
+    compatibilityFlags: [],
+    modules: [{ name: "main.js", type: "ESModule", content: TWO_WORKFLOWS_SCRIPT }],
+    bindings: [
+      Workflows.local({
+        binding: "ALPHA_WORKFLOW",
+        workflowName: "ALPHA_WORKFLOW",
+        className: "AlphaWorkflow",
+      }),
+      Workflows.local({
+        binding: "BETA_WORKFLOW",
+        workflowName: "BETA_WORKFLOW",
+        className: "BetaWorkflow",
+      }),
+    ],
+  });
+
 const waitForStatus = (
   fetch: (path: string) => Effect.Effect<Response>,
   id: string,
@@ -298,6 +357,30 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
 
         const final = yield* waitForStatus(fetch, id, "complete");
         expect(final["output"]).toBe("workflow-complete");
+      }),
+    { timeout: 30_000 },
+  );
+
+  // Regression: a worker that owns more than one workflow must start. Each
+  // owned workflow contributes a `workflows:<name>` Engine service plus a
+  // *shared* `workflows:storage` service that must be created only once;
+  // creating it per-workflow makes workerd fail to boot with "Config defines
+  // multiple services named workflows:storage". Booting and running both
+  // workflows proves the storage service is created exactly once.
+  it.effect(
+    "a worker can own two workflows without duplicating workflows:storage",
+    () =>
+      Effect.gen(function* () {
+        const { fetch } = yield* startTwoWorkflowsWorker();
+
+        const createRes = yield* fetch("/create");
+        expect(createRes.status).toBe(200);
+
+        const alpha = yield* waitForStatus(fetch, "alpha", "complete");
+        expect(alpha["output"]).toBe("alpha-output");
+
+        const beta = yield* waitForStatus(fetch, "beta", "complete");
+        expect(beta["output"]).toBe("beta-output");
       }),
     { timeout: 30_000 },
   );

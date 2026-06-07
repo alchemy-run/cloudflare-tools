@@ -114,7 +114,6 @@
   },
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
-    "capnweb": "^0.7.0",
     "workerd": "catalog:workers"
   },
   "devDependencies": {
@@ -127,6 +126,7 @@
     "@effect/platform-node": "catalog:effect",
     "@effect/vitest": "catalog:effect",
     "capnp-es": "^0.0.14",
+    "capnweb": "^0.8.0",
     "rolldown": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"
@@ -149,7 +149,7 @@
     "@sentry/core": "8.9.2",
     "@sentry/utils": "8.9.2",
     "capnp-es": "0.0.14",
-    "capnweb": "0.7.0",
+    "capnweb": "0.8.0",
     "effect": "4.0.0-beta.78",
     "heap-js": "2.7.1",
     "itty-time": "2.0.2",

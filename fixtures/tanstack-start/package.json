@@ -14,6 +14,7 @@
     "pretest": "playwright install chromium"
   },
   "dependencies": {
+    "@effect/sql-pg": "catalog:effect",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-router": "latest",
@@ -27,7 +28,7 @@
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.36.4",
+    "@cloudflare/workers-types": "catalog:workers",
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-runtime": "workspace:*",
     "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
@@ -40,6 +41,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
+    "dotenv": "^17.4.2",
     "effect": "catalog:effect",
     "vite": "catalog:"
   },

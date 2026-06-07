@@ -23,7 +23,7 @@
     },
     "test": {
       "dependsOn": ["build", "^build"],
-      "env": ["TEST_MYSQL_URL"],
+      "env": ["TEST_MYSQL_URL", "TEST_POSTGRES_URL"],
       "outputs": []
     }
   }

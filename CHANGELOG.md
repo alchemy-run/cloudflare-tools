@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.10.9](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.9) (2026-06-05)
+
+*No significant changes*
+
+## [v0.10.8](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.8) (2026-06-05)
+
+### Features
+
+- **runtime**: queues - by @john-royal in [#39](https://github.com/alchemy-run/cloudflare-tools/pull/39) [(ea762b1)](https://github.com/alchemy-run/cloudflare-tools/commit/ea762b1336c1366e58379596b06559c4acbb2bd9)
+
 ## [v0.10.7](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.7) (2026-06-04)
 
 ### Bug Fixes

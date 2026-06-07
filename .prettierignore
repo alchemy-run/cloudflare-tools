@@ -2,3 +2,4 @@ workers-sdk
 dist
 routeTree.gen.ts
 __snapshots__
+CHANGELOG.md

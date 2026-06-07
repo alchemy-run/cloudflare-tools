@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-  "version": "0.10.7",
+  "version": "0.10.9",
   "description": "Rolldown plugin for Cloudflare Workers.",
   "keywords": [
     "cloudflare",
@@ -74,10 +74,14 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "rolldown": "catalog:"
+    "rolldown": "catalog:",
+    "vite": "^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
     "rolldown": {
+      "optional": true
+    },
+    "vite": {
       "optional": true
     }
   }

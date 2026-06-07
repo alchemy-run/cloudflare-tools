@@ -1,8 +1,11 @@
 import { createMiniflare, type MiniflareInstance } from "@distilled.cloud/test-utils/miniflare";
 import { miniflareModulesFromDirectory } from "@distilled.cloud/test-utils/miniflare-module";
 import { expect, test } from "@playwright/test";
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+dotenv.config();
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(dirname, "..");
@@ -31,6 +34,9 @@ test.beforeAll(async () => {
         has_static_routing: false,
       },
     },
+    bindings: {
+      TEST_POSTGRES_URL: process.env.TEST_POSTGRES_URL!,
+    },
   });
 });
 
@@ -57,4 +63,9 @@ test("renders the homepage", async ({ page }) => {
     animations: "disabled",
     maxDiffPixelRatio: 0.03,
   });
+});
+
+test("fetches database", async () => {
+  const response = await miniflare.fetchJson<[{ "?column?": number }]>("/api/db");
+  expect(response).toMatchObject([{ "?column?": 1 }]);
 });

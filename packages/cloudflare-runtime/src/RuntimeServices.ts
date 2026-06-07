@@ -9,14 +9,10 @@ import {
   SendEmail,
   Workflows,
 } from "./bindings/index.ts";
-import * as DevRegistry from "./dev-registry/DevRegistry.ts";
-import * as DevRegistryProxy from "./dev-registry/DevRegistryProxy.ts";
-import * as Globals from "./globals/Globals.ts";
-import * as Internet from "./globals/Internet.ts";
-import * as Loopback from "./globals/Loopback.ts";
-import * as LoopbackServer from "./globals/LoopbackServer.ts";
-import * as Storage from "./globals/Storage.ts";
+import { Globals, Internet, Loopback, LoopbackServer, Storage } from "./globals/index.ts";
+import * as Paths from "./internal/Paths.ts";
 import * as WorkerProxy from "./proxy/WorkerProxy.ts";
+import { Registry, RegistryProxy } from "./registry/index.ts";
 import { Access, RemoteBindings, RemoteWorker } from "./remote-bindings/index.ts";
 import * as Runtime from "./Runtime.ts";
 import * as Workerd from "./workerd/Workerd.ts";
@@ -50,7 +46,6 @@ export const layerLocalBindings = () =>
   Layer.mergeAll(
     AnalyticsEngine.AnalyticsEngineLive,
     Assets.AssetsLive,
-    DevRegistryProxy.DevRegistryProxyLive,
     DispatchNamespace.DispatchNamespaceLive,
     Hyperdrive.HyperdriveLive,
     Queue.QueueLive,
@@ -62,13 +57,13 @@ export const layerLocalBindings = () =>
 export type BindingServices =
   | AnalyticsEngine.AnalyticsEngine
   | Assets.Assets
-  | DevRegistryProxy.DevRegistryProxy
   | DispatchNamespace.DispatchNamespace
   | Hyperdrive.Hyperdrive
   | Loopback.Loopback
   | Queue.Queue
   | RateLimit.RateLimit
   | RemoteBindings.RemoteBindings
+  | RegistryProxy.RegistryProxy
   | SendEmail.SendEmail
   | Workflows.Workflows;
 
@@ -80,6 +75,9 @@ export const layerProxy = () =>
     Layer.mergeAll(Internet.InternetLive, Workerd.WorkerdLive),
   );
 
+export const layerRegistry = () =>
+  RegistryProxy.RegistryProxyLive.pipe(Layer.provide(Registry.RegistryLive));
+
 export const layerRuntime = (config: RuntimeConfig) =>
   Runtime.RuntimeLive.pipe(
     Layer.provideMerge(layerLocalBindings()),
@@ -89,6 +87,7 @@ export const layerRuntime = (config: RuntimeConfig) =>
     Layer.provideMerge(layerLoopback()),
     Layer.provide(layerStorage(config.storage)),
     Layer.provide(Internet.InternetLive),
-    Layer.provide(DevRegistry.DevRegistryLive),
+    Layer.provideMerge(layerRegistry()),
+    Layer.provide(Paths.PathsLive),
     Layer.provide(Workerd.WorkerdLive),
   );

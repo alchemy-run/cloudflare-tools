@@ -4,15 +4,15 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as WorkflowsBindingWorker from "worker:./binding.worker.ts";
 import * as WorkflowsWrappedBindingWorker from "worker:./wrapped-binding.worker.ts";
-import { USER_WORKER_SERVICE_NAME } from "../../dev-registry/Constants.shared.ts";
-import { DevRegistryProxy } from "../../dev-registry/DevRegistryProxy.ts";
 import * as Storage from "../../globals/Storage.ts";
+import { SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import {
   formatExtensionModule,
   formatInternalWorkerModules,
 } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import * as PluginContext from "../../PluginContext.ts";
+import { RegistryProxy } from "../../registry/RegistryProxy.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -25,7 +25,7 @@ export class Workflows extends Plugin.Service<
   {
     readonly register: (
       workflow: WorkflowProps,
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator, ConfigError, DevRegistryProxy>;
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator, ConfigError>;
   }
 >()("cloudflare-runtime/plugin/Workflows") {}
 
@@ -67,7 +67,7 @@ export const WorkflowsLive = Layer.effect(
     return Workflows.of(
       Effect.gen(function* () {
         const ctx = yield* PluginContext.PluginContext;
-        const proxy = yield* ctx.get(DevRegistryProxy);
+        const proxy = yield* ctx.get(RegistryProxy);
         const services: Array<WorkerdConfig.Service> = [];
         let hasWorkflows = false;
 
@@ -94,10 +94,11 @@ export const WorkflowsLive = Layer.effect(
             register: Effect.fnUntraced(function* (workflow) {
               hasWorkflows = true;
               if (workflow.scriptName && workflow.scriptName !== ctx.worker.name) {
-                return yield* proxy.api.registerExternalWorkflow(
-                  workflow.scriptName,
-                  workflow.workflowName,
-                );
+                return yield* proxy.api.subscribe({
+                  kind: "workflow",
+                  scriptName: workflow.scriptName,
+                  workflowName: workflow.workflowName,
+                });
               }
               if (services.length === 0) {
                 services.push(yield* createStorageService());
@@ -127,7 +128,7 @@ export const WorkflowsLive = Layer.effect(
                     {
                       name: "USER_WORKFLOW",
                       service: {
-                        name: USER_WORKER_SERVICE_NAME,
+                        name: SERVICE_USER_WORKER,
                         entrypoint: workflow.className,
                       },
                     },
@@ -147,7 +148,11 @@ export const WorkflowsLive = Layer.effect(
                 },
               } satisfies WorkerdConfig.Service;
               services.push(engineService);
-              yield* proxy.api.registerOwnedWorkflow(workflow.workflowName, engineService.name);
+              yield* proxy.api.publish({
+                kind: "workflow",
+                workflowName: workflow.workflowName,
+                service: engineService.name,
+              });
               return {
                 name: engineService.name,
                 entrypoint: "WorkflowBinding",
@@ -178,9 +183,7 @@ export interface WorkflowProps {
  * - Otherwise the binding routes through the dev-registry proxy to the
  *   owner instance, so engine state lives in exactly one process.
  */
-export const local = (
-  props: WorkflowProps,
-): PluginContext.BindingHook<Workflows | DevRegistryProxy> =>
+export const local = (props: WorkflowProps): PluginContext.BindingHook<Workflows | RegistryProxy> =>
   Plugin.use(Workflows, (workflows) =>
     Effect.map(workflows.api.register(props), (service) => ({
       name: props.binding,

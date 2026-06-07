@@ -5,14 +5,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Workflows from "../../src/bindings/workflows/Workflows.ts";
-import * as DevRegistry from "../../src/dev-registry/DevRegistry.ts";
 import * as Globals from "../../src/globals/Globals.ts";
 import * as Internet from "../../src/globals/Internet.ts";
 import * as Storage from "../../src/globals/Storage.ts";
+import * as Paths from "../../src/internal/Paths.ts";
 import * as Runtime from "../../src/Runtime.ts";
 import * as RuntimeServices from "../../src/RuntimeServices.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
-import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
+import { localRuntimeLayer, startTestWorker, waitForRegistryEntry } from "../helpers/runtime.ts";
 
 const WORKFLOW_SCRIPT = `
 import { WorkflowEntrypoint } from "cloudflare:workers";
@@ -40,7 +40,8 @@ const persistenceRuntimeLayer = (directory: string) =>
     Layer.provideMerge(RuntimeServices.layerLoopback()),
     Layer.provide(Storage.layerDisk(directory)),
     Layer.provide(Internet.InternetLive),
-    Layer.provide(DevRegistry.DevRegistryLive),
+    Layer.provideMerge(RuntimeServices.layerRegistry()),
+    Layer.provide(Paths.PathsLive),
     Layer.provide(Workerd.WorkerdLive),
     Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   );
@@ -346,18 +347,13 @@ export default {
 };
 `;
 
-describe("Workflows binding cross-instance", () => {
-  it.effect(
-    "consumer binding routes to the owner's engine via the dev registry",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const registryPath = yield* fs.makeTempDirectoryScoped({
-          prefix: "workflows-cross-registry-",
-        });
-        process.env.MINIFLARE_REGISTRY_PATH = registryPath;
-
-        yield* Effect.gen(function* () {
+layer(localRuntimeLayer, { excludeTestServices: true })(
+  "Workflows binding cross-instance",
+  (it) => {
+    it.effect(
+      "consumer binding routes to the owner's engine via the dev registry",
+      () =>
+        Effect.gen(function* () {
           // Owner: defines the WorkflowEntrypoint class and hosts the Engine.
           yield* startTestWorker({
             name: "cross-owner",
@@ -376,45 +372,49 @@ describe("Workflows binding cross-instance", () => {
           // Consumer: declares the binding with `scriptName` pointing at
           // the owner. It does NOT define `CrossWorkflow`, so its Workflows
           // plugin must skip engine creation and route through the proxy.
-          const { fetch } = yield* Effect.gen(function* () {
-            return yield* startTestWorker({
-              name: "cross-consumer",
-              compatibilityDate: "2026-03-09",
-              compatibilityFlags: [],
-              modules: [
-                {
-                  name: "main.js",
-                  type: "ESModule",
-                  content: CROSS_INSTANCE_CONSUMER_SCRIPT,
-                },
-              ],
-              bindings: [
-                Workflows.local({
-                  binding: "CROSS_WORKFLOW",
-                  workflowName: "CROSS_WORKFLOW",
-                  className: "CrossWorkflow",
-                  scriptName: "cross-owner",
-                }),
-              ],
-            });
-          }).pipe(Effect.provide(localRuntimeLayer));
+          const consumer = yield* startTestWorker({
+            name: "cross-consumer",
+            compatibilityDate: "2026-03-09",
+            compatibilityFlags: [],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: CROSS_INSTANCE_CONSUMER_SCRIPT,
+              },
+            ],
+            bindings: [
+              Workflows.local({
+                binding: "CROSS_WORKFLOW",
+                workflowName: "CROSS_WORKFLOW",
+                className: "CrossWorkflow",
+                scriptName: "cross-owner",
+              }),
+            ],
+          });
+
+          yield* waitForRegistryEntry({
+            kind: "workflow",
+            scriptName: "cross-owner",
+            workflowName: "CROSS_WORKFLOW",
+          });
 
           const id = "cross-instance-1";
-          const createRes = yield* fetch(`/create?id=${id}`);
+          const createRes = yield* consumer.fetch(`/create?id=${id}`);
           expect(createRes.status).toBe(200);
 
           const deadline = Date.now() + 15_000;
           let final: Record<string, unknown> = {};
           while (Date.now() < deadline) {
-            const res = yield* fetch(`/status?id=${id}`);
+            const res = yield* consumer.fetch(`/status?id=${id}`);
             final = (yield* Effect.promise(() => res.json())) as Record<string, unknown>;
             if (final["status"] === "complete") break;
             yield* Effect.sleep("100 millis");
           }
           expect(final["status"]).toBe("complete");
           expect(final["output"]).toEqual({ ok: true, payload: "from-owner" });
-        }).pipe(Effect.provide(localRuntimeLayer));
-      }).pipe(Effect.provide(NodeServices.layer)),
-    { timeout: 60_000 },
-  );
-});
+        }),
+      { timeout: 60_000 },
+    );
+  },
+);

@@ -2,9 +2,13 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
-import { SOCKET_HTTP, USER_WORKER_SERVICE_NAME } from "./dev-registry/Constants.shared.ts";
 import type * as Globals from "./globals/Globals.ts";
 import * as Storage from "./globals/Storage.ts";
+import {
+  defaultDurableObjectUniqueKey,
+  SERVICE_USER_WORKER,
+  SOCKET_USER_ENTRY,
+} from "./internal/constants.ts";
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
@@ -42,15 +46,15 @@ export const RuntimeLive = Layer.effect(
           {
             sockets: [
               {
-                name: SOCKET_HTTP,
+                name: SOCKET_USER_ENTRY,
                 address: "127.0.0.1:0",
-                service: { name: entry ?? USER_WORKER_SERVICE_NAME },
+                service: { name: entry ?? SERVICE_USER_WORKER },
               },
               ...sockets,
             ],
             services: [
               {
-                name: USER_WORKER_SERVICE_NAME,
+                name: SERVICE_USER_WORKER,
                 worker: {
                   compatibilityDate: worker.compatibilityDate,
                   compatibilityFlags: worker.compatibilityFlags,
@@ -59,7 +63,9 @@ export const RuntimeLive = Layer.effect(
                   durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => ({
                     className: namespace.className,
                     enableSql: namespace.sql,
-                    uniqueKey: namespace.uniqueKey ?? `${worker.name}-${namespace.className}`,
+                    uniqueKey:
+                      namespace.uniqueKey ??
+                      defaultDurableObjectUniqueKey(worker.name, namespace.className),
                     ephemeralLocal: namespace.ephemeralLocal,
                   })),
                   durableObjectStorage: {
@@ -74,7 +80,7 @@ export const RuntimeLive = Layer.effect(
           { "debug-port": "127.0.0.1:0" },
         );
         yield* context.start(ports);
-        return new URL(`http://127.0.0.1:${ports[SOCKET_HTTP]}`);
+        return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);
       }),
     });
   }),

@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
-import { DevRegistryProxy } from "../dev-registry/DevRegistryProxy.ts";
 import * as Plugin from "../Plugin.ts";
 import type { BindingHook } from "../PluginContext.ts";
+import { RegistryProxy } from "../registry/RegistryProxy.ts";
 import { makeRemoteBinding } from "../remote-bindings/RemoteBindings.ts";
 
 export interface LocalServiceProps {
@@ -35,12 +35,21 @@ export const local = ({
   scriptName,
   entrypoint,
   props,
-}: LocalServiceProps): BindingHook<DevRegistryProxy> =>
-  Plugin.use(DevRegistryProxy, (proxy) =>
-    Effect.map(proxy.api.registerService(scriptName, entrypoint, props), (service) => ({
-      name: binding,
-      service,
-    })),
+}: LocalServiceProps): BindingHook<RegistryProxy> =>
+  Plugin.use(RegistryProxy, (proxy) =>
+    proxy.api
+      .subscribe({
+        kind: "worker",
+        scriptName,
+        entrypoint,
+        props,
+      })
+      .pipe(
+        Effect.map((service) => ({
+          name: binding,
+          service,
+        })),
+      ),
   );
 
 /**

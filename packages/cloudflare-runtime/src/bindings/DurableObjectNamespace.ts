@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
-import { DevRegistryProxy } from "../dev-registry/DevRegistryProxy.ts";
+import { defaultDurableObjectUniqueKey } from "../internal/constants.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import { PluginContext } from "../PluginContext.ts";
+import { RegistryProxy } from "../registry/RegistryProxy.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
 
@@ -42,7 +43,7 @@ export const local = ({
   className,
   scriptName,
   uniqueKey,
-}: LocalDurableObjectNamespaceProps): BindingHook<DevRegistryProxy> =>
+}: LocalDurableObjectNamespaceProps): BindingHook<RegistryProxy> =>
   PluginContext.use((context) => {
     if (scriptName === undefined || scriptName === context.worker.name) {
       const namespace = context.worker.durableObjectNamespaces?.find(
@@ -76,8 +77,15 @@ export const local = ({
         durableObjectNamespace: { className },
       });
     }
-    return context.get(DevRegistryProxy).pipe(
-      Effect.flatMap((proxy) => proxy.api.registerDurableObject(scriptName, className, uniqueKey)),
+    return context.get(RegistryProxy).pipe(
+      Effect.flatMap((proxy) =>
+        proxy.api.subscribe({
+          kind: "durable-object",
+          scriptName,
+          className,
+          uniqueKey: uniqueKey ?? defaultDurableObjectUniqueKey(scriptName, className),
+        }),
+      ),
       Effect.map(
         (durableObjectNamespace): WorkerdConfig.Worker_Binding => ({
           name: binding,

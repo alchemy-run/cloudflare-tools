@@ -74,11 +74,6 @@
     "./bindings/WorkerLoader": "./dist/node/bindings/WorkerLoader.mjs",
     "./bindings/workflows": "./dist/node/bindings/workflows/index.mjs",
     "./bindings/workflows/Workflows": "./dist/node/bindings/workflows/Workflows.mjs",
-    "./dev-registry": "./dist/node/dev-registry/index.mjs",
-    "./dev-registry/Constants": "./dist/node/dev-registry/Constants.shared.mjs",
-    "./dev-registry/DevRegistry": "./dist/node/dev-registry/DevRegistry.mjs",
-    "./dev-registry/DevRegistryProxy": "./dist/node/dev-registry/DevRegistryProxy.mjs",
-    "./dev-registry/DevRegistryTypes": "./dist/node/dev-registry/DevRegistryTypes.shared.mjs",
     "./globals": "./dist/node/globals/index.mjs",
     "./globals/Globals": "./dist/node/globals/Globals.mjs",
     "./globals/Internet": "./dist/node/globals/Internet.mjs",
@@ -89,6 +84,10 @@
     "./PluginContext": "./dist/node/PluginContext.mjs",
     "./proxy": "./dist/node/proxy/index.mjs",
     "./proxy/WorkerProxy": "./dist/node/proxy/WorkerProxy.mjs",
+    "./registry": "./dist/node/registry/index.mjs",
+    "./registry/Registry": "./dist/node/registry/Registry.mjs",
+    "./registry/RegistryProxy": "./dist/node/registry/RegistryProxy.mjs",
+    "./registry/RegistryTypes": "./dist/node/registry/RegistryTypes.shared.mjs",
     "./remote-bindings": "./dist/node/remote-bindings/index.mjs",
     "./remote-bindings/Access": "./dist/node/remote-bindings/Access.mjs",
     "./remote-bindings/RemoteBindings": "./dist/node/remote-bindings/RemoteBindings.mjs",
@@ -116,9 +115,7 @@
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
     "capnweb": "^0.7.0",
-    "chokidar": "^4.0.1",
-    "workerd": "catalog:workers",
-    "xdg-app-paths": "^8.3.0"
+    "workerd": "catalog:workers"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",

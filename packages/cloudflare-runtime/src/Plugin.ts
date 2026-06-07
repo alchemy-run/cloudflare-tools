@@ -8,7 +8,7 @@ import type * as WorkerdConfig from "./workerd/Config.ts";
 import type * as Workerd from "./workerd/Workerd.ts";
 
 export type Plugin<Api = never> = WithApi<
-  PluginConfig & { readonly defer?: Effect.Effect<PluginConfig> },
+  PluginConfig & { readonly defer?: Effect.Effect<PluginConfig, RuntimeError> },
   Api
 >;
 

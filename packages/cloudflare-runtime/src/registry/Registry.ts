@@ -16,22 +16,31 @@ import * as Paths from "../internal/Paths.ts";
 import * as System from "../internal/System.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import {
-  registryServiceKey,
+  resolvedTargetKey,
   type RegistryEntry,
-  type ResolvedServiceMap,
-  type SubscriberEntry,
+  type ResolvedTargetMap,
+  type Subscriber,
 } from "./RegistryTypes.shared.ts";
 
 export class Registry extends Context.Service<
   Registry,
   {
-    readonly read: (
-      subscribers: ReadonlyArray<SubscriberEntry>,
-    ) => Effect.Effect<ResolvedServiceMap>;
-    readonly write: (entry: RegistryEntry) => Effect.Effect<void, SystemError, Scope.Scope>;
+    /**
+     * Reads the registry and returns the resolved targets for the given subscribers.
+     */
+    readonly read: (subscribers: ReadonlyArray<Subscriber>) => Effect.Effect<ResolvedTargetMap>;
+    /**
+     * Subscribes to changes in the registry for the given subscribers.
+     * Returns a stream containing an updated `ResolvedTargetMap` whenever the registry changes.
+     */
     readonly subscribe: (
-      subscribers: ReadonlyArray<SubscriberEntry>,
-    ) => Stream.Stream<ResolvedServiceMap, never, Scope.Scope>;
+      subscribers: ReadonlyArray<Subscriber>,
+    ) => Stream.Stream<ResolvedTargetMap>;
+    /**
+     * Writes an entry to the registry.
+     * The entry is removed when the scope closes.
+     */
+    readonly write: (entry: RegistryEntry) => Effect.Effect<void, SystemError, Scope.Scope>;
   }
 >()("cloudflare-runtime/registry/Registry") {}
 
@@ -43,30 +52,6 @@ export const RegistryLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* Paths.state("alchemy", "registry");
-
-    const writeEntry = (entry: RegistryEntry) => {
-      const entryPath = path.join(directory, `${encodeURIComponent(entry.scriptName)}.json`);
-      return fs.writeFileString(entryPath, JSON.stringify(entry, null, 2)).pipe(
-        Effect.zip(
-          SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
-          { concurrent: true },
-        ),
-        Effect.tap(() => {
-          const unregister = exitHook(() => NodeFs.unlinkSync(entryPath));
-          return Effect.addFinalizer(() => {
-            unregister();
-            return fs.remove(entryPath).pipe(Effect.ignore);
-          });
-        }),
-        Effect.tap(() =>
-          DateTime.nowAsDate.pipe(
-            Effect.flatMap((now) => fs.utimes(entryPath, now, now)),
-            Effect.schedule(Schedule.spaced("30 seconds")),
-            Effect.forkScoped,
-          ),
-        ),
-      );
-    };
 
     const ensureNonStale = (entryPath: string) =>
       Effect.zip(
@@ -84,7 +69,12 @@ export const RegistryLive = Layer.effect(
         ensureNonStale(entryPath),
         fs
           .readFileString(entryPath)
-          .pipe(Effect.map((content) => [entry, JSON.parse(content)] as const)),
+          .pipe(
+            Effect.map(
+              (content) =>
+                [decodeURIComponent(path.basename(entry, ".json")), JSON.parse(content)] as const,
+            ),
+          ),
         (valid, entryContent) => (valid ? entryContent : undefined),
         { concurrent: true },
       ).pipe(Effect.orElseSucceed(() => undefined));
@@ -116,70 +106,102 @@ export const RegistryLive = Layer.effect(
       Effect.forkDetach,
     );
 
-    const findMatch = (subscriber: SubscriberEntry, registry: RegistryEntry) => {
-      switch (subscriber.kind) {
-        case "worker":
-          return registry.scriptName === subscriber.scriptName ? registry.services[0] : undefined;
-        case "durable-object":
-          return registry.scriptName === subscriber.scriptName
-            ? registry.services.find(
-                (service) =>
-                  service.kind === "durable-object" && service.className === subscriber.className,
-              )
-            : undefined;
-        case "queue-consumer":
-          return registry.services.find(
-            (service) =>
-              service.kind === "queue-consumer" && service.queueName === subscriber.queueName,
-          );
-        case "workflow":
-          return registry.scriptName === subscriber.scriptName
-            ? registry.services.find(
-                (service) =>
-                  service.kind === "workflow" && service.workflowName === subscriber.workflowName,
-              )
-            : undefined;
-      }
-    };
-
-    const pick =
-      (subscribers: ReadonlyArray<SubscriberEntry>) =>
-      (registry: MutableHashMap.MutableHashMap<string, RegistryEntry>) => {
-        const resolved: ResolvedServiceMap = {};
-        for (const entry of MutableHashMap.values(registry)) {
-          for (const subscriber of subscribers) {
-            const match = findMatch(subscriber, entry);
-            if (match) {
-              resolved[registryServiceKey(subscriber)] = {
-                ...match,
-                scriptName: entry.scriptName,
-                debugPortAddress: entry.debugPortAddress,
-              };
-            }
-          }
-        }
-        return resolved;
-      };
-
     return Registry.of({
-      read: (subscribers) => SubscriptionRef.get(ref).pipe(Effect.map(pick(subscribers))),
-      write: (entry) =>
-        writeEntry(entry).pipe(
+      read: (subscribers) =>
+        SubscriptionRef.get(ref).pipe(Effect.map(pickSubscriberServices(subscribers))),
+      subscribe: (subscribers) =>
+        SubscriptionRef.changes(ref).pipe(
+          Stream.map(pickSubscriberServices(subscribers)),
+          Stream.changes,
+        ),
+      write: (entry) => {
+        const entryPath = path.join(directory, `${encodeURIComponent(entry.scriptName)}.json`);
+        return fs.writeFileString(entryPath, JSON.stringify(entry, null, 2)).pipe(
+          Effect.andThen(
+            // Immediately update the in-memory registry so it's available without waiting on IO.
+            SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
+          ),
+          Effect.tap(() => {
+            // Remove the entry from the filesystem when the scope closes.
+            // If scope finalizers fail to run, a synchronous exit hook ensures the entry is removed.
+            const unregister = exitHook(() => {
+              try {
+                NodeFs.unlinkSync(entryPath);
+              } catch {}
+            });
+            return Effect.addFinalizer(() =>
+              fs
+                .remove(entryPath)
+                .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+            );
+          }),
+          Effect.tap(() =>
+            // Update the `mtime` every 30 seconds so the entry is not considered stale.
+            DateTime.nowAsDate.pipe(
+              Effect.flatMap((now) => fs.utimes(entryPath, now, now)),
+              Effect.schedule(Schedule.spaced("30 seconds")),
+              Effect.forkScoped,
+            ),
+          ),
           Effect.mapError(
             (error) =>
               new SystemError({
                 subtag: "RegistryWriteError",
                 message: "Failed to write registry entry",
-                hint: "The registry entry could not be written to the filesystem.",
                 detail: {
                   entry,
                 },
                 cause: error,
               }),
           ),
-        ),
-      subscribe: (subscribers) =>
-        SubscriptionRef.changes(ref).pipe(Stream.map(pick(subscribers)), Stream.changes),
+        );
+      },
     });
   }),
 );
+
+const pickSubscriberServices =
+  (subscribers: ReadonlyArray<Subscriber>) =>
+  (registry: MutableHashMap.MutableHashMap<string, RegistryEntry>) => {
+    const resolved: ResolvedTargetMap = {};
+    for (const subscriber of subscribers) {
+      for (const entry of MutableHashMap.values(registry)) {
+        const service = extractSubscriberService(subscriber, entry);
+        if (service) {
+          resolved[resolvedTargetKey(subscriber)] = {
+            ...service,
+            scriptName: entry.scriptName,
+            debugPortAddress: entry.debugPortAddress,
+          };
+          break;
+        }
+      }
+    }
+    return resolved;
+  };
+
+const extractSubscriberService = (subscriber: Subscriber, entry: RegistryEntry) => {
+  switch (subscriber.kind) {
+    case "worker":
+      return entry.scriptName === subscriber.scriptName ? entry.services[0] : undefined;
+    case "durable-object":
+      return entry.scriptName === subscriber.scriptName
+        ? entry.services.find(
+            (service) =>
+              service.kind === "durable-object" && service.className === subscriber.className,
+          )
+        : undefined;
+    case "queue-consumer":
+      return entry.services.find(
+        (service) =>
+          service.kind === "queue-consumer" && service.queueName === subscriber.queueName,
+      );
+    case "workflow":
+      return entry.scriptName === subscriber.scriptName
+        ? entry.services.find(
+            (service) =>
+              service.kind === "workflow" && service.workflowName === subscriber.workflowName,
+          )
+        : undefined;
+  }
+};

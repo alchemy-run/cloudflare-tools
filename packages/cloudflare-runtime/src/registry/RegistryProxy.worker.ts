@@ -1,9 +1,15 @@
+/**
+ * This file contains the worker entrypoints for the registry proxy.
+ * The actual entrypoint is built dynamically in RegistryProxy.buildWorkerModules
+ * so that we can bake in the initial registry state and export one
+ * makeExternalDurableObject() per Durable Object class.
+ */
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import {
-  registryServiceKey,
-  type ResolvedService,
-  type ResolvedServiceMap,
-  type SubscriberEntry,
+  resolvedTargetKey,
+  type ResolvedTarget,
+  type ResolvedTargetMap,
+  type Subscriber,
 } from "./RegistryTypes.shared.ts";
 
 interface Env {
@@ -32,6 +38,53 @@ declare namespace Env {
   }
 }
 
+/**
+ * The target map is a map of subscriber keys to resolved targets.
+ * It is stored at the top level so it can be accessed synchronously
+ * across all the worker entrypoints.
+ */
+export namespace Target {
+  let value: ResolvedTargetMap = {};
+
+  export function set(newValue: ResolvedTargetMap): void {
+    value = newValue;
+  }
+
+  export interface Resolver {
+    resolve(): Fetcher | undefined;
+  }
+
+  /**
+   * Constructs a cached target resolver for a subscriber.
+   * This reuses the same fetcher if the debug port address hasn't changed.
+   * The `toFetcher` function should use the debug port binding to create a fetcher for the target service.
+   */
+  export function makeResolver<T extends Subscriber>(
+    subscriber: T,
+    toFetcher: (target: ResolvedTarget<T>) => Fetcher,
+  ): Resolver {
+    const key = resolvedTargetKey(subscriber);
+    let fetcher: Fetcher | undefined;
+    let debugPortAddress: string | undefined;
+    return {
+      resolve: () => {
+        const target = value[key] as ResolvedTarget<T> | undefined;
+        if (!target) {
+          fetcher = undefined;
+          debugPortAddress = undefined;
+          return undefined;
+        }
+        if (fetcher && debugPortAddress === target.debugPortAddress) {
+          return fetcher;
+        }
+        fetcher = toFetcher(target);
+        debugPortAddress = target.debugPortAddress;
+        return fetcher;
+      },
+    };
+  }
+}
+
 const HANDLER_RESERVED_KEYS = new Set<string>([
   "alarm",
   "connect",
@@ -45,16 +98,21 @@ const HANDLER_RESERVED_KEYS = new Set<string>([
   "webSocketMessage",
 ]);
 
+/**
+ * Creates a Durable Object subclass that proxies all method calls and fetch requests
+ * to a Durable Object running in a separate workerd instance.
+ * This is a factory function because we need a separate one for each Durable Object class.
+ */
 export function makeExternalDurableObject(
-  subscriber: SubscriberEntry.DurableObject,
+  subscriber: Subscriber.DurableObject,
 ): typeof DurableObject<Env> {
-  return class ExternalDurableObject extends DurableObject<Env> {
-    private resolver: Services.Resolver;
+  return class extends DurableObject<Env> {
+    private resolver: Target.Resolver;
 
     constructor(ctx: DurableObjectState, env: Env) {
       super(ctx, env);
 
-      this.resolver = Services.makeResolver(subscriber, (service) =>
+      this.resolver = Target.makeResolver(subscriber, (service) =>
         env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getActor(
           service.service,
           subscriber.className,
@@ -95,13 +153,16 @@ export function makeExternalDurableObject(
   };
 }
 
-export class ExternalQueueConsumer extends WorkerEntrypoint<Env, SubscriberEntry.QueueConsumer> {
-  private resolver = Services.makeResolver(this.ctx.props, (service) =>
+/**
+ * Forwards queue consumer requests to the queue broker in the consuming worker.
+ */
+export class ExternalQueueConsumer extends WorkerEntrypoint<Env, Subscriber.QueueConsumer> {
+  private target = Target.makeResolver(this.ctx.props, (service) =>
     this.env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getEntrypoint(service.service),
   );
 
   fetch(request: Request): Promise<Response> | Response {
-    const fetcher = this.resolver.resolve();
+    const fetcher = this.target.resolve();
     if (!fetcher) {
       console.warn(
         `[registry] No consumer registered for queue "${this.ctx.props.queueName}". Accepting and dropping message.`,
@@ -116,23 +177,25 @@ export class ExternalQueueConsumer extends WorkerEntrypoint<Env, SubscriberEntry
   }
 }
 
-export class ExternalService extends WorkerEntrypoint<Env, SubscriberEntry.Worker> {
-  private rpcResolver: Services.Resolver;
-  private fetchResolver: Services.Resolver;
+export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
+  // This is used to route fetch requests via the full middleware chain,
+  // while RPC requests hit the user worker directly.
+  private fetchTarget: Target.Resolver;
+  private rpcTarget: Target.Resolver;
 
-  constructor(ctx: ExecutionContext<SubscriberEntry.Worker>, env: Env) {
+  constructor(ctx: ExecutionContext<Subscriber.Worker>, env: Env) {
     super(ctx, env);
 
-    this.rpcResolver = Services.makeResolver(ctx.props, (service) =>
+    this.fetchTarget = Target.makeResolver(ctx.props, (service) =>
       env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getEntrypoint(
-        service.rpcService,
+        service.fetchService,
         ctx.props?.entrypoint,
         ctx.props?.props,
       ),
     );
-    this.fetchResolver = Services.makeResolver(ctx.props, (service) =>
+    this.rpcTarget = Target.makeResolver(ctx.props, (service) =>
       env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getEntrypoint(
-        service.fetchService,
+        service.rpcService,
         ctx.props?.entrypoint,
         ctx.props?.props,
       ),
@@ -146,7 +209,7 @@ export class ExternalService extends WorkerEntrypoint<Env, SubscriberEntry.Worke
         if (typeof prop === "string" && HANDLER_RESERVED_KEYS.has(prop)) {
           return undefined;
         }
-        const fetcher = this.rpcResolver.resolve();
+        const fetcher = this.rpcTarget.resolve();
         if (!fetcher) {
           throw new Error(this.notFoundMessage());
         }
@@ -156,15 +219,17 @@ export class ExternalService extends WorkerEntrypoint<Env, SubscriberEntry.Worke
   }
 
   fetch(request: Request): Promise<Response> | Response {
-    const fetcher = this.fetchResolver.resolve();
+    const fetcher = this.fetchTarget.resolve();
     if (!fetcher) {
       return new Response(this.notFoundMessage(), { status: 503 });
     }
     return fetcher.fetch(request);
   }
 
+  // Separate connection for scheduled: the debug port's EventDispatcher
+  // doesn't support runScheduled/runAlarm/queue, so we forward via HTTP.
   async scheduled(controller: ScheduledController) {
-    const fetcher = this.fetchResolver.resolve();
+    const fetcher = this.fetchTarget.resolve();
     if (!fetcher) {
       throw new Error(this.notFoundMessage());
     }
@@ -183,7 +248,7 @@ export class ExternalService extends WorkerEntrypoint<Env, SubscriberEntry.Worke
   }
 
   async tail(events: Array<TraceItem>) {
-    const fetcher = this.fetchResolver.resolve();
+    const fetcher = this.fetchTarget.resolve();
     if (!fetcher) {
       console.warn(
         `[registry] Failed to forward tail events to "${this.ctx.props.scriptName}": worker not found`,
@@ -230,12 +295,15 @@ export class ExternalService extends WorkerEntrypoint<Env, SubscriberEntry.Worke
   }
 }
 
-export class ExternalWorkflow extends WorkerEntrypoint<Env, SubscriberEntry.Workflow> {
-  private resolver: Services.Resolver;
+/**
+ * Forwards a workflow binding to the workflow engine in the owner worker.
+ */
+export class ExternalWorkflow extends WorkerEntrypoint<Env, Subscriber.Workflow> {
+  private target: Target.Resolver;
 
-  constructor(ctx: ExecutionContext<SubscriberEntry.Workflow>, env: Env) {
+  constructor(ctx: ExecutionContext<Subscriber.Workflow>, env: Env) {
     super(ctx, env);
-    this.resolver = Services.makeResolver(ctx.props, (service) =>
+    this.target = Target.makeResolver(ctx.props, (service) =>
       env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getEntrypoint(
         service.service,
         "WorkflowBinding",
@@ -250,7 +318,7 @@ export class ExternalWorkflow extends WorkerEntrypoint<Env, SubscriberEntry.Work
         if (typeof prop === "string" && HANDLER_RESERVED_KEYS.has(prop)) {
           return undefined;
         }
-        const fetcher = this.resolver.resolve();
+        const fetcher = this.target.resolve();
         if (!fetcher) {
           throw new Error(this.notFoundMessage());
         }
@@ -260,7 +328,7 @@ export class ExternalWorkflow extends WorkerEntrypoint<Env, SubscriberEntry.Work
   }
 
   async fetch(request: Request): Promise<Response> {
-    const fetcher = this.resolver.resolve();
+    const fetcher = this.target.resolve();
     if (!fetcher) {
       return new Response(this.notFoundMessage(), { status: 503 });
     }
@@ -269,42 +337,5 @@ export class ExternalWorkflow extends WorkerEntrypoint<Env, SubscriberEntry.Work
 
   private notFoundMessage() {
     return `Workflow "${this.ctx.props.workflowName}" defined in worker "${this.ctx.props.scriptName}" not found. Make sure the worker is running locally and exports the workflow.`;
-  }
-}
-
-export namespace Services {
-  let services: ResolvedServiceMap = {};
-
-  export function set(newValue: ResolvedServiceMap): void {
-    services = newValue;
-  }
-
-  export interface Resolver {
-    resolve(): Fetcher | undefined;
-  }
-
-  export function makeResolver<T extends SubscriberEntry>(
-    subscriber: T,
-    toFetcher: (service: ResolvedService<T>) => Fetcher,
-  ): Resolver {
-    const key = registryServiceKey(subscriber);
-    let fetcher: Fetcher | undefined;
-    let debugPortAddress: string | undefined;
-    return {
-      resolve: () => {
-        const target = services[key] as ResolvedService<T> | undefined;
-        if (!target) {
-          fetcher = undefined;
-          debugPortAddress = undefined;
-          return undefined;
-        }
-        if (fetcher && debugPortAddress === target.debugPortAddress) {
-          return fetcher;
-        }
-        fetcher = toFetcher(target);
-        debugPortAddress = target.debugPortAddress;
-        return fetcher;
-      },
-    };
   }
 }

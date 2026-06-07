@@ -14,9 +14,9 @@ import * as Paths from "../../src/internal/Paths.ts";
 import * as Registry from "../../src/registry/Registry.ts";
 import * as RegistryProxy from "../../src/registry/RegistryProxy.ts";
 import {
-  registryServiceKey,
-  type ResolvedServiceMap,
-  type SubscriberEntry,
+  resolvedTargetKey,
+  type ResolvedTargetMap,
+  type Subscriber,
 } from "../../src/registry/RegistryTypes.shared.ts";
 import * as Runtime from "../../src/Runtime.ts";
 import * as RuntimeServices from "../../src/RuntimeServices.ts";
@@ -82,15 +82,15 @@ export const startTestWorker = <B extends BindingHooks>(worker: RuntimeWorker<B>
   });
 
 export const waitForRegistryEntry = Effect.fn(function* (
-  subscriber: SubscriberEntry,
+  subscriber: Subscriber,
   options: { toBeDefined: boolean } = { toBeDefined: true },
 ) {
   const registry = yield* Registry.Registry;
-  const queue = yield* Queue.unbounded<ResolvedServiceMap, Done<void>>();
+  const queue = yield* Queue.unbounded<ResolvedTargetMap, Done<void>>();
   yield* registry.subscribe([subscriber]).pipe(Stream.runIntoQueue(queue), Effect.forkScoped);
   while (true) {
     const value = yield* Queue.take(queue);
-    const isDefined = registryServiceKey(subscriber) in value;
+    const isDefined = resolvedTargetKey(subscriber) in value;
     if (isDefined === options.toBeDefined) {
       return;
     }

@@ -12,11 +12,11 @@ import * as Stream from "effect/Stream";
 import * as Paths from "../../src/internal/Paths.ts";
 import * as Registry from "../../src/registry/Registry.ts";
 import {
-  registryServiceKey,
+  resolvedTargetKey,
   type RegistryEntry,
-  type ResolvedService,
-  type ResolvedServiceMap,
-  type SubscriberEntry,
+  type ResolvedTarget,
+  type ResolvedTargetMap,
+  type Subscriber,
 } from "../../src/registry/RegistryTypes.shared.ts";
 import { configProvider, waitForRegistryEntry } from "../helpers/runtime.ts";
 
@@ -108,7 +108,7 @@ describe.each([true, false])(
       Effect.gen(function* () {
         const registry = yield* Registry.Registry;
         const { registryEntry, subscriberEntry, registryServiceMap } = yield* makeTestData("5");
-        const queue = yield* Queue.unbounded<ResolvedServiceMap, Done<void>>();
+        const queue = yield* Queue.unbounded<ResolvedTargetMap, Done<void>>();
         yield* registry
           .subscribe([subscriberEntry])
           .pipe(Stream.runIntoQueue(queue), Effect.forkScoped);
@@ -138,19 +138,17 @@ const registryEntry = (scriptName: string): RegistryEntry => ({
   ],
 });
 
-const subscriberEntry = (scriptName: string): SubscriberEntry => ({ kind: "worker", scriptName });
+const subscriberEntry = (scriptName: string): Subscriber => ({ kind: "worker", scriptName });
 
-const resolvedService = (scriptName: string): ResolvedService => ({
-  scriptName,
-  debugPortAddress: "127.0.0.1:12345",
-  kind: "worker",
-  fetchService: "user",
-  rpcService: "user",
-});
-
-const registryServiceMap = (scriptName: string): ResolvedServiceMap => {
-  const service = resolvedService(scriptName);
+const registryServiceMap = (scriptName: string): ResolvedTargetMap => {
+  const service: ResolvedTarget<Subscriber.Worker> = {
+    scriptName,
+    debugPortAddress: "127.0.0.1:12345",
+    kind: "worker",
+    fetchService: "user",
+    rpcService: "user",
+  };
   return {
-    [registryServiceKey(service)]: service,
+    [resolvedTargetKey(service)]: service,
   };
 };

@@ -1,10 +1,10 @@
-export type SubscriberEntry =
-  | SubscriberEntry.Worker
-  | SubscriberEntry.DurableObject
-  | SubscriberEntry.QueueConsumer
-  | SubscriberEntry.Workflow;
+export type Subscriber =
+  | Subscriber.Worker
+  | Subscriber.DurableObject
+  | Subscriber.QueueConsumer
+  | Subscriber.Workflow;
 
-export declare namespace SubscriberEntry {
+export declare namespace Subscriber {
   export interface Worker {
     readonly kind: "worker";
     readonly scriptName: string;
@@ -31,16 +31,10 @@ export declare namespace SubscriberEntry {
 export interface RegistryEntry {
   readonly scriptName: string;
   readonly debugPortAddress: string;
-  readonly services: [RegistryService.Worker, ...Array<RegistryService>];
+  readonly services: [RegistryEntry.Worker, ...Array<RegistryEntry.Service>];
 }
 
-export type RegistryService =
-  | RegistryService.Worker
-  | RegistryService.DurableObject
-  | RegistryService.QueueConsumer
-  | RegistryService.Workflow;
-
-export declare namespace RegistryService {
+export declare namespace RegistryEntry {
   export interface Worker {
     readonly kind: "worker";
     readonly fetchService: string;
@@ -62,21 +56,22 @@ export declare namespace RegistryService {
     readonly workflowName: string;
     readonly service: string;
   }
+  export type Service = Worker | DurableObject | QueueConsumer | Workflow;
 }
 
-export type ResolvedService<T extends SubscriberEntry = SubscriberEntry> = Extract<
-  RegistryService,
+export interface ResolvedTargetMap {
+  [key: string]: ResolvedTarget;
+}
+
+export type ResolvedTarget<T extends Subscriber = Subscriber> = Extract<
+  RegistryEntry.Service,
   { kind: T["kind"] }
 > & {
   readonly scriptName: string;
   readonly debugPortAddress: string;
 };
 
-export interface ResolvedServiceMap {
-  [key: string]: ResolvedService;
-}
-
-export const registryServiceKey = (entry: ResolvedService | SubscriberEntry) => {
+export const resolvedTargetKey = (entry: ResolvedTarget | Subscriber) => {
   switch (entry.kind) {
     case "worker":
       return `worker:${entry.scriptName}` as const;

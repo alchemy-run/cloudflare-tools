@@ -5,35 +5,42 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as NodeCrypto from "node:crypto";
 import * as RegistryProxyWorker from "worker:./RegistryProxy.worker.ts";
-import { SERVICE_USER_WORKER } from "../internal/constants.ts";
+import { defaultDurableObjectUniqueKey, SERVICE_USER_WORKER } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../workerd/Config.ts";
 import * as Registry from "./Registry.ts";
-import type { ResolvedServiceMap, SubscriberEntry } from "./RegistryTypes.shared.ts";
+import type { ResolvedTargetMap, Subscriber } from "./RegistryTypes.shared.ts";
 
 export class RegistryProxy extends Plugin.Service<
   RegistryProxy,
   {
+    /**
+     * Declares a service, belonging to the current worker, that will be published to the registry proxy.
+     */
     readonly publish: (service: PublishedService) => Effect.Effect<void>;
-    readonly subscribe: <T extends SubscriberEntry>(
+    /**
+     * Declares an external service that will be consumed by the current worker.
+     * Returns a service designator that proxies to the external target.
+     */
+    readonly subscribe: <T extends Subscriber>(
       subscriber: T,
     ) => Effect.Effect<ServiceDesignatorFromSubscriber<T>>;
   }
 >()("cloudflare-runtime/plugin/RegistryProxy") {}
 
-type ServiceDesignatorFromSubscriber<T extends SubscriberEntry> = T extends {
+type PublishedService =
+  | Subscriber.DurableObject
+  | (Subscriber.QueueConsumer & { service: string })
+  | (Omit<Subscriber.Workflow, "scriptName"> & { service: string });
+
+type ServiceDesignatorFromSubscriber<T extends Subscriber> = T extends {
   kind: "durable-object";
 }
   ? WorkerdConfig.Worker_DurableObjectNamespace
   : WorkerdConfig.ServiceDesignator;
-
-type PublishedService =
-  | SubscriberEntry.DurableObject
-  | (SubscriberEntry.QueueConsumer & { service: string })
-  | (Omit<SubscriberEntry.Workflow, "scriptName"> & { service: string });
 
 const SERVICE_REGISTRY_PROXY = "cloudflare-runtime:registry-proxy";
 const SOCKET_REGISTRY_PROXY = "registry-proxy-socket";
@@ -48,63 +55,17 @@ export const RegistryProxyLive = Layer.effect(
     return RegistryProxy.of(
       Effect.gen(function* () {
         const { worker } = yield* PluginContext;
+
         const published: Array<PublishedService> =
           worker.durableObjectNamespaces?.map((namespace) => ({
             kind: "durable-object",
             scriptName: worker.name,
             className: namespace.className,
-            uniqueKey: namespace.uniqueKey ?? `${worker.name}-${namespace.className}`,
+            uniqueKey:
+              namespace.uniqueKey ??
+              defaultDurableObjectUniqueKey(worker.name, namespace.className),
           })) ?? [];
-        const subscribed: Array<SubscriberEntry> = [];
-
-        const writeRegistry = Effect.fn(function* (ports: Record<string, number>) {
-          const debugPort = ports[SOCKET_DEBUG_PORT];
-          if (!debugPort) {
-            return yield* new SystemError({
-              subtag: "RegistryProxyDebugPort",
-              message: "Registry proxy debug port not found",
-              hint: "The registry proxy debug port is not found.",
-              detail: { debugPort },
-            });
-          }
-          yield* registry.write({
-            scriptName: worker.name,
-            debugPortAddress: `127.0.0.1:${debugPort}`,
-            services: [
-              {
-                kind: "worker",
-                fetchService: SERVICE_USER_WORKER,
-                rpcService: SERVICE_USER_WORKER,
-              },
-              ...published.map((service) => ({
-                ...service,
-                service: "service" in service ? service.service : SERVICE_USER_WORKER,
-              })),
-            ],
-          });
-        });
-        const subscribeRegistry = Effect.fn(function* (ports: Record<string, number>) {
-          if (subscribed.length === 0) {
-            return;
-          }
-          const registryPort = ports[SOCKET_REGISTRY_PROXY];
-          if (!registryPort) {
-            return yield* new SystemError({
-              subtag: "RegistryProxyRegistryPort",
-              message: "Registry proxy registry port not found",
-              hint: "The registry proxy registry port is not found.",
-              detail: { registryPort },
-            });
-          }
-          yield* registry.subscribe(subscribed).pipe(
-            Stream.runForEach((services) =>
-              http.post(`http://127.0.0.1:${registryPort}/`, {
-                body: HttpBody.jsonUnsafe(services),
-              }),
-            ),
-            Effect.forkScoped,
-          );
-        });
+        const subscribed: Array<Subscriber> = [];
 
         return {
           defer: Effect.gen(function* () {
@@ -143,17 +104,67 @@ export const RegistryProxyLive = Layer.effect(
             };
             return { sockets: [socket], services: [service] };
           }),
-          start: Effect.fn(function* (ports) {
-            yield* Effect.all([writeRegistry(ports), subscribeRegistry(ports)], {
-              concurrency: "unbounded",
-            });
-          }),
+          start: (ports) =>
+            // When the worker starts, publish it to the registry.
+            // If we have external services, subscribe to the registry and push updates to the proxy.
+            Effect.all(
+              [
+                Effect.gen(function* () {
+                  const debugPort = ports[SOCKET_DEBUG_PORT];
+                  if (!debugPort) {
+                    return yield* new SystemError({
+                      subtag: "RegistryProxyDebugPort",
+                      message: "Debug port not found.",
+                      detail: { debugPort },
+                    });
+                  }
+                  yield* registry.write({
+                    scriptName: worker.name,
+                    debugPortAddress: `127.0.0.1:${debugPort}`,
+                    services: [
+                      {
+                        kind: "worker",
+                        // TODO: The fetch service should be the service name for the top of the middleware chain.
+                        fetchService: SERVICE_USER_WORKER,
+                        rpcService: SERVICE_USER_WORKER,
+                      },
+                      ...published.map((service) => ({
+                        ...service,
+                        service: "service" in service ? service.service : SERVICE_USER_WORKER,
+                      })),
+                    ],
+                  });
+                }),
+                Effect.gen(function* () {
+                  if (subscribed.length === 0) {
+                    return;
+                  }
+                  const proxyPort = ports[SOCKET_REGISTRY_PROXY];
+                  if (!proxyPort) {
+                    return yield* new SystemError({
+                      subtag: "RegistryProxyPort",
+                      message: "Registry proxy port not found.",
+                      detail: { proxyPort },
+                    });
+                  }
+                  yield* registry.subscribe(subscribed).pipe(
+                    Stream.runForEach((targets) =>
+                      http.post(`http://127.0.0.1:${proxyPort}/`, {
+                        body: HttpBody.jsonUnsafe(targets),
+                      }),
+                    ),
+                    Effect.forkScoped,
+                  );
+                }),
+              ],
+              { concurrency: "unbounded" },
+            ),
           api: {
             publish: (entry) =>
               Effect.sync(() => {
                 published.push(entry);
               }),
-            subscribe: <T extends SubscriberEntry>(subscriber: T) =>
+            subscribe: <T extends Subscriber>(subscriber: T) =>
               Effect.sync<ServiceDesignatorFromSubscriber<T>>(() => {
                 subscribed.push(subscriber);
                 switch (subscriber.kind) {
@@ -198,23 +209,24 @@ export const RegistryProxyLive = Layer.effect(
   }),
 );
 
+/** Generates a stable, variable-safe class name for an external Durable Object. */
 const externalDurableObjectClassName = (scriptName: string, className: string) =>
   `ExternalDurableObject_${NodeCrypto.createHash("sha256").update(scriptName).update(className).digest("hex").slice(0, 16)}`;
 
+/** Builds the worker modules for the registry proxy, including a pre-populated registry and proxy classes for each external Durable Object. */
 const buildWorkerModules = (
-  initialRegistry: ResolvedServiceMap,
-  durableObjects: ReadonlyArray<SubscriberEntry.DurableObject>,
+  targets: ResolvedTargetMap,
+  durableObjects: ReadonlyArray<Subscriber.DurableObject>,
 ) => {
-  const entryName = Object.keys(RegistryProxyWorker.modules)[0];
   const main = [
-    `import { makeExternalDurableObject, Services } from "./${entryName}";`,
-    `export { ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${entryName}";`,
-    `Services.set(${JSON.stringify(initialRegistry)});`,
+    `import { makeExternalDurableObject, Target } from "./${RegistryProxyWorker.main}";`,
+    `export { ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${RegistryProxyWorker.main}";`,
+    `Target.set(${JSON.stringify(targets)});`,
     `export default {`,
     `  async fetch(request) {`,
     `    if (request.method === "POST") {`,
     `      const data = await request.json();`,
-    `      Services.set(data);`,
+    `      Target.set(data);`,
     `      return new Response("ok");`,
     `    }`,
     `    return new Response("not found", { status: 404 });`,

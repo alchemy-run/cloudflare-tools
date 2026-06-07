@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Plugin from "../src/Plugin.ts";
 import * as PluginContext from "../src/PluginContext.ts";
 import type { RuntimeWorker } from "../src/RuntimeWorker.ts";
+import { SERVICE_USER_WORKER } from "../src/internal/constants.ts";
 
 const makeWorker = (overrides: Partial<RuntimeWorker> = {}): RuntimeWorker => ({
   name: "test",
@@ -35,7 +36,6 @@ describe("Plugin / PluginContext", () => {
       expect(greeter.api.greet("world")).toBe("hello, world!");
       const config = yield* ctx.config;
       expect(config.services).toEqual([{ name: "greeter:svc" }]);
-      expect(config.middlewares ?? []).toEqual([]);
     }).pipe(Effect.provide(GreeterLive)),
   );
 
@@ -88,7 +88,7 @@ describe("Plugin / PluginContext", () => {
       const lastMiddleware = middlewareServices[middlewareServices.length - 1];
       const lastBindings = (lastMiddleware as { worker: { bindings: Array<any> } }).worker.bindings;
       const upstream = lastBindings.find((b) => b.name === "NEXT");
-      expect(upstream?.service?.name).toBe("user");
+      expect(upstream?.service?.name).toBe(SERVICE_USER_WORKER);
     }),
   );
 

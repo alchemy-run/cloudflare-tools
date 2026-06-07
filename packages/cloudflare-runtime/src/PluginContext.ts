@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
+import { SERVICE_USER_WORKER } from "./internal/constants.ts";
 import type * as Plugin from "./Plugin.ts";
 import type { RuntimeError } from "./RuntimeError.shared.ts";
 import { ConfigError } from "./RuntimeError.shared.ts";
@@ -27,7 +28,7 @@ export class PluginContext extends Context.Service<
         services: Array<WorkerdConfig.Service>;
         extensions: Array<WorkerdConfig.Extension>;
       },
-      ConfigError
+      RuntimeError
     >;
   }
 >()("cloudflare-runtime/PluginContext") {}
@@ -75,7 +76,10 @@ export const make = (
                   {
                     name: middleware.upstreamBindingName,
                     service: {
-                      name: index < middlewares.length - 1 ? middlewares[index + 1].name : "user",
+                      name:
+                        index < middlewares.length - 1
+                          ? middlewares[index + 1].name
+                          : SERVICE_USER_WORKER,
                     },
                   },
                 ],
@@ -132,5 +136,7 @@ const isPlugin = <Identifier extends string>(
 ): entry is [Plugin.PluginIdentifier<Identifier>, Plugin.PluginBuilder<any>] =>
   entry[0].startsWith("cloudflare-runtime/plugin/");
 
-export const use = PluginContext.use.bind(PluginContext);
-export const useSync = PluginContext.useSync.bind(PluginContext);
+export const use = Effect.fn("PluginContext.use")(PluginContext.use.bind(PluginContext));
+export const useSync = Effect.fn("PluginContext.useSync")(
+  PluginContext.useSync.bind(PluginContext),
+);

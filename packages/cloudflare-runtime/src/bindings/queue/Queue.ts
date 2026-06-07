@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as QueueBrokerWorker from "worker:./QueueBroker.worker.ts";
-import { USER_WORKER_SERVICE_NAME } from "../../dev-registry/Constants.shared.ts";
-import { DevRegistryProxy } from "../../dev-registry/DevRegistryProxy.ts";
+import { SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import * as PluginContext from "../../PluginContext.ts";
+import { RegistryProxy } from "../../registry/RegistryProxy.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../../workerd/Config.ts";
 import type { QueueConsumer, QueueProducerEntry } from "./QueueOptions.shared.ts";
@@ -40,7 +40,7 @@ export const QueueLive = Layer.succeed(
   Queue.of(
     Effect.gen(function* () {
       const ctx = yield* PluginContext.PluginContext;
-      const proxy = yield* ctx.get(DevRegistryProxy);
+      const proxy = yield* ctx.get(RegistryProxy);
       const consumers = ctx.worker.queueConsumers ?? [];
       const producers: Array<QueueProducerEntry> = [];
 
@@ -58,16 +58,20 @@ export const QueueLive = Layer.succeed(
             detail: { queueName: consumer.queueName },
           });
         }
-        yield* proxy.api.registerOwnedQueue(
-          consumer.queueName,
-          queueServiceName(consumer.queueName),
-        );
+        yield* proxy.api.publish({
+          kind: "queue-consumer",
+          queueName: consumer.queueName,
+          service: queueServiceName(consumer.queueName),
+        });
       }
 
       const queueConsumerServiceDesignator = (queueName: string) =>
         consumers.find((consumer) => consumer.queueName === queueName)
           ? Effect.succeed<WorkerdConfig.ServiceDesignator>({ name: queueServiceName(queueName) })
-          : proxy.api.registerExternalQueue(queueName);
+          : proxy.api.subscribe({
+              kind: "queue-consumer",
+              queueName,
+            });
 
       /**
        * Build the workerd service for a single consumed queue. A single service both
@@ -98,7 +102,7 @@ export const QueueLive = Layer.succeed(
                 name: BINDING_QUEUE_BROKER,
                 durableObjectNamespace: { className: "QueueBroker" },
               },
-              { name: BINDING_QUEUE_USER_WORKER, service: { name: USER_WORKER_SERVICE_NAME } },
+              { name: BINDING_QUEUE_USER_WORKER, service: { name: SERVICE_USER_WORKER } },
               { name: BINDING_QUEUE_NAME, text: consumer.queueName },
               { name: BINDING_QUEUE_CONSUMER, json: JSON.stringify(consumer) },
               { name: BINDING_QUEUE_PRODUCERS, json: JSON.stringify(producers) },
@@ -154,7 +158,7 @@ export interface QueueProducerProps {
  */
 export const binding = (
   props: QueueProducerProps,
-): PluginContext.BindingHook<Queue | DevRegistryProxy> =>
+): PluginContext.BindingHook<Queue | RegistryProxy> =>
   Plugin.use(Queue, (queues) =>
     Effect.map(queues.api.registerProducer(props), (queue) => ({
       name: props.binding,

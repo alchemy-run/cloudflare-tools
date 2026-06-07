@@ -131,6 +131,7 @@ jobs:
           set -euo pipefail
           PKG_NAME=$(node -p "require('./package.json').name")
           rm -f *.tgz
+          bun run ../../scripts/pr-package.ts ${SHORT_SHA}
           bun pm pack --destination .
           tgz=$(ls *.tgz)
           echo "Publishing ${PKG_NAME} (${tgz}) with tags ${TAGS}"
@@ -255,12 +256,12 @@ jobs:
           BODY=$(cat /tmp/body.md)
           gh api -X POST "repos/${REPO}/commits/${SHA}/comments" -f body="$BODY"
 
-  # ── Cleanup on PR close (merged or not). ──────────────────────────────────
+  # ── Cleanup on PR close without merge. ────────────────────────────────────
   # Deletes the branch tag, pr-<number> tag, and short+long sha tags for every
   # commit in the PR across every package project. 404s are ignored (tag may
   # have been TTL'd or never set).
   cleanup:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

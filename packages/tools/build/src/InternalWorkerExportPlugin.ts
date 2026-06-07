@@ -74,6 +74,7 @@ export const InternalWorkerExportPlugin = (): rolldown.Plugin => {
             [
               ...imports,
               imports.length > 0 ? "" : undefined,
+              `export const main = ${JSON.stringify(chunk.fileName)};`,
               "export const modules = {",
               `  ${JSON.stringify(chunk.fileName)}: ${JSON.stringify(code)},`,
               ...moduleEntries,

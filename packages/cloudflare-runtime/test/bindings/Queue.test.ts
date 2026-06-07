@@ -1,7 +1,7 @@
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Queue from "../../src/bindings/queue/Queue.ts";
-import { localRuntimeLayer, localRuntimeWith, startTestWorker } from "../helpers/runtime.ts";
+import { localRuntimeLayer, startTestWorker, waitForRegistryEntry } from "../helpers/runtime.ts";
 
 // Combined producer + consumer worker. The `queue()` handler records every
 // delivered message into a module-global array, which the test reads back via
@@ -291,7 +291,7 @@ export default {
 };
 `;
 
-layer(localRuntimeWith({ temporaryRegistryPrefix: "queues-cross-registry-" }), {
+layer(localRuntimeLayer, {
   excludeTestServices: true,
 })("Queues binding cross-instance", (it) => {
   it.effect(
@@ -318,9 +318,7 @@ layer(localRuntimeWith({ temporaryRegistryPrefix: "queues-cross-registry-" }), {
           bindings: [Queue.binding({ binding: "QUEUE", queueName: "cross-queue" })],
         });
 
-        // Give the producer instance a moment to observe the consumer's
-        // dev-registry registration before sending.
-        yield* Effect.sleep("500 millis");
+        yield* waitForRegistryEntry({ kind: "queue-consumer", queueName: "cross-queue" });
         yield* producer.fetch("/", { method: "POST" });
 
         const received = yield* pollReceived(consumer.fetch, (r) => r.length >= 1, 15_000);

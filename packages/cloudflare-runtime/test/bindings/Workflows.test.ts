@@ -210,26 +210,6 @@ export default {
 };
 `;
 
-const startTwoWorkflowsWorker = () =>
-  startTestWorker({
-    name: "workflows-multi-test",
-    compatibilityDate: "2026-03-09",
-    compatibilityFlags: [],
-    modules: [{ name: "main.js", type: "ESModule", content: TWO_WORKFLOWS_SCRIPT }],
-    bindings: [
-      Workflows.local({
-        binding: "ALPHA_WORKFLOW",
-        workflowName: "ALPHA_WORKFLOW",
-        className: "AlphaWorkflow",
-      }),
-      Workflows.local({
-        binding: "BETA_WORKFLOW",
-        workflowName: "BETA_WORKFLOW",
-        className: "BetaWorkflow",
-      }),
-    ],
-  });
-
 const waitForStatus = (
   fetch: (path: string) => Effect.Effect<Response>,
   id: string,
@@ -372,7 +352,24 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
     "a worker can own two workflows without duplicating workflows:storage",
     () =>
       Effect.gen(function* () {
-        const { fetch } = yield* startTwoWorkflowsWorker();
+        const { fetch } = yield* startTestWorker({
+          name: "workflows-multi-test",
+          compatibilityDate: "2026-03-09",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: TWO_WORKFLOWS_SCRIPT }],
+          bindings: [
+            Workflows.local({
+              binding: "ALPHA_WORKFLOW",
+              workflowName: "ALPHA_WORKFLOW",
+              className: "AlphaWorkflow",
+            }),
+            Workflows.local({
+              binding: "BETA_WORKFLOW",
+              workflowName: "BETA_WORKFLOW",
+              className: "BetaWorkflow",
+            }),
+          ],
+        });
 
         const createRes = yield* fetch("/create");
         expect(createRes.status).toBe(200);

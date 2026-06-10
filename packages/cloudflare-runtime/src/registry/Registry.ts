@@ -103,7 +103,7 @@ export const RegistryLive = Layer.effect(
     ).pipe(
       Stream.tap((newValue) => SubscriptionRef.set(ref, newValue)),
       Stream.runDrain,
-      Effect.forkDetach,
+      Effect.forkScoped,
     );
 
     return Registry.of({

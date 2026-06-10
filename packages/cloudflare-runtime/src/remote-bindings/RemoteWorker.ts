@@ -20,7 +20,7 @@ export class RemoteWorker extends Context.Service<
   }
 >()("cloudflare-runtime/remote-bindings/RemoteWorker") {}
 
-export const make = Effect.fn(function* (accountId: string) {
+export const make = Effect.fn(function* (accountId: Effect.Effect<string>) {
   const http = yield* HttpClient.HttpClient;
   const access = yield* Access.Access;
 
@@ -32,7 +32,7 @@ export const make = Effect.fn(function* (accountId: string) {
     sandboxApi(
       "PreviewSubdomain",
       `Failed to get the workers.dev subdomain for account ${accountId}.`,
-      getSubdomain({ accountId }),
+      accountId.pipe(Effect.flatMap((accountId) => getSubdomain({ accountId }))),
     ),
   );
 
@@ -40,7 +40,7 @@ export const make = Effect.fn(function* (accountId: string) {
     const { token, exchangeUrl } = yield* sandboxApi(
       "PreviewSession",
       `Failed to create a preview session for account ${accountId}.`,
-      createSubdomainEdgePreviewSession({ accountId }),
+      createSubdomainEdgePreviewSession({ accountId: yield* accountId }),
     );
     if (!exchangeUrl) {
       return token;
@@ -76,7 +76,7 @@ export const make = Effect.fn(function* (accountId: string) {
       "PreviewUpload",
       `Failed to upload the script preview for "${options.name}".`,
       createScriptEdgePreview({
-        accountId,
+        accountId: yield* accountId,
         scriptName: options.name,
         cfPreviewUploadConfigToken,
         wranglerSessionConfig: { workersDev: true, minimalMode: true },
@@ -119,7 +119,8 @@ export const make = Effect.fn(function* (accountId: string) {
   });
 });
 
-export const layer = (accountId: string) => Layer.effect(RemoteWorker, make(accountId));
+export const layer = (accountId: Effect.Effect<string>) =>
+  Layer.effect(RemoteWorker, make(accountId));
 
 /**
  * Wrap a Cloudflare SDK call so that both typed failures and defects (the

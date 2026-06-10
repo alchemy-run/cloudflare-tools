@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
   AnalyticsEngine,
@@ -23,7 +24,7 @@ export interface RuntimeConfig {
 }
 
 export interface ApiConfig {
-  accountId: string;
+  accountId: string | Effect.Effect<string>;
 }
 
 export interface StorageConfig {
@@ -32,7 +33,9 @@ export interface StorageConfig {
 
 export const layerRemoteBindings = ({ accountId }: ApiConfig) =>
   RemoteBindings.RemoteBindingsLive.pipe(
-    Layer.provide(RemoteWorker.layer(accountId)),
+    Layer.provide(
+      RemoteWorker.layer(Effect.isEffect(accountId) ? accountId : Effect.succeed(accountId)),
+    ),
     Layer.provide(Access.layer),
   );
 

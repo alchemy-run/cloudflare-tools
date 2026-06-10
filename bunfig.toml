@@ -1,4 +1,8 @@
 [install]
 # Only install package versions published at least 3 days ago
 minimumReleaseAge = 259200 # seconds
-minimumReleaseAgeExcludes = ["@alchemy.run/node-utils"]
+minimumReleaseAgeExcludes = [
+  "@alchemy.run/node-utils",
+  "@distilled.cloud/core",
+  "@distilled.cloud/cloudflare",
+]

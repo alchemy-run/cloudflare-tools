@@ -49,13 +49,16 @@ jobs:
           filters: |
             cloudflare-rolldown-plugin:
               - 'packages/cloudflare-rolldown-plugin/**'
-            cloudflare-runtime:
               - 'packages/cloudflare-runtime/**'
-              - 'packages/cloudflare-rolldown-plugin/**'
-            cloudflare-vite-plugin:
               - 'packages/cloudflare-vite-plugin/**'
-              - 'packages/cloudflare-runtime/**'
+            cloudflare-runtime:
               - 'packages/cloudflare-rolldown-plugin/**'
+              - 'packages/cloudflare-runtime/**'
+              - 'packages/cloudflare-vite-plugin/**'
+            cloudflare-vite-plugin:
+              - 'packages/cloudflare-rolldown-plugin/**'
+              - 'packages/cloudflare-runtime/**'
+              - 'packages/cloudflare-vite-plugin/**'
 
   # ── Compute tags once so every matrix job + the comment use the same set. ─
   tags:

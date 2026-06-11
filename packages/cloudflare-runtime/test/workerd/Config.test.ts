@@ -74,6 +74,31 @@ describe("workerd/Config", () => {
       expect(buffer.byteLength).toBeGreaterThan(0);
     });
 
+    it("encodes container-backed Durable Object namespaces", () => {
+      const config: WorkerdConfig.Config = {
+        services: [
+          {
+            name: "user",
+            worker: {
+              compatibilityDate: "2026-03-10",
+              modules: [{ name: "main.js", esModule: "export default {}" }],
+              durableObjectNamespaces: [
+                { className: "Foo", uniqueKey: "foo", container: { imageName: "my-image:dev" } },
+              ],
+              containerEngine: {
+                localDocker: {
+                  socketPath: "unix:///var/run/docker.sock",
+                  containerEgressInterceptorImage: "cloudflare/proxy-everything:latest",
+                },
+              },
+            },
+          },
+        ],
+      };
+      const buffer = serializeConfig(config);
+      expect(buffer.byteLength).toBeGreaterThan(0);
+    });
+
     it("handles extensions and disk services", () => {
       const config: WorkerdConfig.Config = {
         services: [{ name: "files", disk: { path: "/tmp", writable: false } }],

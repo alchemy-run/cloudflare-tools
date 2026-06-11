@@ -1,6 +1,10 @@
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
 import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { BindingHook } from "./PluginContext.ts";
+import type {
+  Worker_ContainerEngine,
+  Worker_DurableObjectNamespace_ContainerOptions,
+} from "./workerd/Config.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
@@ -11,6 +15,11 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly assets?: Assets;
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  /**
+   * Container engine workerd uses to start containers for Durable Object
+   * namespaces that declare a `container` attachment (local Docker socket).
+   */
+  readonly containerEngine?: Worker_ContainerEngine;
   /**
    * Queues this worker consumes via its `queue()` handler. Each consumed
    * queue gets an in-memory broker hosted in this worker's process; producers
@@ -51,4 +60,10 @@ export interface DurableObjectNamespace {
   sql: boolean;
   uniqueKey?: string;
   ephemeralLocal?: true;
+  /**
+   * Attach a container to every Durable Object in this namespace. workerd
+   * starts one per DO instance via the worker's `containerEngine` and exposes
+   * it as `ctx.container`.
+   */
+  container?: Worker_DurableObjectNamespace_ContainerOptions;
 }

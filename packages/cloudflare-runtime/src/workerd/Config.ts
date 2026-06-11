@@ -63,6 +63,12 @@ export interface ServiceDesignator {
 
 export type Worker_DockerConfiguration = {
   socketPath: string;
+  /**
+   * Docker image for the container egress interceptor sidecar. workerd uses it
+   * to intercept containers' outbound traffic and route it through workerd for
+   * egress mappings. See https://hub.docker.com/r/cloudflare/proxy-everything.
+   */
+  containerEgressInterceptorImage?: string;
 };
 
 export type Worker_ContainerEngine = {

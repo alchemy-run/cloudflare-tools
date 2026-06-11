@@ -67,10 +67,12 @@ export const RuntimeLive = Layer.effect(
                       namespace.uniqueKey ??
                       defaultDurableObjectUniqueKey(worker.name, namespace.className),
                     ephemeralLocal: namespace.ephemeralLocal,
+                    container: namespace.container,
                   })),
                   durableObjectStorage: {
                     localDisk: storage.name,
                   },
+                  containerEngine: worker.containerEngine,
                 },
               },
               ...services,

@@ -60,5 +60,34 @@ export function workerEnvironments(options: CloudflarePluginOptions): {
 } {
   const entry = options.viteEnvironment?.name ?? "ssr";
   const children = options.viteEnvironment?.childEnvironments ?? [];
+
+  // `client` is Vite's reserved browser environment — it must never be given
+  // Worker config. Children must be distinct and must not collide with the
+  // entry, since each environment name becomes a computed key in the generated
+  // config (a collision would silently overwrite one env with another's
+  // settings). Mirrors the validation in `@cloudflare/vite-plugin`.
+  if (entry === "client") {
+    throw new Error(
+      `[cloudflare] viteEnvironment.name cannot be "client" (the reserved browser environment).`,
+    );
+  }
+  for (const child of children) {
+    if (child === "client") {
+      throw new Error(
+        `[cloudflare] viteEnvironment.childEnvironments cannot include "client" (the reserved browser environment).`,
+      );
+    }
+    if (child === entry) {
+      throw new Error(
+        `[cloudflare] viteEnvironment.childEnvironments cannot include the entry environment "${entry}".`,
+      );
+    }
+  }
+  if (new Set(children).size !== children.length) {
+    throw new Error(
+      `[cloudflare] viteEnvironment.childEnvironments contains duplicate names: ${JSON.stringify(children)}`,
+    );
+  }
+
   return { entry, children, all: [entry, ...children] };
 }

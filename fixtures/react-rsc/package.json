@@ -1,0 +1,27 @@
+{
+  "name": "@fixtures/react-rsc",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 3100",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-rsc": "latest",
+    "rsc-html-stream": "^0.0.7",
+    "vite": "catalog:"
+  }
+}

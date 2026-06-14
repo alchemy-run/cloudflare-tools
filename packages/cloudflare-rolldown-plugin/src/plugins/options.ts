@@ -80,6 +80,13 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         // are discovered lazily and re-optimized mid-session — which re-hashes
         // and duplicates singletons like React (a null hooks dispatcher).
         const resolveEnvironmentEntries = (name: string): Array<string> | undefined => {
+          // Single-worker (non-RSC) default: preserve the original behavior
+          // exactly — the optimizer's scan root comes only from an explicit
+          // `main`, otherwise it's left to Vite's auto-discovery. The per-env
+          // input fallback below applies only to multi-environment topologies.
+          if (childEnvs.length === 0) {
+            return pluginOptions.main ? [vite.normalizePath(pluginOptions.main)] : undefined;
+          }
           const rawInput =
             name === entryEnv
               ? (pluginOptions.main ??

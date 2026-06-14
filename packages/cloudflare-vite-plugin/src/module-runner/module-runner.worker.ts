@@ -57,7 +57,12 @@ export class ModuleRunnerDO extends DurableObject<Env> {
     globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__ = async (environmentName: string, id: string) => {
       const moduleRunner = this.moduleRunners.get(environmentName);
       if (!moduleRunner) {
-        throw new Error(`Module runner not initialized for environment: "${environmentName}"`);
+        throw new Error(
+          `Module runner not initialized for environment: "${environmentName}". ` +
+            `If this is a child environment loaded at runtime (e.g. an RSC app's ` +
+            `"ssr" environment), ensure it's listed in the plugin's ` +
+            `viteEnvironment.childEnvironments.`,
+        );
       }
       return callbacks.run(this.env, () => moduleRunner.import(id));
     };

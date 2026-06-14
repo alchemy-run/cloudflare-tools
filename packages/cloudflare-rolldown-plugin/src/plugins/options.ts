@@ -1,7 +1,7 @@
 import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
-import type { CloudflarePluginOptions } from "../options.js";
+import { type CloudflarePluginOptions, workerEnvironments } from "../options.js";
 import { hasNodejsCompat } from "../utils.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
@@ -55,10 +55,11 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
       async config(userConfig) {
         const vite = await import("vite");
         const isRolldown = "rolldownVersion" in this.meta;
+        const { entry: entryEnv, children: childEnvs } = workerEnvironments(pluginOptions);
         input = normalizeInput(
           pluginOptions.main ??
-            userConfig.environments?.ssr?.build?.rolldownOptions?.input ??
-            userConfig.environments?.ssr?.build?.rollupOptions?.input ??
+            userConfig.environments?.[entryEnv]?.build?.rolldownOptions?.input ??
+            userConfig.environments?.[entryEnv]?.build?.rollupOptions?.input ??
             {},
         );
         const rollupOptions: vite.Rollup.RollupOptions = {
@@ -70,8 +71,115 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
           process.env.NODE_ENV || userConfig.mode || "production",
         );
         const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
+
+        // The dep-prebundle scanner for each Worker environment must be rooted
+        // at THAT environment's own entry, so its whole module graph (e.g. an
+        // RSC app's `ssr` env pulling react-dom/server + react) is bundled in
+        // the initial optimize pass. Sharing one `entries` (or one config
+        // object) across envs leaves children with no scan root, so their deps
+        // are discovered lazily and re-optimized mid-session — which re-hashes
+        // and duplicates singletons like React (a null hooks dispatcher).
+        const resolveEnvironmentEntries = (name: string): Array<string> | undefined => {
+          const rawInput =
+            name === entryEnv
+              ? (pluginOptions.main ??
+                userConfig.environments?.[name]?.build?.rolldownOptions?.input ??
+                userConfig.environments?.[name]?.build?.rollupOptions?.input)
+              : (userConfig.environments?.[name]?.build?.rolldownOptions?.input ??
+                userConfig.environments?.[name]?.build?.rollupOptions?.input ??
+                pluginOptions.main);
+          if (!rawInput) return undefined;
+          const values =
+            typeof rawInput === "string"
+              ? [rawInput]
+              : Array.isArray(rawInput)
+                ? rawInput
+                : Object.values(rawInput);
+          return values.length > 0 ? values.map((value) => vite.normalizePath(value)) : undefined;
+        };
+
+        // The Worker treatment (workerd resolve conditions + dependency
+        // pre-bundling) applies to the entry environment AND every child
+        // environment it loads at runtime — without `noDiscovery: false` the
+        // child/entry envs get Vite's throwing deps optimizer, which breaks
+        // RSC dev (`registerMissingImport is not supported in dev <env>`). A
+        // fresh config object is built per environment so each can carry its
+        // own `optimizeDeps.entries` without aliasing the others.
+        const makeWorkerEnvironment = (
+          name: string,
+          { isEntry }: { isEntry: boolean },
+        ): vite.EnvironmentOptions => ({
+          resolve: {
+            noExternal: true,
+            conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
+          },
+          optimizeDeps: {
+            noDiscovery: false,
+            ignoreOutdatedRequests: true,
+            entries: resolveEnvironmentEntries(name),
+            ...(isRolldown
+              ? {
+                  rolldownOptions: {
+                    platform: "neutral",
+                    resolve: {
+                      conditionNames: [
+                        ...DEFAULT_RESOLVE_CONDITION_NAMES,
+                        "development|production",
+                      ],
+                      mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                      extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                    },
+                    transform: {
+                      target: TARGET,
+                      define,
+                    },
+                  },
+                }
+              : {
+                  esbuildOptions: {
+                    platform: "neutral",
+                    conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
+                    resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
+                    mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                    target: TARGET,
+                    define,
+                  },
+                }),
+          },
+          keepProcessEnv: true,
+          // The entry environment owns the Worker's build input and server
+          // output directory; children (e.g. `ssr`) keep their own build config
+          // from the framework plugin (`@vitejs/plugin-rsc`).
+          ...(isEntry
+            ? {
+                build: {
+                  ssr: true,
+                  target: TARGET,
+                  emitAssets: true,
+                  copyPublicDir: false,
+                  outDir: getOutputDirectory(userConfig, "server"),
+                  ...(isRolldown
+                    ? {
+                        rolldownOptions: {
+                          ...rollupOptions,
+                          platform: "neutral",
+                          resolve: {
+                            mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                            extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                          },
+                        },
+                      }
+                    : { rollupOptions }),
+                },
+              }
+            : {}),
+        });
+
         return {
           appType,
+          // Legacy top-level `ssr` namespace: a baseline for any SSR-kind env
+          // that doesn't override. Each Worker env sets its own `resolve`
+          // below; this stays as a harmless default.
           ssr: {
             noExternal: true,
             resolve: {
@@ -94,65 +202,10 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 outDir: getOutputDirectory(userConfig, "client"),
               },
             },
-            ssr: {
-              resolve: {
-                noExternal: true,
-                conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
-              },
-              build: {
-                ssr: true,
-                target: TARGET,
-                emitAssets: true,
-                copyPublicDir: false,
-                outDir: getOutputDirectory(userConfig, "server"),
-                ...(isRolldown
-                  ? {
-                      rolldownOptions: {
-                        ...rollupOptions,
-                        platform: "neutral",
-                        resolve: {
-                          mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                          extensions: DEFAULT_RESOLVE_EXTENSIONS,
-                        },
-                      },
-                    }
-                  : { rollupOptions }),
-              },
-              optimizeDeps: {
-                noDiscovery: false,
-                ignoreOutdatedRequests: true,
-                entries: pluginOptions.main ? vite.normalizePath(pluginOptions.main) : undefined,
-                ...(isRolldown
-                  ? {
-                      rolldownOptions: {
-                        platform: "neutral",
-                        resolve: {
-                          conditionNames: [
-                            ...DEFAULT_RESOLVE_CONDITION_NAMES,
-                            "development|production",
-                          ],
-                          mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                          extensions: DEFAULT_RESOLVE_EXTENSIONS,
-                        },
-                        transform: {
-                          target: TARGET,
-                          define,
-                        },
-                      },
-                    }
-                  : {
-                      esbuildOptions: {
-                        platform: "neutral",
-                        conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
-                        resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
-                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                        target: TARGET,
-                        define,
-                      },
-                    }),
-              },
-              keepProcessEnv: true,
-            },
+            [entryEnv]: makeWorkerEnvironment(entryEnv, { isEntry: true }),
+            ...Object.fromEntries(
+              childEnvs.map((name) => [name, makeWorkerEnvironment(name, { isEntry: false })]),
+            ),
           },
         };
       },

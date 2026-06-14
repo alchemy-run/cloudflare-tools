@@ -1,3 +1,4 @@
+import { workerEnvironments } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import type { BindingHooks, Module, RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
 import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
 import {
@@ -103,7 +104,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         className: "ModuleRunnerDO",
       }),
       Json.local("__DISTILLED_ENVIRONMENT__", {
-        environmentName: "ssr",
+        // The Worker runs the entry environment (the `rsc` env for RSC apps,
+        // `ssr` otherwise); its module runner imports the entry from here.
+        environmentName: workerEnvironments(options).entry,
         entryId: entry.id,
         entryName: entry.name,
       }),

@@ -42,6 +42,17 @@ export default defineConfig({
       worker: { name: "fixtures-react-router-rsc" },
     }),
   ],
+  environments: {
+    // A second `ssr` input the worker loads on demand via
+    // loadModule("ssr", "worker-ssr") — alongside the framework's `index`.
+    ssr: {
+      build: {
+        rollupOptions: {
+          input: { "worker-ssr": "./react-router-vite/worker-ssr.tsx" },
+        },
+      },
+    },
+  },
   optimizeDeps: {
     include: ["react-router", "react-router/internal/react-server-client"],
   },

@@ -37,9 +37,8 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
       // The worker started cleanly and is reachable on its socket.
       expect(baseUrl.href).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
       const response = yield* Effect.promise(() => fetch(baseUrl));
-      // Either 200 (asset served) or a structured non-200 — both indicate the
-      // binding wired up without crashing the worker config.
-      expect([200, 404, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
+      expect(yield* Effect.promise(() => response.text())).toBe("<h1>home</h1>");
     }),
   );
 

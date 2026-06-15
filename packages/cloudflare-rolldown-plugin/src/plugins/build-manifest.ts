@@ -102,6 +102,11 @@ function listModules(dir: string, root: string): Array<DistilledWorkerModule> {
   return modules;
 }
 
+function getManifestDir(entryOutDir: string | undefined, clientOutDir: string | undefined) {
+  const outputRoot = entryOutDir ?? clientOutDir;
+  return outputRoot ? path.dirname(outputRoot) : undefined;
+}
+
 /**
  * Emits the build manifest after a production build.
  *
@@ -133,10 +138,21 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
     // Empty each Worker environment's output directory before the build writes,
     // so the on-disk module walk reflects only this build's output.
     configResolved(config) {
-      for (const name of workerEnvNames) {
+      const resolveOutDir = (name: string): string | undefined => {
         const outDir = config.environments[name]?.build.outDir;
+        return outDir ? path.resolve(config.root, outDir) : undefined;
+      };
+      const manifestDir = getManifestDir(resolveOutDir(entry), resolveOutDir("client"));
+      if (manifestDir) {
+        // A plain Vite SPA build does not run the app builder hooks, so remove
+        // any stale manifest before the build starts. Builds with a Worker will
+        // write a fresh manifest later in buildApp.
+        fs.rmSync(path.join(manifestDir, BUILD_MANIFEST_NAME), { force: true });
+      }
+      for (const name of workerEnvNames) {
+        const outDir = resolveOutDir(name);
         if (outDir) {
-          fs.rmSync(path.resolve(config.root, outDir), { recursive: true, force: true });
+          fs.rmSync(outDir, { recursive: true, force: true });
         }
       }
     },
@@ -179,9 +195,8 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
         // the client output directly under this root (see `getOutputDirectory`),
         // so module paths resolve relative to it and the framework's
         // cross-environment imports stay intact.
-        const outputRoot = entryOutDir ?? clientOutDir;
-        if (!outputRoot) return;
-        const manifestDir = path.dirname(outputRoot);
+        const manifestDir = getManifestDir(entryOutDir, clientOutDir);
+        if (!manifestDir) return;
         const manifestPath = path.join(manifestDir, BUILD_MANIFEST_NAME);
 
         // Start from a clean slate: a successful build emits a fresh manifest or,

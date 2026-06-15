@@ -1,6 +1,7 @@
 import type { CloudflarePluginOptions } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import {
   additionalModulesPlugin,
+  buildManifestPlugin,
   cloudflareExternalsPlugin,
   nodejsAlsPlugin,
   nodejsImportWarningPlugin,
@@ -44,6 +45,7 @@ export default function cloudflareVitePlugin(
         return { rsc: { serverHandler: false } } as vite.UserConfig;
       },
     } as vite.Plugin,
+    buildManifestPlugin(options),
     dev(options),
   ];
 }

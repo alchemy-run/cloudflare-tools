@@ -26,7 +26,7 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
   it.effect("registers an assets:worker service when worker.assets is configured", () =>
     Effect.gen(function* () {
       const dir = yield* writeFixture();
-      const { baseUrl } = yield* startTestWorker({
+      const worker = yield* startTestWorker({
         name: "assets-bound",
         compatibilityDate: "2026-03-10",
         compatibilityFlags: [],
@@ -34,11 +34,8 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         assets: { directory: dir },
         bindings: [Assets.local("ASSETS")],
       });
-      // The worker started cleanly and is reachable on its socket.
-      expect(baseUrl.href).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
-      const response = yield* Effect.promise(() => fetch(baseUrl));
-      expect(response.status).toBe(200);
-      expect(yield* Effect.promise(() => response.text())).toBe("<h1>home</h1>");
+      const text = yield* worker.fetchText("/");
+      expect(text).toBe("<h1>home</h1>");
     }),
   );
 

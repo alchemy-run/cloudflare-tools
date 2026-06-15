@@ -1,10 +1,7 @@
-import {
+// Re-export the asset-worker so that its contents gets compiled into cloudflare-runtime.
+// AssetWorkerInner must be explicitly re-exported so that the bundled module exposes it
+// via ctx.exports (enabled by the enable_ctx_exports compat flag).
+export {
   AssetWorkerInner,
-  type Env,
+  default,
 } from "@distilled.cloud/vendor-workers-shared/workers/asset-worker";
-
-export default class LocalAssetWorker extends AssetWorkerInner<Env> {
-  override fetch(request: Request): Promise<Response> {
-    return super.fetch(request);
-  }
-}

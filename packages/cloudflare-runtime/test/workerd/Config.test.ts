@@ -1,5 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
+import { Message } from "capnp-es";
 import * as WorkerdConfig from "../../src/workerd/Config.ts";
+import { Config as CapnpConfig } from "../../src/workerd/internal/config.capnp.ts";
 import { serializeConfig } from "../../src/workerd/internal/config.serialize.ts";
 
 describe("workerd/Config", () => {
@@ -109,6 +111,46 @@ describe("workerd/Config", () => {
           ],
         }),
       ).toThrow(/services\.0\.worker\.bindings\.0\.json/);
+    });
+
+    it("round-trips the container engine and per-DO container image", () => {
+      const config: WorkerdConfig.Config = {
+        services: [
+          {
+            name: "user",
+            worker: {
+              compatibilityDate: "2026-03-10",
+              modules: [{ name: "main.js", esModule: "export default {}" }],
+              durableObjectNamespaces: [
+                {
+                  className: "MyContainer",
+                  uniqueKey: "user-MyContainer",
+                  container: { imageName: "cloudflare-dev/mycontainer:abc12345" },
+                },
+              ],
+              containerEngine: {
+                localDocker: {
+                  socketPath: "unix:///var/run/docker.sock",
+                  containerEgressInterceptorImage: "cloudflare/proxy-everything:test",
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      const buffer = serializeConfig(config);
+      const decoded = new Message(buffer, false).getRoot(CapnpConfig);
+      const worker = decoded.services.get(0).worker;
+
+      expect(worker.containerEngine.localDocker.socketPath).toBe("unix:///var/run/docker.sock");
+      expect(worker.containerEngine.localDocker.containerEgressInterceptorImage).toBe(
+        "cloudflare/proxy-everything:test",
+      );
+
+      const namespace = worker.durableObjectNamespaces.get(0);
+      expect(namespace.className).toBe("MyContainer");
+      expect(namespace.container.imageName).toBe("cloudflare-dev/mycontainer:abc12345");
     });
 
     it("throws a useful error when a key does not exist on the capnp struct", () => {

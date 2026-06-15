@@ -10,6 +10,7 @@ import {
   SendEmail,
   Workflows,
 } from "./bindings/index.ts";
+import * as Docker from "./Docker.ts";
 import { Globals, Internet, Loopback, LoopbackServer, Storage } from "./globals/index.ts";
 import * as Paths from "./internal/Paths.ts";
 import * as WorkerProxy from "./proxy/WorkerProxy.ts";
@@ -92,5 +93,6 @@ export const layerRuntime = (config: RuntimeConfig) =>
     Layer.provide(Internet.InternetLive),
     Layer.provideMerge(layerRegistry()),
     Layer.provide(Paths.PathsLive),
+    Layer.provide(Docker.DockerLive),
     Layer.provide(Workerd.WorkerdLive),
   );

@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Workflows from "../../src/bindings/workflows/Workflows.ts";
+import * as Docker from "../../src/Docker.ts";
 import * as Globals from "../../src/globals/Globals.ts";
 import * as Internet from "../../src/globals/Internet.ts";
 import * as Storage from "../../src/globals/Storage.ts";
@@ -62,6 +63,7 @@ describe("Workflows binding", () => {
           Layer.provide(Internet.InternetLive),
           Layer.provideMerge(RuntimeServices.layerRegistry()),
           Layer.provide(Paths.PathsLive),
+          Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
           Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
         );

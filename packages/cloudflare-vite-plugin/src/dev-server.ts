@@ -1,4 +1,9 @@
-import type { BindingHooks, Module, RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
+import type {
+  BindingHooks,
+  ContainersConfig,
+  Module,
+  RuntimeServices,
+} from "@distilled.cloud/cloudflare-runtime";
 import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
 import {
   DurableObjectNamespace,
@@ -61,13 +66,14 @@ const importPlatformServices = Layer.unwrap(
   }),
 );
 
-export const createDefaultContext = async () => {
+export const createDefaultContext = async (containers?: ContainersConfig) => {
   const scope = Scope.makeUnsafe();
 
   return await layerRuntime({
     api: {
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
+    containers,
   }).pipe(
     Layer.provide(
       Layer.mergeAll(Credentials.fromEnv(), importPlatformServices, FetchHttpClient.layer),

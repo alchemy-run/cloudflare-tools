@@ -194,7 +194,12 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             },
           },
           builder:
-            appType === "spa"
+            // Multi-environment (RSC) topologies are orchestrated by the
+            // framework plugin's own multi-pass `buildApp` (e.g.
+            // `@vitejs/plugin-rsc`). Defer to it; setting our own here rebuilds
+            // every environment on top of the framework's passes. The
+            // single-worker path keeps the explicit per-environment builder.
+            appType === "spa" || childEnvs.length > 0
               ? undefined
               : {
                   buildApp: async (app) => {

@@ -34,8 +34,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
           createEnvironment(name: string, config: vite.ResolvedConfig) {
             const hasConfigureServer = config.plugins.some(
               (plugin) =>
-                plugin.name === "distilled-cloudflare:dev" &&
-                plugin.configureServer !== undefined,
+                plugin.name === "distilled-cloudflare:dev" && plugin.configureServer !== undefined,
             );
             if (!hasConfigureServer) {
               return vite.createRunnableDevEnvironment(name, config);

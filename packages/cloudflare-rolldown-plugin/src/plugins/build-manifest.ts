@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type * as vite from "vite";
 import type { CloudflarePluginOptions } from "../options.js";
 import { workerEnvironments } from "../options.js";
+import { MODULE_RULES } from "./additional-modules.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
 /** Filename of the build manifest, written to the build output root. */
@@ -19,8 +20,16 @@ export const BUILD_MANIFEST_NAME = "__distilled-build.json";
  * every child environment it loads at runtime (e.g. an RSC app's `ssr` output,
  * pulled in via `import("../../ssr/index.js")`). Their relative layout is
  * preserved on disk, so those cross-environment imports resolve once the set is
- * uploaded as one Worker. Module kind is inferred from the file extension
- * (`.js`/`.mjs` → ES module, `.wasm` → compiled Wasm).
+ * uploaded as one Worker. Module kind is inferred from the file extension —
+ * `.js`/`.mjs` are ES modules and the {@link MODULE_RULES} extensions map to
+ * their Cloudflare module type (`.wasm` → Wasm, `.bin` → Data, `.txt`/`.html`/
+ * `.sql` → Text).
+ *
+ * The manifest describes only the *build* output. Deploy-time inputs the build
+ * doesn't own — bindings, secrets, Durable Object classes and migrations,
+ * source maps — are the deployer's responsibility. `compatibilityDate` and
+ * `compatibilityFlags` record what the Worker was *compiled* against and are
+ * authoritative: a deployer must deploy against the same values.
  */
 export interface DistilledBuildManifest {
   version: 1;
@@ -38,9 +47,20 @@ export interface DistilledBuildManifest {
   };
 }
 
-const MODULE_EXTENSIONS = new Set([".js", ".mjs", ".wasm"]);
-
 const toPosix = (p: string) => p.split(path.sep).join("/");
+
+/**
+ * A file is a Worker module if it's an ES module (`.js`/`.mjs`) or matches one
+ * of the Cloudflare additional-module rules — the same rules the build uses to
+ * *emit* those modules, so the two never drift.
+ */
+function isWorkerModuleFile(name: string): boolean {
+  return (
+    name.endsWith(".js") ||
+    name.endsWith(".mjs") ||
+    MODULE_RULES.some((rule) => rule.pattern.test(name))
+  );
+}
 
 /** Recursively list the Worker module files under `dir`, relative to `root`. */
 function listModules(dir: string, root: string): Array<string> {
@@ -50,7 +70,7 @@ function listModules(dir: string, root: string): Array<string> {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (MODULE_EXTENSIONS.has(path.extname(entry.name))) {
+      } else if (isWorkerModuleFile(entry.name)) {
         modules.push(toPosix(path.relative(root, full)));
       }
     }
@@ -62,20 +82,24 @@ function listModules(dir: string, root: string): Array<string> {
 /**
  * Emits the build manifest after a production build.
  *
- * Runs in the `buildApp` hook with `order: "post"` so it fires after the
- * framework plugin's build orchestration (e.g. `@vitejs/plugin-rsc`'s
- * multi-pass `buildApp`), once every environment has been written. Mirrors how
- * the official `@cloudflare/vite-plugin` writes its deploy config, but as a
- * wrangler-free manifest the deployer consumes directly.
+ * The Worker module set is read from disk (the on-disk tree includes files the
+ * framework writes outside the rollup bundle, e.g. plugin-rsc's assets manifest
+ * and encryption key). To keep that read exact, the Worker environment output
+ * directories are emptied up front in `configResolved` — Vite's own
+ * `emptyOutDir` is skipped for these environments because the framework's
+ * non-writing scan passes mark them "rendered" first, which would otherwise let
+ * stale files from previous builds leak into the manifest.
  *
- * The Worker entry is the chunk built from the distilled worker-entry wrapper
- * (identified by its module marker). The module set is every JS/Wasm file
- * across the entry and child environment outputs; static assets are the
- * `client` output. Builds with no Worker entry (a pure SPA / assets-only site)
- * emit no manifest.
+ * The manifest is written in the `buildApp` hook with `order: "post"`, after
+ * every environment (including the framework's multi-pass orchestration) has
+ * been written. The Worker entry is the chunk built from the distilled
+ * worker-entry wrapper (identified by its module marker, captured on the real
+ * write). A build with no Worker entry (a pure SPA / assets-only site) emits no
+ * manifest, and any stale manifest from a previous build is removed.
  */
 export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plugin {
   const { entry, children } = workerEnvironments(options);
+  const workerEnvNames = [entry, ...children];
   const wantedEntryName = options.main ? path.parse(options.main).name : undefined;
   let mainFileName: string | undefined;
 
@@ -83,6 +107,16 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
     name: "distilled-cloudflare:build-manifest",
     apply: "build",
     sharedDuringBuild: true,
+    // Empty each Worker environment's output directory before the build writes,
+    // so the on-disk module walk reflects only this build's output.
+    configResolved(config) {
+      for (const name of workerEnvNames) {
+        const outDir = config.environments[name]?.build.outDir;
+        if (outDir) {
+          fs.rmSync(path.resolve(config.root, outDir), { recursive: true, force: true });
+        }
+      }
+    },
     // Capture the entry chunk on a real write only — `writeBundle` doesn't fire
     // for the framework's non-writing scan passes (`build.write === false`), so
     // the filename always reflects the final emitted Worker.
@@ -106,10 +140,6 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
     buildApp: {
       order: "post",
       async handler(builder) {
-        // No Worker entry was emitted — a pure SPA / assets-only build has no
-        // Worker to describe, so there's nothing to write.
-        if (!mainFileName) return;
-
         const resolveOutDir = (name: string): string | undefined => {
           const environment = builder.environments[name];
           return environment
@@ -126,8 +156,17 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
         // `getOutputDirectory`), so module paths resolve relative to it and the
         // framework's cross-environment imports stay intact.
         const manifestDir = path.dirname(entryOutDir);
+        const manifestPath = path.join(manifestDir, BUILD_MANIFEST_NAME);
 
-        const modules = [entry, ...children]
+        // Start from a clean slate: a successful build emits a fresh manifest or
+        // none, never a stale one.
+        fs.rmSync(manifestPath, { force: true });
+
+        // No Worker entry was emitted — a pure SPA / assets-only build has no
+        // Worker to describe.
+        if (!mainFileName) return;
+
+        const modules = workerEnvNames
           .map(resolveOutDir)
           .filter((dir): dir is string => dir !== undefined)
           .flatMap((dir) => listModules(dir, manifestDir));
@@ -163,10 +202,7 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
             : undefined,
         };
 
-        fs.writeFileSync(
-          path.join(manifestDir, BUILD_MANIFEST_NAME),
-          `${JSON.stringify(manifest, null, 2)}\n`,
-        );
+        fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
       },
     },
   };

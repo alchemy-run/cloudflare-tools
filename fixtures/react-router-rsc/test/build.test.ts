@@ -12,7 +12,14 @@ const distDir = path.join(fixtureDir, "dist");
 
 type Manifest = {
   version: number;
-  worker: { main: string; modules: Array<string>; compatibilityFlags?: Array<string> };
+  workers: {
+    app: {
+      main: string;
+      modules: Array<{ path: string; type: string }>;
+      compatibilityDate?: string;
+      compatibilityFlags?: Array<string>;
+    };
+  };
   assets?: { directory: string };
 };
 let manifest: Manifest;
@@ -27,44 +34,96 @@ beforeAll(() => {
 }, 120_000);
 
 test("emits a build manifest describing the worker entry and assets", () => {
-  expect(manifest.version).toBe(1);
-  expect(manifest.worker.main).toBeTruthy();
-  expect(manifest.worker.modules).toContain(manifest.worker.main);
-  expect(manifest.worker.modules.length).toBeGreaterThan(0);
+  const worker = manifest.workers.app;
+
+  expect(manifest.version).toBe(2);
+  // The framework also emits `server/index.js`; the main entry must be the
+  // distilled worker-entry wrapper captured from the real write pass.
+  expect(worker.main).toBe("server/entry.worker.js");
+  expect(worker.modules).toContainEqual({ path: worker.main, type: "esm" });
+  expect(worker.modules.length).toBeGreaterThan(0);
+  expect(worker.modules.every((module) => module.path && module.type)).toBe(true);
   expect(manifest.assets?.directory).toBe("client");
-  expect(manifest.worker.compatibilityFlags).toContain("nodejs_compat");
+  expect(worker.compatibilityDate).toBe("2026-03-10");
+  expect(worker.compatibilityFlags).toContain("nodejs_compat");
 });
 
 test("folds the worker-loaded ssr output into the worker module set", () => {
+  const modulePaths = manifest.workers.app.modules.map((module) => module.path);
+
   // The single-worker RSC topology loads the `ssr` env at runtime via
   // loadModule (`import("../../ssr/...")`), so its output must ship as part of
   // the same worker — both the entry (`server/`) and child (`ssr/`) outputs.
-  expect(manifest.worker.modules.some((module) => module.startsWith("server/"))).toBe(true);
-  expect(manifest.worker.modules.some((module) => module.startsWith("ssr/"))).toBe(true);
-  expect(manifest.worker.modules).toContain("ssr/worker-ssr.js");
+  expect(modulePaths.some((module) => module.startsWith("server/"))).toBe(true);
+  expect(modulePaths.some((module) => module.startsWith("ssr/"))).toBe(true);
+  expect(modulePaths).toContain("ssr/worker-ssr.js");
+});
+
+test("worker module entries are sorted and unique", () => {
+  const modulePaths = manifest.workers.app.modules.map((module) => module.path);
+
+  expect(modulePaths).toEqual([...modulePaths].sort((a, b) => a.localeCompare(b)));
+  expect(new Set(modulePaths).size).toBe(modulePaths.length);
 });
 
 test("worker module set is self-contained (every relative import resolves)", () => {
-  const moduleSet = new Set(manifest.worker.modules);
+  const moduleSet = new Set(manifest.workers.app.modules.map((module) => module.path));
   const transpiler = new Bun.Transpiler({ loader: "js" });
   const unresolved: Array<string> = [];
-  for (const module of manifest.worker.modules) {
+  for (const module of manifest.workers.app.modules) {
+    if (module.type !== "esm") continue;
     for (const imported of transpiler.scanImports(
-      fs.readFileSync(path.join(distDir, module), "utf8"),
+      fs.readFileSync(path.join(distDir, module.path), "utf8"),
     )) {
       if (!imported.path.startsWith(".")) continue;
       const resolved = path.posix.normalize(
-        path.posix.join(path.posix.dirname(module), imported.path),
+        path.posix.join(path.posix.dirname(module.path), imported.path),
       );
-      if (!moduleSet.has(resolved)) unresolved.push(`${module} -> ${imported.path}`);
+      if (!moduleSet.has(resolved)) unresolved.push(`${module.path} -> ${imported.path}`);
     }
   }
   expect(unresolved).toEqual([]);
 });
 
 test("client assets are not part of the worker module set", () => {
-  expect(manifest.worker.modules.some((module) => module.startsWith("client/"))).toBe(false);
+  expect(manifest.workers.app.modules.some((module) => module.path.startsWith("client/"))).toBe(
+    false,
+  );
 });
+
+test("a custom RSC outDir split removes stale manifest and emits no broken graph", () => {
+  const customDistDir = path.join(fixtureDir, "dist-custom");
+  const customManifestPath = path.join(customDistDir, "__distilled-build.json");
+  try {
+    fs.rmSync(customDistDir, { recursive: true, force: true });
+    fs.mkdirSync(customDistDir, { recursive: true });
+    fs.writeFileSync(
+      customManifestPath,
+      `${JSON.stringify({
+        version: 2,
+        workers: {
+          app: {
+            main: "server/stale.js",
+            modules: [{ path: "server/stale.js", type: "esm" }],
+          },
+        },
+      })}\n`,
+    );
+
+    const result = spawnSync("bun", ["vite", "build", "--outDir", "dist-custom"], {
+      cwd: fixtureDir,
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      throw new Error(`vite build failed (${result.status}):\n${result.stdout}\n${result.stderr}`);
+    }
+
+    expect(result.stderr).toContain(`skipping __distilled-build.json`);
+    expect(fs.existsSync(customManifestPath)).toBe(false);
+  } finally {
+    fs.rmSync(customDistDir, { recursive: true, force: true });
+  }
+}, 120_000);
 
 // Must run last: it triggers a second build that rewrites `dist`.
 test("a rebuild drops stale worker files left in the output", () => {
@@ -77,6 +136,8 @@ test("a rebuild drops stale worker files left in the output", () => {
   const rebuilt: Manifest = JSON.parse(
     fs.readFileSync(path.join(distDir, "__distilled-build.json"), "utf8"),
   );
-  expect(rebuilt.worker.modules).not.toContain("server/STALE_REVIEW_MARKER.js");
+  expect(rebuilt.workers.app.modules.map((module) => module.path)).not.toContain(
+    "server/STALE_REVIEW_MARKER.js",
+  );
   expect(fs.existsSync(stale)).toBe(false);
 }, 120_000);

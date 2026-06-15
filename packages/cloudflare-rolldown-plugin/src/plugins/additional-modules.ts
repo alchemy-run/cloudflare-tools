@@ -11,9 +11,9 @@ import { createPlugin } from "../factory.js";
 import { sanitizePath } from "../utils.js";
 
 export const MODULE_RULES = [
-  { type: "CompiledWasm", pattern: /\.wasm(\?module)?$/ },
-  { type: "Data", pattern: /\.bin$/ },
-  { type: "Text", pattern: /\.(txt|html|sql)$/ },
+  { type: "CompiledWasm", manifestType: "wasm", pattern: /\.wasm(\?module)?$/ },
+  { type: "Data", manifestType: "data", pattern: /\.bin$/ },
+  { type: "Text", manifestType: "text", pattern: /\.(txt|html|sql)$/ },
 ] as const;
 
 const MODULE_REFERENCE_PATTERN = `__CLOUDFLARE_MODULE__(${MODULE_RULES.map((rule) => rule.type).join("|")})__(.*?)__CLOUDFLARE_MODULE__`;

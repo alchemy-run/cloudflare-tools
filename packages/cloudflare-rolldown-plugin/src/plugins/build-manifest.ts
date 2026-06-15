@@ -20,31 +20,44 @@ export const BUILD_MANIFEST_NAME = "__distilled-build.json";
  * every child environment it loads at runtime (e.g. an RSC app's `ssr` output,
  * pulled in via `import("../../ssr/index.js")`). Their relative layout is
  * preserved on disk, so those cross-environment imports resolve once the set is
- * uploaded as one Worker. Module kind is inferred from the file extension —
- * `.js`/`.mjs` are ES modules and the {@link MODULE_RULES} extensions map to
- * their Cloudflare module type (`.wasm` → Wasm, `.bin` → Data, `.txt`/`.html`/
- * `.sql` → Text).
+ * uploaded as one Worker. Module kind is explicit: `.js`/`.mjs` are ES modules,
+ * `.json` files are JSON modules, and the {@link MODULE_RULES} extensions map
+ * to their Cloudflare module type (`.wasm` → Wasm, `.bin` → Data,
+ * `.txt`/`.html`/`.sql` → Text). Source maps are auxiliary debug artifacts, not
+ * Worker modules, and are not listed here.
  *
  * The manifest describes only the *build* output. Deploy-time inputs the build
  * doesn't own — bindings, secrets, Durable Object classes and migrations,
- * source maps — are the deployer's responsibility. `compatibilityDate` and
- * `compatibilityFlags` record what the Worker was *compiled* against and are
- * authoritative: a deployer must deploy against the same values.
+ * source-map upload policy — are the deployer's responsibility.
+ * `compatibilityDate` and `compatibilityFlags` record what the Worker was
+ * *compiled* against and are authoritative: a deployer must deploy against the
+ * same values. If `compatibilityDate` is absent, that absence is authoritative
+ * too; deployers should fail or require an explicit deploy-time value rather
+ * than silently substituting a default that may not match the build.
  */
 export interface DistilledBuildManifest {
-  version: 1;
-  worker: {
-    /** Entry module, relative to the manifest directory (e.g. `server/index.js`). */
-    main: string;
-    /** Every Worker module, relative to the manifest directory. */
-    modules: Array<string>;
-    compatibilityDate?: string;
-    compatibilityFlags?: Array<string>;
+  version: 2;
+  workers: {
+    app: {
+      /** Entry module, relative to the manifest directory (e.g. `server/index.js`). */
+      main: string;
+      /** Every Worker module, relative to the manifest directory. */
+      modules: Array<DistilledWorkerModule>;
+      compatibilityDate?: string;
+      compatibilityFlags?: Array<string>;
+    };
   };
   /** Static assets, relative to the manifest directory. */
   assets?: {
     directory: string;
   };
+}
+
+export type DistilledWorkerModuleType = "esm" | "wasm" | "data" | "text" | "json";
+
+export interface DistilledWorkerModule {
+  path: string;
+  type: DistilledWorkerModuleType;
 }
 
 const toPosix = (p: string) => p.split(path.sep).join("/");
@@ -54,24 +67,34 @@ const toPosix = (p: string) => p.split(path.sep).join("/");
  * of the Cloudflare additional-module rules — the same rules the build uses to
  * *emit* those modules, so the two never drift.
  */
-function isWorkerModuleFile(name: string): boolean {
-  return (
-    name.endsWith(".js") ||
-    name.endsWith(".mjs") ||
-    MODULE_RULES.some((rule) => rule.pattern.test(name))
-  );
+function getWorkerModuleType(name: string): DistilledWorkerModuleType | undefined {
+  if (name.endsWith(".js") || name.endsWith(".mjs")) {
+    return "esm";
+  }
+  if (name.endsWith(".json")) {
+    return "json";
+  }
+  return MODULE_RULES.find((rule) => rule.pattern.test(name))?.manifestType;
 }
 
 /** Recursively list the Worker module files under `dir`, relative to `root`. */
-function listModules(dir: string, root: string): Array<string> {
-  const modules: Array<string> = [];
+function listModules(dir: string, root: string): Array<DistilledWorkerModule> {
+  const modules: Array<DistilledWorkerModule> = [];
   const walk = (current: string) => {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (isWorkerModuleFile(entry.name)) {
-        modules.push(toPosix(path.relative(root, full)));
+      } else {
+        const relativePath = toPosix(path.relative(root, full));
+        const type = getWorkerModuleType(entry.name);
+        if (
+          type &&
+          relativePath !== ".vite/manifest.json" &&
+          !relativePath.endsWith("/.vite/manifest.json")
+        ) {
+          modules.push({ path: relativePath, type });
+        }
       }
     }
   };
@@ -168,10 +191,15 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
 
         if (!entryOutDir || !mainFileName) return;
 
-        const modules = workerEnvNames
-          .map(resolveOutDir)
-          .filter((dir): dir is string => dir !== undefined)
-          .flatMap((dir) => listModules(dir, manifestDir));
+        const modules = Array.from(
+          new Map(
+            workerEnvNames
+              .map(resolveOutDir)
+              .filter((dir): dir is string => dir !== undefined)
+              .flatMap((dir) => listModules(dir, manifestDir))
+              .map((module) => [module.path, module]),
+          ).values(),
+        ).sort((a, b) => a.path.localeCompare(b.path));
 
         // Every Worker output must live under the manifest root. A module that
         // escapes it means the entry and child environments were written to
@@ -179,7 +207,7 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
         // imports can't satisfy either. That happens with a custom
         // `build.outDir` under the child-environment (RSC) topology; the result
         // isn't deployable, so emit nothing rather than a broken manifest.
-        const escaping = modules.filter((module) => module.startsWith("../"));
+        const escaping = modules.filter((module) => module.path.startsWith("../"));
         if (escaping.length > 0) {
           builder.config.logger.warn(
             `[cloudflare] skipping ${BUILD_MANIFEST_NAME}: ${escaping.length} worker module(s) ` +
@@ -190,12 +218,14 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
         }
 
         const manifest: DistilledBuildManifest = {
-          version: 1,
-          worker: {
-            main: toPosix(path.relative(manifestDir, path.join(entryOutDir, mainFileName))),
-            modules,
-            compatibilityDate: options.compatibilityDate,
-            compatibilityFlags: options.compatibilityFlags,
+          version: 2,
+          workers: {
+            app: {
+              main: toPosix(path.relative(manifestDir, path.join(entryOutDir, mainFileName))),
+              modules,
+              compatibilityDate: options.compatibilityDate,
+              compatibilityFlags: options.compatibilityFlags,
+            },
           },
           assets: clientOutDir
             ? { directory: toPosix(path.relative(manifestDir, clientOutDir)) }

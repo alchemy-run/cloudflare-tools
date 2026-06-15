@@ -82,7 +82,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                 },
               },
             ],
-            middleware: [
+            middlewares: [
               {
                 name: "assets:router",
                 worker: {

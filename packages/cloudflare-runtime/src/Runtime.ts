@@ -35,9 +35,14 @@ export const RuntimeLive = Layer.effect(
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
     const docker = yield* Docker.Docker;
-    const plugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
+    const basePlugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
 
     const preparePlugins = Effect.fnUntraced(function* (worker: RuntimeWorker) {
+      const plugins = new Map(basePlugins);
+      const overrides = yield* PluginContext.pickPluginsFromContext();
+      for (const [key, builder] of overrides) {
+        plugins.set(key, builder);
+      }
       const context = yield* PluginContext.make(worker as RuntimeWorker, plugins);
       const bindings = yield* Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
         concurrency: "unbounded",

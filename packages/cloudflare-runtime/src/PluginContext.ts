@@ -60,7 +60,11 @@ export const make = (
         const services = configs.flatMap((config) => config.services ?? []);
         const sockets = configs.flatMap((config) => config.sockets ?? []);
         const extensions = configs.flatMap((config) => config.extensions ?? []);
-        const middlewares = configs.flatMap((config) => config.middlewares ?? []);
+        const middlewareOrder = (middleware: Plugin.Middleware) =>
+          middleware.name === "plugin:entry" ? 1 : 0;
+        const middlewares = configs
+          .flatMap((config) => config.middlewares ?? [])
+          .sort((a, b) => middlewareOrder(a) - middlewareOrder(b));
         return {
           entry: middlewares[0]?.name,
           sockets,

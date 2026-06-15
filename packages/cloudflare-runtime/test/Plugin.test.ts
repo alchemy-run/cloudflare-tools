@@ -92,6 +92,55 @@ describe("Plugin / PluginContext", () => {
     }),
   );
 
+  it.effect("keeps plugin:entry as the innermost middleware before the user worker", () =>
+    Effect.gen(function* () {
+      class Outer extends Plugin.Service<Outer>()("cloudflare-runtime/plugin/Outer") {}
+      class Entry extends Plugin.Service<Entry>()("cloudflare-runtime/plugin/Entry") {}
+      const outerLayer = Layer.succeed(
+        Outer,
+        Outer.of({
+          middlewares: [
+            {
+              name: "assets:router",
+              worker: { compatibilityDate: "2026-03-10" },
+              upstreamBindingName: "USER_WORKER",
+            },
+          ],
+        }),
+      );
+      const entryLayer = Layer.succeed(
+        Entry,
+        Entry.of({
+          middlewares: [
+            {
+              name: "plugin:entry",
+              worker: { compatibilityDate: "2026-03-10" },
+              upstreamBindingName: "USER_WORKER",
+            },
+          ],
+        }),
+      );
+      const ctx = yield* PluginContext.make(makeWorker()).pipe(
+        Effect.provide(Layer.mergeAll(entryLayer, outerLayer)),
+      );
+      const config = yield* ctx.config;
+      expect(config.entry).toBe("assets:router");
+
+      const router = config.services.find((s) => s.name === "assets:router") as {
+        worker: { bindings: Array<any> };
+      };
+      const entry = config.services.find((s) => s.name === "plugin:entry") as {
+        worker: { bindings: Array<any> };
+      };
+      expect(router.worker.bindings.find((b) => b.name === "USER_WORKER")?.service?.name).toBe(
+        "plugin:entry",
+      );
+      expect(entry.worker.bindings.find((b) => b.name === "USER_WORKER")?.service?.name).toBe(
+        SERVICE_USER_WORKER,
+      );
+    }),
+  );
+
   it.effect("Plugin.useSync reads a plugin field synchronously", () =>
     Effect.gen(function* () {
       const ctx = yield* PluginContext.make(makeWorker());

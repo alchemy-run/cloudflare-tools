@@ -1,6 +1,7 @@
 import { workerEnvironments } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import type { BindingHooks, Module, RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
 import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
+import { RuntimeLive } from "@distilled.cloud/cloudflare-runtime/Runtime";
 import {
   DurableObjectNamespace,
   Json,
@@ -8,7 +9,7 @@ import {
   UnsafeEval,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
-import type * as Context from "effect/Context";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -37,9 +38,20 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   context: Context.Context<RuntimeServices>,
 ) => {
   const scope = Scope.makeUnsafe();
-  const address = await serve(options, entry, server).pipe(
-    Effect.provide(ViteAssets.ViteAssetsLive(server)),
+  const assetsContext = await ViteAssets.ViteAssetsLive(server).pipe(
+    Layer.buildWithScope(scope),
     Effect.provide(context),
+    Effect.runPromise,
+  );
+  const contextWithAssets = Context.merge(context, assetsContext);
+  const runtimeContext = await RuntimeLive.pipe(
+    Layer.buildWithScope(scope),
+    Effect.provideContext(contextWithAssets),
+    Effect.runPromise,
+  );
+  const devContext = Context.merge(contextWithAssets, runtimeContext);
+  const address = await serve(options, entry, server).pipe(
+    Effect.provideContext(devContext),
     Scope.provide(scope),
     Effect.runPromise,
   );

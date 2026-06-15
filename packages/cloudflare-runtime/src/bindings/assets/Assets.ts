@@ -274,7 +274,7 @@ export const AssetsLive = Layer.effect(
               },
             },
           ],
-          middleware: [
+          middlewares: [
             {
               name: "assets:router",
               worker: {
@@ -332,7 +332,7 @@ export const buildAssetConfigs = (
     staticRouting = parseStaticRouting(worker.assets.runWorkerFirst);
   }
   const routerConfig: RouterConfig = {
-    invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst !== false,
+    invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst === true,
     static_routing: staticRouting,
     has_user_worker: true,
   };

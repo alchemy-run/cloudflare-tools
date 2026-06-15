@@ -66,7 +66,7 @@ describe("Assets / buildAssetConfigs", () => {
       },
     });
     expect(routerConfig).toMatchObject({
-      invoke_user_worker_ahead_of_assets: true,
+      invoke_user_worker_ahead_of_assets: false,
       has_user_worker: true,
     });
     expect(routerConfig.static_routing).toBeDefined();
@@ -85,5 +85,23 @@ describe("Assets / buildAssetConfigs", () => {
       assets: { directory: "/tmp/x", runWorkerFirst: false },
     });
     expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(false);
+  });
+
+  it("defaults to assets-first routing when runWorkerFirst is not specified", () => {
+    const { routerConfig } = Assets.buildAssetConfigs({
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: [],
+      assets: { directory: "/tmp/x" },
+    });
+    expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(false);
+  });
+
+  it("routes every request to the user worker when runWorkerFirst is true", () => {
+    const { routerConfig } = Assets.buildAssetConfigs({
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: [],
+      assets: { directory: "/tmp/x", runWorkerFirst: true },
+    });
+    expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(true);
   });
 });

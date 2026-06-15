@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-runtime",
-  "version": "0.10.12",
+  "version": "0.10.13",
   "description": "Runtime for Cloudflare Workers.",
   "keywords": [
     "cloudflare",
@@ -74,6 +74,7 @@
     "./bindings/WorkerLoader": "./dist/node/bindings/WorkerLoader.mjs",
     "./bindings/workflows": "./dist/node/bindings/workflows/index.mjs",
     "./bindings/workflows/Workflows": "./dist/node/bindings/workflows/Workflows.mjs",
+    "./Docker": "./dist/node/Docker.mjs",
     "./globals": "./dist/node/globals/index.mjs",
     "./globals/Globals": "./dist/node/globals/Globals.mjs",
     "./globals/Internet": "./dist/node/globals/Internet.mjs",

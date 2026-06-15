@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.10.13](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.13) (2026-06-12)
+
+### Bug Fixes
+
+- **runtime**: use forkScoped instead of forkDetach for watchers - by John Royal in [#45](https://github.com/alchemy-run/cloudflare-tools/pull/45) [(85c4b5b)](https://github.com/alchemy-run/cloudflare-tools/commit/85c4b5ba08930afceb6ae66691e00587511b1aad)
+
 ## [v0.10.12](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.12) (2026-06-10)
 
 ### Bug Fixes

@@ -65,3 +65,18 @@ test("worker module set is self-contained (every relative import resolves)", () 
 test("client assets are not part of the worker module set", () => {
   expect(manifest.worker.modules.some((module) => module.startsWith("client/"))).toBe(false);
 });
+
+// Must run last: it triggers a second build that rewrites `dist`.
+test("a rebuild drops stale worker files left in the output", () => {
+  const stale = path.join(distDir, "server", "STALE_REVIEW_MARKER.js");
+  fs.writeFileSync(stale, "// stale\n");
+  const result = spawnSync("bun", ["vite", "build"], { cwd: fixtureDir, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`vite build failed (${result.status}):\n${result.stdout}\n${result.stderr}`);
+  }
+  const rebuilt: Manifest = JSON.parse(
+    fs.readFileSync(path.join(distDir, "__distilled-build.json"), "utf8"),
+  );
+  expect(rebuilt.worker.modules).not.toContain("server/STALE_REVIEW_MARKER.js");
+  expect(fs.existsSync(stale)).toBe(false);
+}, 120_000);

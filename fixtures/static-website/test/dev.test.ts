@@ -11,6 +11,7 @@ let baseUrl: string;
 test.beforeAll(async () => {
   proc = spawn("bun", ["vite", "dev", "--host", "127.0.0.1", "--port", "3351"], {
     cwd: fixtureDir,
+    env: { ...process.env, DISTILLED_STATIC_WEBSITE_WORKER: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   baseUrl = await new Promise<string>((resolve, reject) => {

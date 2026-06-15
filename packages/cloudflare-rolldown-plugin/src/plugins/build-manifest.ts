@@ -148,23 +148,25 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
         };
 
         const entryOutDir = resolveOutDir(entry);
-        if (!entryOutDir) return;
+        const clientOutDir = resolveOutDir("client");
 
         // The manifest sits at the build output root — the parent of the entry
-        // environment's output. The distilled plugin places the entry, every
-        // child, and the client output directly under this root (see
-        // `getOutputDirectory`), so module paths resolve relative to it and the
-        // framework's cross-environment imports stay intact.
-        const manifestDir = path.dirname(entryOutDir);
+        // output, or, for an assets-only build with no worker environment, the
+        // client output. The distilled plugin places the entry, every child, and
+        // the client output directly under this root (see `getOutputDirectory`),
+        // so module paths resolve relative to it and the framework's
+        // cross-environment imports stay intact.
+        const outputRoot = entryOutDir ?? clientOutDir;
+        if (!outputRoot) return;
+        const manifestDir = path.dirname(outputRoot);
         const manifestPath = path.join(manifestDir, BUILD_MANIFEST_NAME);
 
-        // Start from a clean slate: a successful build emits a fresh manifest or
-        // none, never a stale one.
+        // Start from a clean slate: a successful build emits a fresh manifest or,
+        // for a pure SPA / assets-only build with no worker entry, none — never a
+        // stale one.
         fs.rmSync(manifestPath, { force: true });
 
-        // No Worker entry was emitted — a pure SPA / assets-only build has no
-        // Worker to describe.
-        if (!mainFileName) return;
+        if (!entryOutDir || !mainFileName) return;
 
         const modules = workerEnvNames
           .map(resolveOutDir)
@@ -186,8 +188,6 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
           );
           return;
         }
-
-        const clientOutDir = resolveOutDir("client");
 
         const manifest: DistilledBuildManifest = {
           version: 1,

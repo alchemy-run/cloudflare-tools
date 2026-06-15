@@ -1,7 +1,7 @@
-import cloudflare from "@distilled.cloud/cloudflare-vite-plugin"
-import react from "@vitejs/plugin-react"
-import rsc from "@vitejs/plugin-rsc"
-import { defineConfig } from "vite"
+import cloudflare from "@distilled.cloud/cloudflare-vite-plugin";
+import react from "@vitejs/plugin-react";
+import rsc from "@vitejs/plugin-rsc";
+import { defineConfig } from "vite";
 
 // Minimal React Server Components app (the @vitejs/plugin-rsc `starter`)
 // wired to the distilled Cloudflare vite plugin, to reproduce and then fix
@@ -36,4 +36,4 @@ export default defineConfig({
       build: { rollupOptions: { input: { index: "./src/framework/entry.browser.tsx" } } },
     },
   },
-})
+});

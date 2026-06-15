@@ -1,10 +1,11 @@
-import './styles.css'
-import { Link, Outlet } from 'react-router'
-import { TestClientState, TestHydrated } from './routes/client'
-import { DumpError, GlobalNavigationLoadingBar } from './routes/root.client'
+// oxlint-disable-next-line import/no-unassigned-import
+import "./styles.css";
+import { Link, Outlet } from "react-router";
+import { TestClientState, TestHydrated } from "./routes/client";
+import { DumpError, GlobalNavigationLoadingBar } from "./routes/root.client";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  console.log('[debug] root - Layout')
+  console.log("[debug] root - Layout");
   return (
     <html lang="en">
       <head>
@@ -37,18 +38,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </body>
     </html>
-  )
+  );
 }
 
 export default function Component() {
-  console.log('[debug] root - Component')
+  console.log("[debug] root - Component");
   return (
     <>
       <Outlet />
     </>
-  )
+  );
 }
 
 export function ErrorBoundary() {
-  return <DumpError />
+  return <DumpError />;
 }

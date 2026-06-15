@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import React from 'react'
+import React from "react";
 
 export function Component() {
-  const [count, setCount] = React.useState(0)
+  const [count, setCount] = React.useState(0);
 
   return (
     <main className="container my-8 px-8 mx-auto">
@@ -16,5 +16,5 @@ export function Component() {
         </button>
       </article>
     </main>
-  )
+  );
 }

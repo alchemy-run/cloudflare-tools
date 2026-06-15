@@ -1,7 +1,7 @@
-import cloudflare from "@distilled.cloud/cloudflare-vite-plugin"
-import react from "@vitejs/plugin-react"
-import rsc from "@vitejs/plugin-rsc"
-import { defineConfig } from "vite"
+import cloudflare from "@distilled.cloud/cloudflare-vite-plugin";
+import react from "@vitejs/plugin-react";
+import rsc from "@vitejs/plugin-rsc";
+import { defineConfig } from "vite";
 
 // Same app as vite.config.ts but with the Cloudflare plugin registered BEFORE
 // `rsc()`. This deliberately produces the non-conventional condition ordering
@@ -34,4 +34,4 @@ export default defineConfig({
       build: { rollupOptions: { input: { index: "./src/framework/entry.browser.tsx" } } },
     },
   },
-})
+});

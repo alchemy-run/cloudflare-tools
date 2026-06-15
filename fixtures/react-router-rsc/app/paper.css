@@ -1,6 +1,6 @@
 @theme {
-  --default-font-family: 'Patrick Hand SC', sans-serif;
-  --default-mono-font-family: 'Patrick Hand SC', sans-serif;
+  --default-font-family: "Patrick Hand SC", sans-serif;
+  --default-mono-font-family: "Patrick Hand SC", sans-serif;
 
   --color-foreground: black;
   --color-danger: rgb(167, 52, 45);
@@ -139,11 +139,11 @@
 
 @layer utilities {
   .prose {
-    :where(u):not(:where([class~='not-prose'], [class~='not-prose'] *)) {
+    :where(u):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
       @apply paper-underline no-underline;
     }
 
-    :where(a):not(:where([class~='not-prose'], [class~='not-prose'] *)) {
+    :where(a):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
       @apply paper-underline-hover no-underline text-secondary;
     }
   }

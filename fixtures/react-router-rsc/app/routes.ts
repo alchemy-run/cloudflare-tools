@@ -1,21 +1,21 @@
-import type { unstable_RSCRouteConfigEntry } from 'react-router'
+import type { unstable_RSCRouteConfigEntry } from "react-router";
 
-export const routes: unstable_RSCRouteConfigEntry[] = [
+export const routes: Array<unstable_RSCRouteConfigEntry> = [
   {
-    id: 'root',
-    path: '',
-    lazy: () => import('./root'),
+    id: "root",
+    path: "",
+    lazy: () => import("./root"),
     children: [
       {
-        id: 'home',
+        id: "home",
         index: true,
-        lazy: () => import('./routes/home'),
+        lazy: () => import("./routes/home"),
       },
       {
-        id: 'about',
-        path: 'about',
-        lazy: () => import('./routes/about'),
+        id: "about",
+        path: "about",
+        lazy: () => import("./routes/about"),
       },
     ],
   },
-]
+];

@@ -1,7 +1,8 @@
-import { sayHello } from './home.actions.ts'
-import { PendingButton } from './home.client.tsx'
-import './home.css'
-import { TestActionStateServer } from './test-action-state/server.tsx'
+import { sayHello } from "./home.actions.ts";
+import { PendingButton } from "./home.client.tsx";
+// oxlint-disable-next-line import/no-unassigned-import
+import "./home.css";
+import { TestActionStateServer } from "./test-action-state/server.tsx";
 
 const Component = () => {
   return (
@@ -11,21 +12,12 @@ const Component = () => {
         <p>This is the home page.</p>
         <span className="test-style-home">[test-style-home]</span>
         <h2>Server Action</h2>
-        <form
-          className="no-prose grid gap-6"
-          action={sayHello.bind(null, 'Demo')}
-        >
+        <form className="no-prose grid gap-6" action={sayHello.bind(null, "Demo")}>
           <div className="grid gap-1">
             <label className="label" htmlFor="name">
               Name
             </label>
-            <input
-              className="input"
-              id="name"
-              type="text"
-              name="name"
-              placeholder={'Demo'}
-            />
+            <input className="input" id="name" type="text" name="name" placeholder={"Demo"} />
           </div>
           <div>
             <PendingButton />
@@ -36,7 +28,7 @@ const Component = () => {
         </div>
       </article>
     </main>
-  )
-}
+  );
+};
 
-export default Component
+export default Component;

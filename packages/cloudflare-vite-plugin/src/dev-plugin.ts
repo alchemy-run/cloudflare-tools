@@ -79,7 +79,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
         );
       }
       if (!options.context) {
-        context ??= await createDefaultContext(options.containers);
+        context ??= await createDefaultContext();
       }
       const [input] = inputs;
       handle ??= await startServer(

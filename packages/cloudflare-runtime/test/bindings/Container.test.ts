@@ -1,32 +1,11 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import { execFileSync } from "node:child_process";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
 import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
-/**
- * Whether a usable Docker daemon is reachable. Container tests are skipped
- * when it is not, so the suite stays green on machines without Docker.
- */
-const isDockerAvailable = (): boolean => {
-  if (process.platform === "win32") {
-    return false;
-  }
-  try {
-    execFileSync(process.env.WRANGLER_DOCKER_BIN ?? "docker", ["info"], {
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const dockerAvailable = isDockerAvailable();
-
-const fixtureDir = fileURLToPath(new URL("./container-fixture", import.meta.url));
+const FIXTURE_DIR = new URL("./container-fixture", import.meta.url);
 
 // A Durable Object with an attached container. It starts the container and
 // proxies the incoming request to the busybox httpd listening on port 8080.
@@ -69,10 +48,12 @@ export default {
 `;
 
 layer(localRuntimeLayer)("Container binding", (it) => {
-  it.effect.skipIf(!dockerAvailable)(
+  it.effect.skipIf(!isDockerAvailable())(
     "builds a container image and proxies requests to it via ctx.container",
     () =>
       Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const context = yield* path.fromFileUrl(FIXTURE_DIR);
         const worker = yield* startTestWorker({
           name: "container-binding",
           compatibilityDate: "2026-03-10",
@@ -89,8 +70,8 @@ layer(localRuntimeLayer)("Container binding", (it) => {
               className: "MyContainer",
               sql: true,
               container: {
-                dockerfile: NodePath.join(fixtureDir, "Dockerfile"),
-                context: fixtureDir,
+                dockerfile: path.join(context, "Dockerfile"),
+                context,
               },
             },
           ],
@@ -102,3 +83,14 @@ layer(localRuntimeLayer)("Container binding", (it) => {
     { timeout: 180_000 },
   );
 });
+
+const isDockerAvailable = () => {
+  try {
+    execFileSync(process.env.DOCKER_BIN ?? "docker", ["info"], {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};

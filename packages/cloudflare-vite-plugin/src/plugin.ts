@@ -11,7 +11,6 @@ import {
 } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import type {
   BindingHooks,
-  ContainersConfig,
   RuntimeServices,
   RuntimeWorker,
 } from "@distilled.cloud/cloudflare-runtime";
@@ -24,12 +23,6 @@ export interface CloudflareVitePluginOptions<
 > extends CloudflarePluginOptions {
   worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
   context?: Context.Context<RuntimeServices>;
-  /**
-   * Local container (Docker) configuration. Applies when a Durable Object
-   * namespace declares an attached `container`. Ignored when a custom
-   * `context` is supplied.
-   */
-  containers?: ContainersConfig;
 }
 
 export default function cloudflareVitePlugin(

@@ -24,7 +24,7 @@ import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
 import * as ViteAssets from "./assets/ViteAssets";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
-import type { CloudflareVitePluginOptions } from "./plugin";
+import type { CloudflareVitePluginOptions } from "./options";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 

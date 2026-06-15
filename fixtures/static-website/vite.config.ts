@@ -10,11 +10,11 @@ const config = defineConfig({
         ? {
             main: "./src/server.ts",
             compatibilityDate: "2025-09-27",
+            assets: {
+              notFoundHandling: "single-page-application",
+            },
             worker: {
               name: "fixtures-static-website",
-              assets: {
-                notFoundHandling: "single-page-application",
-              },
             },
           }
         : {},

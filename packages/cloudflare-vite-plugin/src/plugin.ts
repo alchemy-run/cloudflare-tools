@@ -1,4 +1,3 @@
-import type { CloudflarePluginOptions } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import {
   additionalModulesPlugin,
   buildManifestPlugin,
@@ -10,34 +9,33 @@ import {
   virtualModulesPlugin,
   wasmInitPlugin,
 } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
-import type {
-  BindingHooks,
-  RuntimeServices,
-  RuntimeWorker,
-} from "@distilled.cloud/cloudflare-runtime";
-import type * as Context from "effect/Context";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.js";
+import {
+  normalizeCloudflareVitePluginOptions,
+  type CloudflareVitePluginOptions,
+} from "./options.js";
 
-export interface CloudflareVitePluginOptions<
-  B extends BindingHooks = BindingHooks,
-> extends CloudflarePluginOptions {
-  worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
-  context?: Context.Context<RuntimeServices>;
-}
+export type {
+  CloudflareViteAssetsOptions,
+  CloudflareVitePluginOptions,
+  CloudflareViteWorkerOptions,
+} from "./options.js";
 
 export default function cloudflareVitePlugin(
   options: CloudflareVitePluginOptions = {},
 ): Array<vite.Plugin | null> {
+  const resolvedOptions = normalizeCloudflareVitePluginOptions(options);
+
   return [
-    optionsPlugin.vite(options),
-    cloudflareExternalsPlugin.vite(options),
-    nodejsAlsPlugin.vite(options),
-    nodejsImportWarningPlugin.vite(options),
-    nodejsUnenvPlugin.vite(options),
-    virtualModulesPlugin.vite(options),
-    wasmInitPlugin.vite(options),
-    additionalModulesPlugin.vite(options),
+    optionsPlugin.vite(resolvedOptions),
+    cloudflareExternalsPlugin.vite(resolvedOptions),
+    nodejsAlsPlugin.vite(resolvedOptions),
+    nodejsImportWarningPlugin.vite(resolvedOptions),
+    nodejsUnenvPlugin.vite(resolvedOptions),
+    virtualModulesPlugin.vite(resolvedOptions),
+    wasmInitPlugin.vite(resolvedOptions),
+    additionalModulesPlugin.vite(resolvedOptions),
     {
       name: "distilled-cloudflare:rsc",
       enforce: "pre",
@@ -45,7 +43,7 @@ export default function cloudflareVitePlugin(
         return { rsc: { serverHandler: false } } as vite.UserConfig;
       },
     } as vite.Plugin,
-    buildManifestPlugin(options),
-    dev(options),
+    buildManifestPlugin(resolvedOptions),
+    dev(resolvedOptions),
   ];
 }

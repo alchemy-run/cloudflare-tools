@@ -22,6 +22,12 @@ type Manifest = {
       compatibilityFlags?: Array<string>;
     };
   };
+  assets?: {
+    directory: string;
+    htmlHandling?: string;
+    notFoundHandling?: string;
+    runWorkerFirst?: Array<string> | boolean;
+  };
 };
 
 const workerArtifactPlugin = {
@@ -57,6 +63,11 @@ describe("build manifest", () => {
           main: "./index.ts",
           compatibilityDate: "2026-03-10",
           compatibilityFlags: ["nodejs_compat"],
+          assets: {
+            htmlHandling: "auto-trailing-slash",
+            notFoundHandling: "single-page-application",
+            runWorkerFirst: ["/api/*"],
+          },
         }),
         workerArtifactPlugin,
       ],
@@ -79,6 +90,12 @@ describe("build manifest", () => {
     expect(manifest.version).toBe(2);
     expect(worker.compatibilityDate).toBe("2026-03-10");
     expect(worker.compatibilityFlags).toEqual(["nodejs_compat"]);
+    expect(manifest.assets).toEqual({
+      directory: "client",
+      htmlHandling: "auto-trailing-slash",
+      notFoundHandling: "single-page-application",
+      runWorkerFirst: ["/api/*"],
+    });
     expect(modulePaths).toEqual([...modulePaths].sort((a, b) => a.localeCompare(b)));
     expect(new Set(modulePaths).size).toBe(modulePaths.length);
     expect(worker.modules).toContainEqual({

@@ -7,7 +7,7 @@ import * as NodeHttp from "node:http";
 import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
 import { createDefaultContext, startServer, type ServerHandle } from "./dev-server.js";
-import type { CloudflareVitePluginOptions } from "./plugin.js";
+import type { CloudflareVitePluginOptions } from "./options.js";
 import { handleWebSocket } from "./websockets.js";
 
 let context: Context.Context<RuntimeServices> | undefined;

@@ -50,14 +50,31 @@ export interface DistilledBuildManifest {
   /** Static assets, relative to the manifest directory. */
   assets?: {
     directory: string;
+    htmlHandling?: DistilledAssetHtmlHandling;
+    notFoundHandling?: DistilledAssetNotFoundHandling;
+    runWorkerFirst?: Array<string> | boolean;
   };
 }
 
 export type DistilledWorkerModuleType = "esm" | "wasm" | "data" | "text" | "json";
+export type DistilledAssetHtmlHandling =
+  | "auto-trailing-slash"
+  | "force-trailing-slash"
+  | "drop-trailing-slash"
+  | "none";
+export type DistilledAssetNotFoundHandling = "none" | "404-page" | "single-page-application";
 
 export interface DistilledWorkerModule {
   path: string;
   type: DistilledWorkerModuleType;
+}
+
+interface BuildManifestPluginOptions extends CloudflarePluginOptions {
+  assets?: {
+    htmlHandling?: DistilledAssetHtmlHandling;
+    notFoundHandling?: DistilledAssetNotFoundHandling;
+    runWorkerFirst?: Array<string> | boolean;
+  };
 }
 
 const toPosix = (p: string) => p.split(path.sep).join("/");
@@ -125,7 +142,7 @@ function getManifestDir(entryOutDir: string | undefined, clientOutDir: string | 
  * write). A build with no Worker entry (a pure SPA / assets-only site) emits no
  * manifest, and any stale manifest from a previous build is removed.
  */
-export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plugin {
+export function buildManifestPlugin(options: BuildManifestPluginOptions): vite.Plugin {
   const { entry, children } = workerEnvironments(options);
   const workerEnvNames = [entry, ...children];
   const wantedEntryName = options.main ? path.parse(options.main).name : undefined;
@@ -243,12 +260,27 @@ export function buildManifestPlugin(options: CloudflarePluginOptions): vite.Plug
             },
           },
           assets: clientOutDir
-            ? { directory: toPosix(path.relative(manifestDir, clientOutDir)) }
+            ? {
+                directory: toPosix(path.relative(manifestDir, clientOutDir)),
+                ...assetRoutingManifestFields(options.assets),
+              }
             : undefined,
         };
 
         fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
       },
     },
+  };
+}
+
+function assetRoutingManifestFields(
+  assets: BuildManifestPluginOptions["assets"],
+): Omit<NonNullable<DistilledBuildManifest["assets"]>, "directory"> {
+  return {
+    ...(assets?.htmlHandling !== undefined ? { htmlHandling: assets.htmlHandling } : {}),
+    ...(assets?.notFoundHandling !== undefined
+      ? { notFoundHandling: assets.notFoundHandling }
+      : {}),
+    ...(assets?.runWorkerFirst !== undefined ? { runWorkerFirst: assets.runWorkerFirst } : {}),
   };
 }

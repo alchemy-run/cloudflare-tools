@@ -26,6 +26,9 @@ type BuildManifest = {
   };
   assets?: {
     directory: string;
+    htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
+    notFoundHandling?: "none" | "404-page" | "single-page-application";
+    runWorkerFirst?: boolean | Array<string>;
   };
 };
 ```
@@ -37,7 +40,13 @@ are reserved for future multiple-Worker support, but this contract does not
 currently imply that deployers should expect or synthesize extra Workers.
 
 `assets.directory`, when present, points to the static asset output directory
-relative to the manifest root.
+relative to the manifest root. It is derived from Vite's client build output and
+is not user-configurable in Vite mode.
+
+`assets.htmlHandling`, `assets.notFoundHandling`, and `assets.runWorkerFirst`
+mirror the Vite plugin's asset routing options. They are emitted only when the
+application configures them, so deployers can preserve dev/build routing
+semantics without guessing.
 
 ## Worker Modules
 
@@ -86,6 +95,30 @@ against. When present, deployers must deploy with the same values.
 still authoritative: a deployer should fail or require an explicit deploy-time
 value rather than silently substituting a default and claiming it matches the
 build.
+
+## Vite Configuration Defaults
+
+The Vite plugin owns the Vite asset output path, so static apps can use
+`cloudflare()` with no options and Worker apps do not specify an asset
+directory. Asset routing options live at the top level:
+
+```ts
+cloudflare({
+  main: "./worker/index.ts",
+  assets: {
+    notFoundHandling: "single-page-application",
+  },
+});
+```
+
+The legacy `worker.assets` location is still accepted for advanced runtime
+configuration. If the same routing option is provided in both places with
+different values, the plugin throws instead of choosing one silently.
+
+The plugin intentionally does not infer `main` or default the production
+`compatibilityDate`. Those values define Worker architecture and runtime
+semantics, so a deployer should either read the explicit build metadata or ask
+for a deploy-time value.
 
 ## Emission Rules
 

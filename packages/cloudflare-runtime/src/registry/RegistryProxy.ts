@@ -79,7 +79,7 @@ export const RegistryProxyLive = Layer.effect(
               name: SERVICE_REGISTRY_PROXY,
               worker: {
                 compatibilityDate: "2025-01-01",
-                compatibilityFlags: ["service_binding_extra_handlers"],
+                compatibilityFlags: ["service_binding_extra_handlers", "enable_request_signal"],
                 modules: buildWorkerModules(yield* registry.read(subscribed), durableObjects),
                 bindings: [
                   {

@@ -51,6 +51,16 @@ export class WorkerProxy extends DurableObject<Env> {
 
   private async handleUserWorkerRequest(request: Request): Promise<Response> {
     const promise = Promise.withResolvers<Response>();
+    request.signal.addEventListener("abort", () => {
+      this.requestQueue.delete(request);
+      this.retryRequestQueue.delete(request);
+      promise.reject(
+        new ProxyError({
+          message: "Request aborted",
+          status: 408,
+        }),
+      );
+    });
     this.requestQueue.set(request, promise);
     this.processRequestQueue();
     return await promise.promise;

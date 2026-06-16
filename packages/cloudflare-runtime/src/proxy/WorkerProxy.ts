@@ -81,6 +81,7 @@ export const WorkerProxyLive = Layer.effect(
               name: "proxy:worker",
               worker: {
                 compatibilityDate: "2026-03-10",
+                compatibilityFlags: ["enable_request_signal"],
                 modules: formatInternalWorkerModules(ProxyWorker),
                 bindings: [
                   { name: "PROXY", durableObjectNamespace: { className: "WorkerProxy" } },

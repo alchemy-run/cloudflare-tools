@@ -91,9 +91,17 @@ export class WorkerProxy extends DurableObject<Env> {
         method: request.method,
         headers,
         body: request.body,
+        signal: request.signal,
         redirect: "manual",
       });
     } catch (error) {
+      if (request.signal.aborted) {
+        throw new ProxyError({
+          message: "Request aborted",
+          status: 408,
+          cause: error,
+        });
+      }
       if (!this.target || this.target.href === target.href) {
         throw new ProxyError({
           message: `Failed to fetch worker (upstream address: ${target})`,

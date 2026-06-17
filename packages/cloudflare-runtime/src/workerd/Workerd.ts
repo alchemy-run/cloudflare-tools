@@ -125,11 +125,24 @@ const makeBun = () =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
-        stdio: [config, "pipe", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe", "pipe"],
         killSignal: "SIGKILL",
       }),
     ).pipe(
       Effect.map((child) => ({
+        configure: () =>
+          Effect.tryPromise({
+            try: async () => {
+              await child.stdin.write(config);
+              await child.stdin.end();
+            },
+            catch: (error) =>
+              new SystemError({
+                subtag: "WorkerdSpawn",
+                message: "Failed to write to the workerd process stdin.",
+                cause: error,
+              }),
+          }),
         control: (count) =>
           Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
             if (!child.stdio[3]) {

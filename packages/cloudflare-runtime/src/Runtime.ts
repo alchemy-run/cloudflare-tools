@@ -57,6 +57,10 @@ export const RuntimeLive = Layer.effect(
       const [, containerEngine] = yield* Effect.forEach(
         containers,
         ({ className, container }) => {
+          if ("tag" in container) {
+            imageNames.set(className, container.tag);
+            return Effect.void;
+          }
           const tag = docker.generateImageTag(className);
           imageNames.set(className, tag);
           const prepare =

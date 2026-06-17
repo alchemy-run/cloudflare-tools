@@ -26,7 +26,7 @@ export class Docker extends Context.Service<
   }
 >()("cloudflare-runtime/Docker") {}
 
-export type ContainerImage = ContainerImage.Build | ContainerImage.Pull;
+export type ContainerImage = ContainerImage.Build | ContainerImage.Pull | ContainerImage.Ref;
 
 export declare namespace ContainerImage {
   export interface Build {
@@ -36,6 +36,9 @@ export declare namespace ContainerImage {
   }
   export interface Pull {
     readonly imageUri: string;
+  }
+  export interface Ref {
+    readonly tag: string;
   }
 }
 

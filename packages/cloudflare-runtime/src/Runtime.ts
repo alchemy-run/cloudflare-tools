@@ -1,3 +1,4 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -67,7 +68,14 @@ export const RuntimeLive = Layer.effect(
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
           return prepare.pipe(
             Effect.andThen(docker.validate(tag)),
-            Effect.tap(() => Effect.addFinalizer(() => Effect.ignore(docker.removeContainer(tag)))),
+            Effect.tap(() => {
+              const unregister = exitHook(() => docker.removeContainerSync(tag));
+              return Effect.addFinalizer(() =>
+                docker
+                  .removeContainer(tag)
+                  .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+              );
+            }),
             Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );
         },

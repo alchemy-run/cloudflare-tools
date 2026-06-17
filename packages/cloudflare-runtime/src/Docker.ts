@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as NodeChildProcess from "node:child_process";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 
@@ -24,6 +25,7 @@ export class Docker extends Context.Service<
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
     readonly removeStaleImageTags: (tag: string) => Effect.Effect<void, SystemError>;
     readonly removeContainer: (tag: string) => Effect.Effect<void, SystemError>;
+    readonly removeContainerSync: (tag: string) => void;
   }
 >()("cloudflare-runtime/Docker") {}
 
@@ -301,6 +303,41 @@ export const DockerLive = Layer.effect(
               }),
           ),
         ),
+      removeContainerSync: (tag) => {
+        try {
+          const output = NodeChildProcess.execFileSync(
+            bin,
+            [
+              "ps",
+              "-a",
+              "--no-trunc",
+              "--filter",
+              `ancestor=${tag}`,
+              "--format",
+              "{{.ID}} {{.Names}} {{.Image}}",
+            ],
+            {
+              stdio: "pipe",
+              encoding: "utf-8",
+            },
+          );
+          const containers = output
+            .split("\n")
+            .map((line) => {
+              const [id, name, image] = line.split(" ");
+              return { id, name, image };
+            })
+            .filter((container) => container.image === tag);
+          if (containers.length === 0) return;
+          NodeChildProcess.execFileSync(bin, [
+            "rm",
+            "--force",
+            ...containers.flatMap((container) => [container.id, `${container.name}-proxy`]),
+          ]);
+        } catch {
+          // best-effort cleanup; ignore errors
+        }
+      },
     });
   }),
 );

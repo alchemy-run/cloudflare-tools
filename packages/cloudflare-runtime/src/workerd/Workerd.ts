@@ -1,9 +1,10 @@
 import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
@@ -99,12 +100,25 @@ const make = (
         }
         return ports;
       },
-      Effect.retry({
-        while: (error) => error._tag === "SystemError",
-        schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(3)),
-      }),
+      (self) =>
+        self.pipe(
+          closeScopeOnFailure,
+          Effect.retry({
+            while: (error) => error._tag === "SystemError",
+            schedule: Schedule.both(Schedule.exponential(50), Schedule.recurs(3)),
+          }),
+        ),
     ),
   });
+
+const closeScopeOnFailure = Effect.fnUntraced(function* <A, E, R>(self: Effect.Effect<A, E, R>) {
+  const scope = yield* Effect.flatMap(Effect.scope, Scope.fork);
+  const exit = yield* Effect.exit(self);
+  if (Exit.isFailure(exit)) {
+    yield* Scope.close(scope, exit);
+  }
+  return yield* exit;
+});
 
 const makeBun = () =>
   make((command, args, config) =>

@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Internet from "../../src/globals/Internet.ts";
-import * as Paths from "../../src/internal/Paths.ts";
 import * as WorkerProxy from "../../src/proxy/WorkerProxy.ts";
 import { ConfigError } from "../../src/RuntimeError.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
@@ -12,7 +11,6 @@ import * as PortHelpers from "../helpers/port.ts";
 
 const services = WorkerProxy.WorkerProxyLive.pipe(
   Layer.provideMerge(Layer.mergeAll(Workerd.WorkerdLive, Internet.InternetLive)),
-  Layer.provide(Paths.PathsLive),
   Layer.provide(NodeServices.layer),
 );
 

@@ -1,3 +1,4 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -11,7 +12,6 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as NodeFs from "node:fs";
-import { addFinalizer } from "../internal/finalizer.ts";
 import * as Paths from "../internal/Paths.ts";
 import * as System from "../internal/System.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
@@ -121,12 +121,20 @@ export const RegistryLive = Layer.effect(
             // Immediately update the in-memory registry so it's available without waiting on IO.
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
-          Effect.tap(() =>
-            addFinalizer({
-              effect: fs.remove(entryPath),
-              sync: () => NodeFs.unlinkSync(entryPath),
-            }),
-          ),
+          Effect.tap(() => {
+            // Remove the entry from the filesystem when the scope closes.
+            // If scope finalizers fail to run, a synchronous exit hook ensures the entry is removed.
+            const unregister = exitHook(() => {
+              try {
+                NodeFs.unlinkSync(entryPath);
+              } catch {}
+            });
+            return Effect.addFinalizer(() =>
+              fs
+                .remove(entryPath)
+                .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+            );
+          }),
           Effect.tap(() =>
             // Update the `mtime` every 30 seconds so the entry is not considered stale.
             DateTime.nowAsDate.pipe(

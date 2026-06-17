@@ -92,7 +92,7 @@ export const layerRuntime = (config: RuntimeConfig) =>
     Layer.provide(layerStorage(config.storage)),
     Layer.provide(Internet.InternetLive),
     Layer.provideMerge(layerRegistry()),
+    Layer.provide(Paths.PathsLive),
     Layer.provide(Docker.DockerLive),
     Layer.provide(Workerd.WorkerdLive),
-    Layer.provide(Paths.PathsLive),
   );

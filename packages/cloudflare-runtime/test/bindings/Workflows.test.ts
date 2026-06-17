@@ -62,9 +62,9 @@ describe("Workflows binding", () => {
           Layer.provide(Storage.layerDisk(tmp)),
           Layer.provide(Internet.InternetLive),
           Layer.provideMerge(RuntimeServices.layerRegistry()),
+          Layer.provide(Paths.PathsLive),
           Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
-          Layer.provide(Paths.PathsLive),
           Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
         );
 

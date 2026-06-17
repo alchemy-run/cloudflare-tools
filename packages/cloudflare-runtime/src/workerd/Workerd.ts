@@ -157,7 +157,9 @@ const makeBun = () =>
             const file = Bun.file(child.stdio[3]);
             const collect = async () => {
               let lines = "";
-              for await (const chunk of file.stream().pipeThrough(new TextDecoderStream(), {})) {
+              for await (const chunk of file
+                .stream()
+                .pipeThrough(new TextDecoderStream(), { signal })) {
                 lines += chunk;
                 const messages = lines
                   .split("\n")

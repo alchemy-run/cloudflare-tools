@@ -2,6 +2,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
@@ -97,7 +98,7 @@ export const DockerLive = Layer.effect(
         Effect.scoped,
       );
 
-    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
+    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore", log = false) =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
@@ -111,12 +112,12 @@ export const DockerLive = Layer.effect(
               exitCode: child.exitCode,
               stdout: child.stdout.pipe(
                 Stream.decodeText,
-                Stream.tap((line) => Effect.sync(() => console.log(line))),
+                log ? Stream.tap((line) => Effect.sync(() => console.log(line))) : identity,
                 Stream.mkString,
               ),
               stderr: child.stderr.pipe(
                 Stream.decodeText,
-                Stream.tap((line) => Effect.sync(() => console.error(line))),
+                log ? Stream.tap((line) => Effect.sync(() => console.error(line))) : identity,
                 Stream.mkString,
               ),
             },
@@ -216,7 +217,7 @@ export const DockerLive = Layer.effect(
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
           ];
-          return run(args, fs.stream(image.dockerfile)).pipe(
+          return run(args, fs.stream(image.dockerfile), true).pipe(
             Effect.asVoid,
             Effect.mapError(
               (cause) =>
@@ -275,7 +276,6 @@ export const DockerLive = Layer.effect(
                   repoImage.suffix !== image.suffix
                 );
               });
-            console.log(`removing stale images for "${tag}":`, stale);
             return stale.length > 0 ? Effect.asVoid(run(["rmi", ...stale])) : Effect.void;
           }),
           Effect.ignore,
@@ -283,7 +283,6 @@ export const DockerLive = Layer.effect(
       removeContainer: (tag) =>
         list(tag).pipe(
           Effect.flatMap((containers) => {
-            console.log(`removing containers for "${tag}":`, containers);
             if (containers.length === 0) return Effect.void;
             return Effect.asVoid(
               run([

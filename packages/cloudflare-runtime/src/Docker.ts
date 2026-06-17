@@ -109,13 +109,13 @@ export const DockerLive = Layer.effect(
               stdout: child.stdout.pipe(
                 Stream.decodeText,
                 Stream.splitLines,
-                Stream.tap(Effect.log),
+                Stream.tap((line) => Effect.sync(() => console.log(line))),
                 Stream.mkString,
               ),
               stderr: child.stderr.pipe(
                 Stream.decodeText,
                 Stream.splitLines,
-                Stream.tap(Effect.log),
+                Stream.tap((line) => Effect.sync(() => console.error(line))),
                 Stream.mkString,
               ),
             },

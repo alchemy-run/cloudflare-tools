@@ -1,14 +1,11 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs";
-import { addFinalizer } from "../internal/finalizer.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
@@ -41,6 +38,8 @@ type ControlMessage =
     };
 
 interface ProcessHandle {
+  /** Writes the config to the process's stdin. This can be omitted if the config is passed as an argument to the process. */
+  readonly configure?: () => Effect.Effect<void, SystemError>;
   /** Waits for the process to listen on the given number of sockets. */
   readonly control: (count: number) => Effect.Effect<Array<ControlMessage>, SystemError>;
   /** Resumes with an error if the process fails to start. */
@@ -51,68 +50,42 @@ interface ProcessHandle {
   readonly kill: () => void;
 }
 
-const make = Effect.fnUntraced(function* (
+const make = (
   spawn: (
     command: string,
     args: Array<string>,
+    config: Buffer,
   ) => Effect.Effect<ProcessHandle, ConfigError | SystemError>,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const tempDir = yield* fs
-    .makeTempDirectoryScoped({
-      prefix: "cloudflare-runtime-workerd-config",
-    })
-    .pipe(
-      Effect.mapError(
-        (error) =>
-          new SystemError({
-            subtag: "WorkerdSpawn",
-            message: "Failed to create a temporary directory for the workerd config.",
-            cause: error,
-          }),
-      ),
-      Scope.provide(yield* Effect.scope),
-      Effect.cached,
-    );
-  const writeConfig = Effect.fnUntraced(function* (config: Config) {
-    const configPath = path.join(yield* tempDir, `${crypto.randomUUID()}.capnp`);
-    yield* fs.writeFile(configPath, Buffer.from(serializeConfig(config))).pipe(
-      Effect.catchTag(
-        "PlatformError",
-        (error) =>
-          new SystemError({
-            subtag: "WorkerdSpawn",
-            message: "Failed to write the workerd config file.",
-            cause: error,
-          }),
-      ),
-    );
-    yield* addFinalizer({
-      effect: fs.remove(configPath),
-      sync: () => NodeFs.unlinkSync(configPath),
-    });
-    return configPath;
-  });
-  return Workerd.of({
+) =>
+  Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (config, args) {
-        const configPath = yield* writeConfig(config);
-        const handle = yield* spawn(workerd.bin, [
-          "serve",
-          "--binary",
-          "--experimental",
-          "--control-fd=3",
-          ...Object.entries(args ?? {}).map(([key, value]) =>
-            typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
-          ),
-          configPath,
-        ]);
-        yield* addFinalizer({
-          effect: Effect.sync(() => handle.kill()),
-          sync: () => handle.kill(),
-        });
+        const handle = yield* spawn(
+          workerd.bin,
+          [
+            "serve",
+            "--binary",
+            "--experimental",
+            "--control-fd=3",
+            ...Object.entries(args ?? {}).map(([key, value]) =>
+              typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
+            ),
+            "-",
+          ],
+          Buffer.from(serializeConfig(config)),
+        );
+        // Scope finalizers may not run if the parent exits, so we use an exit hook to ensure we always kill the process.
+        const unregister = exitHook(() => handle.kill());
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            handle.kill();
+            unregister();
+          }),
+        );
+        if (handle.configure) {
+          yield* handle.configure();
+        }
         const count =
           (config.sockets?.length ?? 0) +
           (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
@@ -137,7 +110,6 @@ const make = Effect.fnUntraced(function* (
         ),
     ),
   });
-});
 
 const closeScopeOnFailure = Effect.fnUntraced(function* <A, E, R>(self: Effect.Effect<A, E, R>) {
   const scope = yield* Effect.flatMap(Effect.scope, Scope.fork);
@@ -149,15 +121,28 @@ const closeScopeOnFailure = Effect.fnUntraced(function* <A, E, R>(self: Effect.E
 });
 
 const makeBun = () =>
-  make((command, args) =>
+  make((command, args, config) =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
-        stdio: ["ignore", "pipe", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe", "pipe"],
         killSignal: "SIGKILL",
       }),
     ).pipe(
       Effect.map((child) => ({
+        configure: () =>
+          Effect.tryPromise({
+            try: async () => {
+              await child.stdin.write(config);
+              await child.stdin.end();
+            },
+            catch: (error) =>
+              new SystemError({
+                subtag: "WorkerdSpawn",
+                message: "Failed to write to the workerd process stdin.",
+                cause: error,
+              }),
+          }),
         control: (count) =>
           Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
             if (!child.stdio[3]) {
@@ -233,11 +218,11 @@ const makeBun = () =>
   );
 
 const makeNode = () =>
-  make((command, args) =>
+  make((command, args, config) =>
     Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
-          stdio: ["ignore", "pipe", "pipe", "pipe"],
+          stdio: ["pipe", "pipe", "pipe", "pipe"],
           killSignal: "SIGKILL",
         }),
       catch: (error) =>
@@ -272,6 +257,26 @@ const makeNode = () =>
         }),
       ),
       Effect.map((child) => ({
+        configure: () =>
+          Effect.callback((resume) => {
+            const onError = (
+              cause: unknown,
+              message: string = "Failed to write to the workerd process stdin.",
+            ) => {
+              resume(new SystemError({ subtag: "WorkerdSpawn", message, cause }));
+            };
+            if (!child.stdin) {
+              return onError(undefined, "The workerd process did not have a stdin.");
+            }
+            child.stdin.on("error", onError);
+            child.stdin.end(config, () => {
+              resume(Effect.void);
+              child.stdin?.off("error", onError);
+            });
+            return Effect.sync(() => {
+              child.stdin?.off("error", onError);
+            });
+          }),
         control: (count) =>
           Effect.callback((resume) => {
             const pipe = child.stdio[3];
@@ -322,9 +327,6 @@ const makeNode = () =>
                 ),
               );
             };
-            if (!child.stderr) {
-              return onError();
-            }
             child.stderr.on("data", onData);
             child.stderr.on("end", onError);
             child.stderr.on("error", onError);
@@ -343,13 +345,13 @@ const makeNode = () =>
           };
           return Effect.acquireRelease(
             Effect.sync(() => {
-              child.stdout?.on("data", onStdout);
-              child.stderr?.on("data", onStderr);
+              child.stdout.on("data", onStdout);
+              child.stderr.on("data", onStderr);
             }),
             () =>
               Effect.sync(() => {
-                child.stdout?.off("data", onStdout);
-                child.stderr?.off("data", onStderr);
+                child.stdout.off("data", onStdout);
+                child.stderr.off("data", onStderr);
               }),
           );
         },
@@ -358,9 +360,8 @@ const makeNode = () =>
     ),
   );
 
-export const WorkerdLive = Layer.effect(
-  Workerd,
-  Effect.suspend(() => (typeof globalThis.Bun !== "undefined" ? makeBun() : makeNode())),
+export const WorkerdLive = Layer.sync(Workerd, () =>
+  typeof globalThis.Bun !== "undefined" ? makeBun() : makeNode(),
 );
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;

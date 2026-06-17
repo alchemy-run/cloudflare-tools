@@ -1,3 +1,4 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -10,7 +11,6 @@ import {
   SERVICE_USER_WORKER,
   SOCKET_USER_ENTRY,
 } from "./internal/constants.ts";
-import { addFinalizer } from "./internal/finalizer.ts";
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
@@ -68,12 +68,14 @@ export const RuntimeLive = Layer.effect(
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
           return prepare.pipe(
             Effect.andThen(docker.validate(tag)),
-            Effect.tap(() =>
-              addFinalizer({
-                effect: docker.removeContainer(tag),
-                sync: () => docker.removeContainerSync(tag),
-              }),
-            ),
+            Effect.tap(() => {
+              const unregister = exitHook(() => docker.removeContainerSync(tag));
+              return Effect.addFinalizer(() =>
+                docker
+                  .removeContainer(tag)
+                  .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+              );
+            }),
             Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );
         },

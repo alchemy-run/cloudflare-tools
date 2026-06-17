@@ -58,7 +58,7 @@ export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
   Layer.provideMerge(RegistryProxy.RegistryProxyLive),
   Layer.provideMerge(Registry.RegistryLive),
   Layer.provideMerge(Paths.PathsLive),
-  Layer.provide(Docker.DockerLive),
+  Layer.provideMerge(Docker.DockerLive),
   Layer.provide(Workerd.WorkerdLive),
   Layer.provide(configProvider()),
   Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),

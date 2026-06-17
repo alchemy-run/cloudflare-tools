@@ -9,10 +9,10 @@ const FIXTURE_DIR = new URL("./container-fixture", import.meta.url);
 
 // A Durable Object with an attached container. It starts the container and
 // proxies the incoming request to the busybox httpd listening on port 8080.
-const SCRIPT = `
+const SCRIPT = (index: number) => `
 import { DurableObject } from "cloudflare:workers";
 
-export class MyContainer extends DurableObject {
+export class MyContainer${index} extends DurableObject {
   async fetch(request) {
     const container = this.ctx.container;
     if (!container) {
@@ -47,38 +47,52 @@ export default {
 };
 `;
 
-layer(localRuntimeLayer)("Container binding", (it) => {
+const testContainer = Effect.fn(function* (index: number) {
+  const path = yield* Path.Path;
+  const context = yield* path.fromFileUrl(FIXTURE_DIR);
+  const worker = yield* startTestWorker({
+    name: `container-binding-${index}`,
+    compatibilityDate: "2026-03-10",
+    compatibilityFlags: [],
+    bindings: [
+      DurableObjectNamespace.local({
+        binding: "MY_CONTAINER",
+        className: `MyContainer${index}`,
+      }),
+    ],
+    modules: [{ name: "main.js", type: "ESModule", content: SCRIPT(index) }],
+    durableObjectNamespaces: [
+      {
+        className: `MyContainer${index}`,
+        sql: true,
+        container: {
+          dockerfile: path.join(context, "Dockerfile"),
+          context,
+        },
+      },
+    ],
+  });
+
+  const text = yield* worker.fetchText("/");
+  expect(text).toContain("hello from container");
+
+  console.log(`finished fetching ${index}`);
+}, Effect.scoped);
+
+layer(localRuntimeLayer, { excludeTestServices: true })("Container binding", (it) => {
   it.effect.skipIf(!isDockerAvailable())(
     "builds a container image and proxies requests to it via ctx.container",
+    () => testContainer(0),
+    { timeout: 180_000 },
+  );
+
+  it.effect.skipIf(!isDockerAvailable())(
+    "proxies requests to multiple containers",
     () =>
       Effect.gen(function* () {
-        const path = yield* Path.Path;
-        const context = yield* path.fromFileUrl(FIXTURE_DIR);
-        const worker = yield* startTestWorker({
-          name: "container-binding",
-          compatibilityDate: "2026-03-10",
-          compatibilityFlags: [],
-          bindings: [
-            DurableObjectNamespace.local({
-              binding: "MY_CONTAINER",
-              className: "MyContainer",
-            }),
-          ],
-          modules: [{ name: "main.js", type: "ESModule", content: SCRIPT }],
-          durableObjectNamespaces: [
-            {
-              className: "MyContainer",
-              sql: true,
-              container: {
-                dockerfile: path.join(context, "Dockerfile"),
-                context,
-              },
-            },
-          ],
+        yield* Effect.forEach(Array.from({ length: 10 }), (_, i) => testContainer(i + 1), {
+          concurrency: "unbounded",
         });
-
-        const text = yield* worker.fetchText("/");
-        expect(text).toContain("hello from container");
       }),
     { timeout: 180_000 },
   );

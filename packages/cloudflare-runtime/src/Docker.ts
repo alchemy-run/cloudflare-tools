@@ -17,7 +17,7 @@ export class Docker extends Context.Service<
       WorkerdConfig.Worker_ContainerEngine,
       SystemError
     >;
-    readonly generateImageTag: (className: string) => string;
+    readonly generateImageTag: (className: string, suffix?: string) => string;
     readonly build: (tag: string, image: ContainerImage.Build) => Effect.Effect<void, SystemError>;
     readonly pull: (tag: string, image: ContainerImage.Pull) => Effect.Effect<void, SystemError>;
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
@@ -44,7 +44,7 @@ export declare namespace ContainerImage {
 
 const DEFAULT_DOCKER_HOST =
   process.platform === "win32" ? "//./pipe/docker_engine" : "unix:///var/run/docker.sock";
-const DEV_CONTAINER_PREFIX = "cloudflare-dev";
+const DEV_CONTAINER_PREFIX = "alchemy-dev";
 
 const DockerHost = Config.string("DOCKER_HOST");
 const DockerBin = Config.string("DOCKER_BIN").pipe(Config.orElse(() => Config.succeed("docker")));
@@ -111,13 +111,11 @@ export const DockerLive = Layer.effect(
               exitCode: child.exitCode,
               stdout: child.stdout.pipe(
                 Stream.decodeText,
-                Stream.splitLines,
                 Stream.tap((line) => Effect.sync(() => console.log(line))),
                 Stream.mkString,
               ),
               stderr: child.stderr.pipe(
                 Stream.decodeText,
-                Stream.splitLines,
                 Stream.tap((line) => Effect.sync(() => console.error(line))),
                 Stream.mkString,
               ),
@@ -164,6 +162,28 @@ export const DockerLive = Layer.effect(
     const inspect = (tag: string, format: string) =>
       Effect.map(run(["image", "inspect", tag, "--format", format]), (result) => result.stdout);
 
+    const list = (ancestor: string) =>
+      run([
+        "ps",
+        "-a",
+        "--no-trunc",
+        "--filter",
+        `ancestor=${ancestor}`,
+        "--format",
+        "{{.ID}} {{.Names}} {{.Image}}",
+      ]).pipe(
+        Effect.map((result) =>
+          result.stdout
+            .split("\n")
+            .filter((line) => line.trim() !== "")
+            .map((line) => {
+              const [id, name, image] = line.split(" ");
+              return { id, name, image };
+            })
+            .filter((container) => container.image === ancestor),
+        ),
+      );
+
     return Docker.of({
       getWorkerdDockerConfiguration: yield* DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
@@ -177,8 +197,8 @@ export const DockerLive = Layer.effect(
         })),
         Effect.cached,
       ),
-      generateImageTag: (className) =>
-        `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${crypto.randomUUID().slice(0, 8)}`,
+      generateImageTag: (className, suffix = crypto.randomUUID().slice(0, 8)) =>
+        `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix}`,
       build: (tag, image) =>
         Effect.suspend(() => {
           const args = [
@@ -242,25 +262,36 @@ export const DockerLive = Layer.effect(
       removeStaleImageTags: (tag) =>
         inspect(tag, "{{ range .RepoTags }}{{ . }}\n{{ end }}").pipe(
           Effect.flatMap((output) => {
-            const current = extractImageTagSuffix(tag);
-            if (!current) return Effect.void;
+            const image = parseImageTag(tag);
+            if (!image.suffix) return Effect.void;
             const stale = output
               .split("\n")
               .map((line) => line.trim())
-              .filter(
-                (repoTag) =>
-                  repoTag.startsWith(DEV_CONTAINER_PREFIX) &&
-                  extractImageTagSuffix(repoTag) !== current,
-              );
+              .filter((repoTag) => {
+                const repoImage = parseImageTag(repoTag);
+                return (
+                  repoImage.name === image.name &&
+                  !!repoImage.suffix &&
+                  repoImage.suffix !== image.suffix
+                );
+              });
+            console.log(`removing stale images for "${tag}":`, stale);
             return stale.length > 0 ? Effect.asVoid(run(["rmi", ...stale])) : Effect.void;
           }),
           Effect.ignore,
         ),
       removeContainer: (tag) =>
-        run(["ps", "-a", "--filter", `ancestor=${tag}`, "--format", "{{.ID}}"]).pipe(
-          Effect.flatMap((result) => {
-            const ids = result.stdout.split("\n").filter((line) => line.trim() !== "");
-            return ids.length > 0 ? Effect.asVoid(run(["rm", "--force", ...ids])) : Effect.void;
+        list(tag).pipe(
+          Effect.flatMap((containers) => {
+            console.log(`removing containers for "${tag}":`, containers);
+            if (containers.length === 0) return Effect.void;
+            return Effect.asVoid(
+              run([
+                "rm",
+                "--force",
+                ...containers.flatMap((container) => [container.id, `${container.name}-proxy`]),
+              ]),
+            );
           }),
           Effect.mapError(
             (cause) =>
@@ -275,7 +306,7 @@ export const DockerLive = Layer.effect(
   }),
 );
 
-const extractImageTagSuffix = (tag: string) => {
+const parseImageTag = (tag: string) => {
   const index = tag.lastIndexOf(":");
-  return index === -1 ? undefined : tag.slice(index + 1);
+  return index === -1 ? { name: tag } : { name: tag.slice(0, index), suffix: tag.slice(index + 1) };
 };

@@ -9,7 +9,6 @@ import * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFs from "node:fs";
 import { addFinalizer } from "../internal/finalizer.ts";
-import * as Paths from "../internal/Paths.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
@@ -60,9 +59,24 @@ const make = Effect.fnUntraced(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const state = yield* Paths.state("alchemy", "workerd");
+  const tempDir = yield* fs
+    .makeTempDirectoryScoped({
+      prefix: "cloudflare-runtime-workerd-config",
+    })
+    .pipe(
+      Effect.mapError(
+        (error) =>
+          new SystemError({
+            subtag: "WorkerdSpawn",
+            message: "Failed to create a temporary directory for the workerd config.",
+            cause: error,
+          }),
+      ),
+      Scope.provide(yield* Effect.scope),
+      Effect.cached,
+    );
   const writeConfig = Effect.fnUntraced(function* (config: Config) {
-    const configPath = path.join(state, `${crypto.randomUUID()}.capnp`);
+    const configPath = path.join(yield* tempDir, `${crypto.randomUUID()}.capnp`);
     yield* fs.writeFile(configPath, Buffer.from(serializeConfig(config))).pipe(
       Effect.catchTag(
         "PlatformError",

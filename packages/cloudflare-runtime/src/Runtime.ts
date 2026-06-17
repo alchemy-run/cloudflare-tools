@@ -62,7 +62,6 @@ export const RuntimeLive = Layer.effect(
           const prepare =
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
           return prepare.pipe(
-            Effect.andThen(docker.validate(tag)),
             Effect.tap(() => Effect.addFinalizer(() => Effect.ignore(docker.removeContainer(tag)))),
             Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );

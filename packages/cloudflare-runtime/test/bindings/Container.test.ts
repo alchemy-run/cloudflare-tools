@@ -75,8 +75,6 @@ const testContainer = Effect.fn(function* (index: number) {
 
   const text = yield* worker.fetchText("/");
   expect(text).toContain("hello from container");
-
-  console.log(`finished fetching ${index}`);
 }, Effect.scoped);
 
 layer(localRuntimeLayer, { excludeTestServices: true })("Container binding", (it) => {

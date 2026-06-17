@@ -62,7 +62,7 @@ export const RuntimeLive = Layer.effect(
             imageNames.set(className, container.tag);
             return docker.validate(container.tag);
           }
-          const tag = docker.generateImageTag(className);
+          const tag = docker.generateImageTag(worker.name, className);
           imageNames.set(className, tag);
           const prepare =
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);

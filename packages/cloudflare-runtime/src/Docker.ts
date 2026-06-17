@@ -19,7 +19,7 @@ export class Docker extends Context.Service<
       WorkerdConfig.Worker_ContainerEngine,
       SystemError
     >;
-    readonly generateImageTag: (className: string, suffix?: string) => string;
+    readonly generateImageTag: (workerName: string, className: string, suffix?: string) => string;
     readonly build: (tag: string, image: ContainerImage.Build) => Effect.Effect<void, SystemError>;
     readonly pull: (tag: string, image: ContainerImage.Pull) => Effect.Effect<void, SystemError>;
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
@@ -200,8 +200,12 @@ export const DockerLive = Layer.effect(
         })),
         Effect.cached,
       ),
-      generateImageTag: (className, suffix = crypto.randomUUID().slice(0, 8)) =>
-        `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix}`,
+      generateImageTag: (
+        workerName: string,
+        className: string,
+        suffix = crypto.randomUUID().slice(0, 8),
+      ) =>
+        `${DEV_CONTAINER_PREFIX}/${workerName.toLowerCase()}/${className.toLowerCase()}:${suffix}`,
       build: (tag, image) =>
         Effect.suspend(() => {
           const args = [

@@ -4,10 +4,14 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
+import * as Paths from "../src/internal/Paths.ts";
 import * as Workerd from "../src/workerd/Workerd.ts";
 import * as PortHelpers from "./helpers/port.ts";
 
-const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
+const services = Workerd.WorkerdLive.pipe(
+  Layer.provide(Paths.PathsLive),
+  Layer.provide(NodeServices.layer),
+);
 
 layer(services)((it) => {
   it.effect("spawns a workerd process", () =>

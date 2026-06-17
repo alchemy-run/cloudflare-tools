@@ -106,8 +106,18 @@ export const DockerLive = Layer.effect(
           Effect.all(
             {
               exitCode: child.exitCode,
-              stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
-              stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
+              stdout: child.stdout.pipe(
+                Stream.decodeText,
+                Stream.splitLines,
+                Stream.tap(Effect.log),
+                Stream.mkString,
+              ),
+              stderr: child.stderr.pipe(
+                Stream.decodeText,
+                Stream.splitLines,
+                Stream.tap(Effect.log),
+                Stream.mkString,
+              ),
             },
             { concurrency: "unbounded" },
           ),

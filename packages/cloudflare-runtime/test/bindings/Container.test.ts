@@ -77,24 +77,27 @@ const testContainer = Effect.fn(function* (index: number) {
   expect(text).toContain("hello from container");
 }, Effect.scoped);
 
-layer(localRuntimeLayer, { excludeTestServices: true })("Container binding", (it) => {
-  it.effect.skipIf(!isDockerAvailable())(
-    "builds a container image and proxies requests to it via ctx.container",
-    () => testContainer(0),
-    { timeout: 180_000 },
-  );
+layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
+  "Container binding",
+  (it) => {
+    it.effect.skipIf(!isDockerAvailable())(
+      "builds a container image and proxies requests to it via ctx.container",
+      () => testContainer(0),
+      { concurrent: true },
+    );
 
-  it.effect.skipIf(!isDockerAvailable())(
-    "proxies requests to multiple containers",
-    () =>
-      Effect.gen(function* () {
-        yield* Effect.forEach(Array.from({ length: 10 }), (_, i) => testContainer(i + 1), {
-          concurrency: "unbounded",
-        });
-      }),
-    { timeout: 180_000 },
-  );
-});
+    it.effect.skipIf(!isDockerAvailable())(
+      "proxies requests to multiple containers",
+      () =>
+        Effect.gen(function* () {
+          yield* Effect.forEach(Array.from({ length: 10 }), (_, i) => testContainer(i + 1), {
+            concurrency: "unbounded",
+          });
+        }),
+      { concurrent: true },
+    );
+  },
+);
 
 const isDockerAvailable = () => {
   try {

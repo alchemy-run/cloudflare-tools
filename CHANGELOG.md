@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.11.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.11.2) (2026-06-18)
+
+### Bug Fixes
+
+- **runtime**: use effect logger for docker - by @john-royal [(9e75d08)](https://github.com/alchemy-run/cloudflare-tools/commit/9e75d08899e3ed2385786050385f7e8ea1e1913f)
+
 ## [v0.11.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.11.1) (2026-06-18)
 
 ### Bug Fixes

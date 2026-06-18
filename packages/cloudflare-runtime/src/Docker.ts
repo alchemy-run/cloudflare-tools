@@ -2,7 +2,6 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
@@ -100,7 +99,7 @@ export const DockerLive = Layer.effect(
         Effect.scoped,
       );
 
-    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore", log = false) =>
+    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
@@ -114,12 +113,12 @@ export const DockerLive = Layer.effect(
               exitCode: child.exitCode,
               stdout: child.stdout.pipe(
                 Stream.decodeText,
-                log ? Stream.tap((line) => Effect.sync(() => console.log(line))) : identity,
+                Stream.tap(Effect.logDebug),
                 Stream.mkString,
               ),
               stderr: child.stderr.pipe(
                 Stream.decodeText,
-                log ? Stream.tap((line) => Effect.sync(() => console.error(line))) : identity,
+                Stream.tap(Effect.logDebug),
                 Stream.mkString,
               ),
             },
@@ -219,7 +218,8 @@ export const DockerLive = Layer.effect(
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
           ];
-          return run(args, fs.stream(image.dockerfile), true).pipe(
+          return run(args, fs.stream(image.dockerfile)).pipe(
+            Effect.withLogSpan(`docker: build ${tag}`),
             Effect.asVoid,
             Effect.mapError(
               (cause) =>
@@ -245,10 +245,12 @@ export const DockerLive = Layer.effect(
               ),
             ),
           ),
+          Effect.withLogSpan(`docker: pull ${image.imageUri}`),
           Effect.asVoid,
         ),
       validate: (tag) =>
         inspect(tag, "{{ len .Config.ExposedPorts }}").pipe(
+          Effect.withLogSpan(`docker: inspect ${tag} for exposed ports`),
           Effect.orElseSucceed(() => "0"),
           Effect.flatMap((output) =>
             output === "0"
@@ -280,6 +282,7 @@ export const DockerLive = Layer.effect(
               });
             return stale.length > 0 ? Effect.asVoid(run(["rmi", ...stale])) : Effect.void;
           }),
+          Effect.withLogSpan(`docker: remove stale images for ${tag}`),
           Effect.ignore,
         ),
       removeContainer: (tag) =>
@@ -294,6 +297,7 @@ export const DockerLive = Layer.effect(
               ]),
             );
           }),
+          Effect.withLogSpan(`docker: remove containers for ${tag}`),
           Effect.mapError(
             (cause) =>
               new SystemError({

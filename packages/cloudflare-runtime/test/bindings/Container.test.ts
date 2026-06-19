@@ -3,9 +3,10 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { execFileSync } from "node:child_process";
 import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
+import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
-const FIXTURE_DIR = new URL("./container-fixture", import.meta.url);
+const FIXTURE_DIR = getFixture("container");
 
 // A Durable Object with an attached container. It starts the container and
 // proxies the incoming request to the busybox httpd listening on port 8080.
@@ -49,7 +50,6 @@ export default {
 
 const testContainer = Effect.fn(function* (index: number) {
   const path = yield* Path.Path;
-  const context = yield* path.fromFileUrl(FIXTURE_DIR);
   const worker = yield* startTestWorker({
     name: `container-binding-${index}`,
     compatibilityDate: "2026-03-10",
@@ -66,8 +66,8 @@ const testContainer = Effect.fn(function* (index: number) {
         className: `MyContainer${index}`,
         sql: true,
         container: {
-          dockerfile: path.join(context, "Dockerfile"),
-          context,
+          dockerfile: path.join(FIXTURE_DIR, "Dockerfile"),
+          context: FIXTURE_DIR,
         },
       },
     ],

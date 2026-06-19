@@ -1,8 +1,7 @@
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Assets from "../../src/bindings/assets/Assets.ts";
+import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const ASSETS_SCRIPT = `
@@ -12,26 +11,19 @@ export default {
   }
 };
 `;
-
-const writeFixture = Effect.fn(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const dir = yield* fs.makeTempDirectoryScoped();
-  yield* fs.writeFileString(path.join(dir, "index.html"), "<h1>home</h1>");
-  yield* fs.writeFileString(path.join(dir, "404.html"), "<h1>missing</h1>");
-  return dir;
-});
+const ASSETS_DIRECTORY = getFixture("assets");
 
 layer(localRuntimeLayer)("Assets binding", (it) => {
   it.effect("registers an assets:worker service when worker.assets is configured", () =>
     Effect.gen(function* () {
-      const dir = yield* writeFixture();
       const worker = yield* startTestWorker({
         name: "assets-bound",
         compatibilityDate: "2026-03-10",
         compatibilityFlags: [],
         modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
-        assets: { directory: dir },
+        assets: {
+          directory: ASSETS_DIRECTORY,
+        },
         bindings: [Assets.local("ASSETS")],
       });
       const text = yield* worker.fetchText("/");

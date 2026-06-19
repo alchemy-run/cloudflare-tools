@@ -295,6 +295,7 @@ export const AssetsLive = Layer.effect(
                 modules: formatInternalWorkerModules(RouterWorker),
               },
               upstreamBindingName: "USER_WORKER",
+              order: -1,
             },
           ],
           api: {

@@ -7,6 +7,8 @@ import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 const ASSETS_SCRIPT = `
 export default {
   fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/hello") return new Response("hello from API");
     return env.ASSETS.fetch(request);
   }
 };
@@ -23,11 +25,14 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
         assets: {
           directory: ASSETS_DIRECTORY,
+          runWorkerFirst: ["/api/hello"],
         },
         bindings: [Assets.local("ASSETS")],
       });
       const text = yield* worker.fetchText("/");
       expect(text).toBe("<h1>home</h1>\n");
+      const api = yield* worker.fetchText("/api/hello");
+      expect(api).toBe("hello from API");
     }),
   );
 

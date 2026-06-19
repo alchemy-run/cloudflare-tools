@@ -60,7 +60,9 @@ export const make = (
         const services = configs.flatMap((config) => config.services ?? []);
         const sockets = configs.flatMap((config) => config.sockets ?? []);
         const extensions = configs.flatMap((config) => config.extensions ?? []);
-        const middlewares = configs.flatMap((config) => config.middlewares ?? []);
+        const middlewares = configs
+          .flatMap((config) => config.middlewares ?? [])
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         return {
           entry: middlewares[0]?.name,
           sockets,

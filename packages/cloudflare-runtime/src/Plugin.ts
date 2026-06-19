@@ -26,6 +26,7 @@ export interface Middleware {
   name: string;
   worker: WorkerdConfig.Worker;
   upstreamBindingName: string;
+  order?: number;
 }
 
 export type PluginBuilder<Api = never> =

@@ -274,7 +274,7 @@ export const AssetsLive = Layer.effect(
               },
             },
           ],
-          middleware: [
+          middlewares: [
             {
               name: "assets:router",
               worker: {

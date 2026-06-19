@@ -27,7 +27,7 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         bindings: [Assets.local("ASSETS")],
       });
       const text = yield* worker.fetchText("/");
-      expect(text).toBe("<h1>home</h1>");
+      expect(text).toBe("<h1>home</h1>\n");
     }),
   );
 

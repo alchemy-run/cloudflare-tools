@@ -5,4 +5,5 @@ minimumReleaseAgeExcludes = [
   "@alchemy.run/node-utils",
   "@distilled.cloud/core",
   "@distilled.cloud/cloudflare",
+  "miniflare",
 ]

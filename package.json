@@ -28,9 +28,9 @@
         "effect": ">=4.0.0-beta.78 || >=4.0.0"
       },
       "workers": {
-        "@cloudflare/workers-types": "^4.20260310.1",
-        "miniflare": "^4.20260329.0",
-        "workerd": "1.20260526.1"
+        "@cloudflare/workers-types": "^4.20260617.1",
+        "miniflare": "^4.20260617.0",
+        "workerd": "1.20260617.1"
       }
     },
     "catalog": {

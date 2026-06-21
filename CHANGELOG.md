@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.11.3](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.11.3) (2026-06-21)
+
+### Bug Fixes
+
+- **runtime**: update workerd to match proxy-everything image - by @john-royal [(ab0d40c)](https://github.com/alchemy-run/cloudflare-tools/commit/ab0d40c6489d0d3d3028293d3f8c2a82c4382dd6)
+- asset routing rules not honored - by @john-royal [(fc184bd)](https://github.com/alchemy-run/cloudflare-tools/commit/fc184bd3d60e01fe8cef4eaa54d19b787d8462cb)
+- correct typo in assets plugin property - by @john-royal [(766cd56)](https://github.com/alchemy-run/cloudflare-tools/commit/766cd56e67f00e5132b278745112142323a3bbbe)
+
 ## [v0.11.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.11.2) (2026-06-18)
 
 ### Bug Fixes

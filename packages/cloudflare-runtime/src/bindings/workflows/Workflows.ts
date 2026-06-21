@@ -144,6 +144,10 @@ export const WorkflowsLive = Layer.effect(
                       name: "BINDING_NAME",
                       json: JSON.stringify(workflow.binding),
                     },
+                    {
+                      name: "WORKFLOW_NAME",
+                      json: JSON.stringify(workflow.workflowName),
+                    },
                     ...(workflow.stepLimit !== undefined
                       ? [
                           {

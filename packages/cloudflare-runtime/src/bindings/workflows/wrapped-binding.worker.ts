@@ -1,4 +1,7 @@
-import type { WorkflowBinding } from "@distilled.cloud/vendor-workflows-shared/src/binding";
+import type {
+  WorkflowBinding,
+  WorkflowInstanceRestartOptions,
+} from "@distilled.cloud/vendor-workflows-shared/src/binding";
 
 class WorkflowImpl implements Workflow {
   constructor(private binding: WorkflowBinding) {}
@@ -80,9 +83,9 @@ class InstanceImpl implements WorkflowInstance {
     await instance.terminate();
   }
 
-  public async restart(): Promise<void> {
+  public async restart(options?: WorkflowInstanceRestartOptions): Promise<void> {
     using instance = await this.getInstance();
-    await instance.restart();
+    await instance.restart(options);
   }
 
   public async status(): Promise<InstanceStatus> {

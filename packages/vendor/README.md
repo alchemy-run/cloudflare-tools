@@ -276,11 +276,72 @@ range lives in the root `package.json`). Remove the old `zod` entry.
 ## Updating a vendored package
 
 1. `git submodule update --remote workers-sdk` (or the relevant submodule).
-2. Re-`cp` the changed upstream files over the vendored copies.
-3. Re-apply the import-path mutations and barrel adjustments (a `git diff` of
-   the prior vendored tree against the new submodule contents makes this
-   straightforward).
-4. Run the verification commands from step 6 above. The test suite catches
-   most semantic regressions from upstream changes; the typecheck catches
-   shape changes; lint/format catches the rest.
-5. Update the upstream commit SHA in the package `README.md`.
+2. **Scope the change.** Diff the upstream package between the SHA recorded in
+   the package `README.md` and the new submodule `HEAD` to see exactly what
+   moved:
+
+   ```bash
+   git -C workers-sdk diff --stat <old-sha>..HEAD -- packages/<upstream>
+   ```
+
+3. **Identify which vendored files carry local modifications.** Vendored files
+   are **not** verbatim copies — they may include `effect/Schema` rewrites (see
+   [Conventions](#conventions)), import-path mutations, preserved
+   `eslint-disable` comments, `satisfies` annotations, and `oxfmt` reformatting
+   (tabs → 2-space, no trailing commas). Before touching a changed file,
+   determine whether the existing vendored copy differs from upstream only by
+   formatting or by a real local edit. Format- and lint-normalize the **old**
+   upstream file, then diff against the current vendored copy:
+
+   ```bash
+   git -C workers-sdk show <old-sha>:packages/<upstream>/<file> > /tmp/old.ts
+   cp /tmp/old.ts /tmp/old.fmt.ts
+   bunx oxfmt format /tmp/old.fmt.ts && bunx oxlint --fix /tmp/old.fmt.ts
+   diff /tmp/old.fmt.ts packages/vendor/<upstream>/src/<vendored-path>
+   ```
+
+   - **Empty diff** → format-only. Safe to `cp` the new upstream file over the
+     vendored copy and re-run `oxfmt`/`oxlint --fix`.
+   - **Non-empty diff** → there's a local modification (e.g. `zod` → `Schema`,
+     an import rewrite, an `eslint-disable`). Apply the upstream change by hand,
+     preserving the local edit, rather than blindly copying.
+
+4. **Re-apply the import-path mutations.** Files reclassified into the bucket
+   layout have rewritten relative imports. The mutation is mechanical and
+   consistent per package — e.g. in `workers-shared`, worker sources rewrite
+   `../../utils/X` → `../../../shared/X`. After copying, re-apply with `perl`
+   or by hand, then confirm against a format-normalized diff (step 3).
+
+5. **Copy new and verbatim files.** New upstream files (and unmodified tests,
+   `wrangler.jsonc`, `worker-configuration.d.ts`) can be copied directly. Watch
+   for new files that the layout requires (e.g. a worker that gained a
+   `worker-configuration.d.ts` for a `ctx.exports` loopback).
+
+6. **Reformat and lint-fix**, then verify:
+
+   ```bash
+   bunx oxfmt format packages/vendor/<upstream>
+   bunx oxlint --fix packages/vendor/<upstream>
+   bun run turbo run typecheck test build --filter @distilled.cloud/vendor-<upstream>
+   ```
+
+   Gotchas surfaced here:
+   - **Typecheck failures in copied tests.** Upstream does not typecheck its
+     tests against our pinned `@cloudflare/workers-types`, which is often
+     stricter. A widened object literal may need a `satisfies <Type>`
+     annotation (this is a local modification — preserve it on future updates).
+   - **Lint failures from dropped suppressions.** Upstream may remove an
+     `eslint-disable` comment that we relied on to keep `oxlint` green
+     (e.g. `consistent-type-imports` on a `typeof import()` in a
+     `worker-configuration.d.ts`). Re-add it as a local modification.
+
+7. **Update the upstream commit SHA** in the package `README.md` (and its file
+   map if the layout changed).
+
+8. **Sync downstream bindings.** Upstream changes to a vendored package often
+   require matching changes in `packages/cloudflare-runtime/src/bindings/*`,
+   because those bindings re-implement the corresponding Miniflare plugin. See
+   the [`update-vendored-cloudflare`](../../.cursor/skills/update-vendored-cloudflare/SKILL.md)
+   skill for the full flow, including how to derive the required binding
+   changes by diffing `workers-sdk/packages/miniflare/src/plugins/<x>` and
+   `workers-sdk/packages/miniflare/src/workers/<x>`.

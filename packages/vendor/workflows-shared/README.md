@@ -13,7 +13,7 @@ modifications. Only the project metadata (`package.json`, `tsconfig.json`,
 ## Provenance
 
 Sourced from [`cloudflare/workers-sdk`](https://github.com/cloudflare/workers-sdk)
-at commit `2dc61751451f142dbf93e618133a5c8942c07c9a` (path:
+at commit `a55b29a4ba8a24f4d539538e2bf38e6a7e5b8e52` (path:
 `packages/workflows-shared`). Upstream license: MIT OR Apache-2.0.
 
 ## Consumer imports

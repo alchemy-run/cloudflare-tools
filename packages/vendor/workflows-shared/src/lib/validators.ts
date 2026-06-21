@@ -12,7 +12,7 @@ export const ALLOWED_STRING_ID_PATTERN = "^[a-zA-Z0-9_][a-zA-Z0-9-_]*$";
 const ALLOWED_WORKFLOW_INSTANCE_ID_REGEX = new RegExp(ALLOWED_STRING_ID_PATTERN);
 const ALLOWED_WORKFLOW_NAME_REGEX = ALLOWED_WORKFLOW_INSTANCE_ID_REGEX;
 
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- intentional use of control character range to detect invalid characters in workflow names
 const CONTROL_CHAR_REGEX = new RegExp("[\x00-\x1F]");
 
 export function isValidWorkflowName(name: string): boolean {

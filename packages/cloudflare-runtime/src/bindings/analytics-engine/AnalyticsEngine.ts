@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AnalyticsEngineWorker from "worker:./analytics-engine.worker.ts";
 import { formatExtensionModule } from "../../internal/internal-modules.ts";
@@ -12,19 +13,21 @@ const EXTENSION_MODULE_NAME = "cloudflare-runtime:analytics-engine";
 
 export const AnalyticsEngineLive = Layer.succeed(
   AnalyticsEngine,
-  AnalyticsEngine.of({
-    extensions: [
-      {
-        modules: [
-          {
-            name: EXTENSION_MODULE_NAME,
-            internal: true,
-            esModule: formatExtensionModule(AnalyticsEngineWorker),
-          },
-        ],
-      },
-    ],
-  }),
+  AnalyticsEngine.of(
+    Effect.map(formatExtensionModule(AnalyticsEngineWorker), (esModule) => ({
+      extensions: [
+        {
+          modules: [
+            {
+              name: EXTENSION_MODULE_NAME,
+              internal: true,
+              esModule,
+            },
+          ],
+        },
+      ],
+    })),
+  ),
 );
 
 /**

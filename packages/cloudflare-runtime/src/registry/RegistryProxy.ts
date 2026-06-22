@@ -80,7 +80,13 @@ export const RegistryProxyLive = Layer.effect(
               worker: {
                 compatibilityDate: "2025-01-01",
                 compatibilityFlags: ["service_binding_extra_handlers"],
-                modules: buildWorkerModules(yield* registry.read(subscribed), durableObjects),
+                modules: yield* registry
+                  .read(subscribed)
+                  .pipe(
+                    Effect.flatMap((targets) =>
+                      Effect.promise(() => buildWorkerModules(targets, durableObjects)),
+                    ),
+                  ),
                 bindings: [
                   {
                     name: "REGISTRY_DEBUG_PORT",
@@ -214,13 +220,14 @@ const externalDurableObjectClassName = (scriptName: string, className: string) =
   `ExternalDurableObject_${NodeCrypto.createHash("sha256").update(scriptName).update(className).digest("hex").slice(0, 16)}`;
 
 /** Builds the worker modules for the registry proxy, including a pre-populated registry and proxy classes for each external Durable Object. */
-const buildWorkerModules = (
+const buildWorkerModules = async (
   targets: ResolvedTargetMap,
   durableObjects: ReadonlyArray<Subscriber.DurableObject>,
 ) => {
+  const worker = await RegistryProxyWorker.worker();
   const main = [
-    `import { makeExternalDurableObject, Target } from "./${RegistryProxyWorker.main}";`,
-    `export { ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${RegistryProxyWorker.main}";`,
+    `import { makeExternalDurableObject, Target } from "./${worker.main}";`,
+    `export { ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
     `Target.set(${JSON.stringify(targets)});`,
     `export default {`,
     `  async fetch(request) {`,
@@ -240,7 +247,7 @@ const buildWorkerModules = (
   return formatInternalWorkerModules({
     modules: {
       "index.worker.mjs": main,
-      ...RegistryProxyWorker.modules,
+      ...worker.modules,
     },
   });
 };

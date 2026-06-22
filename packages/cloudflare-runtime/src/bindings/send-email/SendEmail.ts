@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as EmailWorker from "worker:./email.worker.ts";
 import { formatExtensionModule } from "../../internal/internal-modules.ts";
@@ -10,19 +11,21 @@ export class SendEmail extends Plugin.Service<SendEmail>()("cloudflare-runtime/p
 
 export const SendEmailLive = Layer.succeed(
   SendEmail,
-  SendEmail.of({
-    extensions: [
-      {
-        modules: [
-          {
-            name: "cloudflare-internal:email",
-            internal: true,
-            esModule: formatExtensionModule(EmailWorker),
-          },
-        ],
-      },
-    ],
-  }),
+  SendEmail.of(
+    Effect.map(formatExtensionModule(EmailWorker), (esModule) => ({
+      extensions: [
+        {
+          modules: [
+            {
+              name: "cloudflare-internal:email",
+              internal: true,
+              esModule,
+            },
+          ],
+        },
+      ],
+    })),
+  ),
 );
 
 export interface RemoteSendEmailProps {

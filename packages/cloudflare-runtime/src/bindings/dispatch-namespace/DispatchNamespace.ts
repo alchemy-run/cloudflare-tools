@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as DispatchNamespaceBindingWorker from "worker:./dispatch-namespace.worker.ts";
 import { formatExtensionModule } from "../../internal/internal-modules.ts";
@@ -14,19 +15,21 @@ const EXTENSION_MODULE_NAME = "cloudflare-runtime:dispatch-namespace";
 
 export const DispatchNamespaceLive = Layer.succeed(
   DispatchNamespace,
-  DispatchNamespace.of({
-    extensions: [
-      {
-        modules: [
-          {
-            name: EXTENSION_MODULE_NAME,
-            internal: true,
-            esModule: formatExtensionModule(DispatchNamespaceBindingWorker),
-          },
-        ],
-      },
-    ],
-  }),
+  DispatchNamespace.of(
+    Effect.map(formatExtensionModule(DispatchNamespaceBindingWorker), (esModule) => ({
+      extensions: [
+        {
+          modules: [
+            {
+              name: EXTENSION_MODULE_NAME,
+              internal: true,
+              esModule,
+            },
+          ],
+        },
+      ],
+    })),
+  ),
 );
 
 export interface DispatchNamespaceProps {

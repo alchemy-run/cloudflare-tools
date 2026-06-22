@@ -98,7 +98,7 @@ export const QueueLive = Layer.succeed(
           worker: {
             compatibilityDate: BROKER_COMPATIBILITY_DATE,
             compatibilityFlags: ["experimental", "service_binding_extra_handlers"],
-            modules: formatInternalWorkerModules(QueueBrokerWorker),
+            modules: formatInternalWorkerModules(yield* Effect.promise(QueueBrokerWorker.worker)),
             durableObjectNamespaces: [
               {
                 className: "QueueBroker",

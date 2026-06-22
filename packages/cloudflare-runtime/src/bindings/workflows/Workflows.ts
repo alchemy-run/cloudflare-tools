@@ -88,7 +88,7 @@ export const WorkflowsLive = Layer.effect(
                 {
                   name: WORKFLOWS_WRAPPED_BINDING_MODULE,
                   internal: true,
-                  esModule: formatExtensionModule(WorkflowsWrappedBindingWorker),
+                  esModule: yield* formatExtensionModule(WorkflowsWrappedBindingWorker),
                 },
               ],
             };
@@ -116,7 +116,9 @@ export const WorkflowsLive = Layer.effect(
                 worker: {
                   compatibilityDate: "2024-10-22",
                   compatibilityFlags: ["experimental", ...(ctx.worker.compatibilityFlags ?? [])],
-                  modules: formatInternalWorkerModules(WorkflowsBindingWorker),
+                  modules: formatInternalWorkerModules(
+                    yield* Effect.promise(WorkflowsBindingWorker.worker),
+                  ),
                   durableObjectNamespaces: [
                     {
                       className: "Engine",

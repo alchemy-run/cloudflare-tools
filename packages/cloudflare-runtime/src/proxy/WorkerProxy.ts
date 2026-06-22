@@ -66,6 +66,11 @@ export const WorkerProxyLive = Layer.effect(
     });
     type ResolvedOptions = Effect.Success<ReturnType<typeof normalizeOptions>>;
 
+    const modules = yield* Effect.map(
+      Effect.promise(ProxyWorker.worker),
+      formatInternalWorkerModules,
+    );
+
     const serve = ({ host, port, token }: ResolvedOptions) =>
       workerd
         .serve({
@@ -81,7 +86,7 @@ export const WorkerProxyLive = Layer.effect(
               name: "proxy:worker",
               worker: {
                 compatibilityDate: "2026-03-10",
-                modules: formatInternalWorkerModules(ProxyWorker),
+                modules,
                 bindings: [
                   { name: "PROXY", durableObjectNamespace: { className: "WorkerProxy" } },
                   { name: "PROXY_TOKEN", text: token },

@@ -2,7 +2,13 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import type * as rolldown from "rolldown";
 
-export const InternalWorkerImportPlugin = (): Array<rolldown.Plugin> => {
+export const InternalWorkerImportPlugin = (
+  options: {
+    workersRoot: string;
+  } = {
+    workersRoot: "./workers",
+  },
+): Array<rolldown.Plugin> => {
   const WORKER_IMPORT_PREFIX = "\0worker-import:";
   const WORKER_SOURCE_PREFIX = "\0worker-source:";
   return [
@@ -39,7 +45,7 @@ export const InternalWorkerImportPlugin = (): Array<rolldown.Plugin> => {
         async handler(id) {
           const resolvedId = id.slice(WORKER_SOURCE_PREFIX.length);
           return {
-            id: path.resolve("./workers", resolvedId),
+            id: path.resolve(options.workersRoot, resolvedId),
             external: "relative",
           };
         },

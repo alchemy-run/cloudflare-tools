@@ -87,7 +87,11 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                 name: "assets:router",
                 worker: {
                   compatibilityDate: "2024-07-31",
-                  compatibilityFlags: ["nodejs_compat", "no_nodejs_compat_v2"],
+                  compatibilityFlags: [
+                    "nodejs_compat",
+                    "no_nodejs_compat_v2",
+                    "enable_ctx_exports",
+                  ],
                   bindings: [
                     {
                       name: "ASSET_WORKER",

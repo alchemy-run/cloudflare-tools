@@ -1,1 +1,4 @@
-export { default } from "@distilled.cloud/vendor-workers-shared/workers/router-worker";
+export {
+  default,
+  RouterInnerEntrypoint,
+} from "@distilled.cloud/vendor-workers-shared/workers/router-worker";

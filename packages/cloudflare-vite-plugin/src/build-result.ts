@@ -13,54 +13,51 @@ export interface BuildResult {
 export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin => {
   return {
     name: "distilled-cloudflare:build-result",
-    buildApp: {
-      order: "pre",
-      handler: async (builder) => {
-        let assetsDir: string | undefined;
-        let server: BuildResult["server"];
-        const serverModules = new Map<
-          string,
-          vite.Rolldown.OutputChunk | vite.Rolldown.OutputAsset
-        >();
-        for (const environment of Object.values(builder.environments)) {
-          const result = await builder.build(environment);
-          if (environment.name === "client") {
-            assetsDir = environment.config.build.outDir;
-            continue;
+    async buildApp(builder) {
+      let assetsDir: string | undefined;
+      let server: BuildResult["server"];
+      const serverModules = new Map<
+        string,
+        vite.Rolldown.OutputChunk | vite.Rolldown.OutputAsset
+      >();
+      for (const environment of Object.values(builder.environments)) {
+        const result = await builder.build(environment);
+        if (environment.name === "client") {
+          assetsDir = environment.config.build.outDir;
+          continue;
+        }
+        if (!isRolldownOutput(result)) {
+          throw new Error("Build result is not a RolldownOutput");
+        }
+        const chunk = result.output[0];
+        if (chunk.facadeModuleId && chunk.facadeModuleId.startsWith(WORKER_ENTRY_PREFIX)) {
+          if (server) {
+            throw new Error("Multiple server entries found");
           }
-          if (!isRolldownOutput(result)) {
-            throw new Error("Build result is not a RolldownOutput");
-          }
-          const chunk = result.output[0];
-          if (chunk.facadeModuleId && chunk.facadeModuleId.startsWith(WORKER_ENTRY_PREFIX)) {
-            if (server) {
-              throw new Error("Multiple server entries found");
-            }
-            server = [chunk];
-          } else {
-            for (const chunk of result.output) {
-              serverModules.set(chunk.fileName, chunk);
-            }
+          server = [chunk];
+        } else {
+          for (const chunk of result.output) {
+            serverModules.set(chunk.fileName, chunk);
           }
         }
-        const keys = Array.from(serverModules.keys()).sort((a, b) => a.localeCompare(b));
-        if (keys.length > 0) {
-          if (!server) {
-            throw new Error("Server entry not found");
-          }
-          for (const key of keys) {
-            const chunk = serverModules.get(key);
-            if (!chunk) {
-              throw new Error(`Chunk ${key} not found`);
-            }
-            server.push(chunk);
-          }
+      }
+      const keys = Array.from(serverModules.keys()).sort((a, b) => a.localeCompare(b));
+      if (keys.length > 0) {
+        if (!server) {
+          throw new Error("Server entry not found");
         }
-        options.onBuildComplete?.({
-          assetsDir,
-          server,
-        });
-      },
+        for (const key of keys) {
+          const chunk = serverModules.get(key);
+          if (!chunk) {
+            throw new Error(`Chunk ${key} not found`);
+          }
+          server.push(chunk);
+        }
+      }
+      options.onBuildComplete?.({
+        assetsDir,
+        server,
+      });
     },
   };
 };

@@ -86,7 +86,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       const [input] = inputs;
       handle ??= await startServer(
         options,
-        { id: input, name: input },
+        { environmentName: environmentNames[0], entryId: input, entryName: input },
         server,
         options.context ?? context!,
       );

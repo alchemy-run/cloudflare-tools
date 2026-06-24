@@ -1,3 +1,4 @@
+import type { EntryEnvironment } from "./constants.shared.ts";
 import type { ModuleRunnerDO } from "./module-runner.worker.ts";
 
 export interface Env extends Cloudflare.Env {
@@ -8,11 +9,7 @@ export interface Env extends Cloudflare.Env {
     eval: (code: string, id: string) => Function;
   };
   __DISTILLED_INVOKE_MODULE__: Fetcher;
-  __DISTILLED_ENVIRONMENT__: {
-    environmentName: string;
-    entryId: string;
-    entryName: string;
-  };
+  __DISTILLED_ENVIRONMENT__: EntryEnvironment;
   [key: string]: unknown;
 }
 

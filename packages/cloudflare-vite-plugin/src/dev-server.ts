@@ -103,7 +103,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         className: "ModuleRunnerDO",
       }),
       Json.local("__DISTILLED_ENVIRONMENT__", {
-        environmentName: "ssr",
+        environmentName: options.viteEnvironment?.name ?? "ssr",
         entryId: entry.id,
         entryName: entry.name,
       }),

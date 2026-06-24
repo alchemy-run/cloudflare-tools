@@ -1,5 +1,5 @@
 import type * as rolldown from "rolldown";
-import type { CloudflarePluginOptions } from "./options.js";
+import type { BasePluginOptions } from "./options.js";
 import {
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
@@ -11,9 +11,11 @@ import {
   wasmInitPlugin,
 } from "./plugins/index.js";
 
-export type CloudflarePlugin = (options?: CloudflarePluginOptions) => Array<rolldown.Plugin | null>;
+export type RolldownPluginOptions = Omit<BasePluginOptions, "viteEnvironment">;
 
-const cloudflare: CloudflarePlugin = (options = {}) => {
+export type RolldownPlugin = (options?: RolldownPluginOptions) => Array<rolldown.Plugin | null>;
+
+const cloudflare: RolldownPlugin = (options = {}) => {
   return [
     optionsPlugin.rolldown(options),
     cloudflareExternalsPlugin.rolldown(options),

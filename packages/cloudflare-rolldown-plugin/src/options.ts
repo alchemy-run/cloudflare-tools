@@ -1,4 +1,4 @@
-export interface CloudflarePluginOptions {
+export interface BasePluginOptions {
   /**
    * The main entry point to use.
    * Defaults to the one from your Rolldown configuration.
@@ -28,4 +28,20 @@ export interface CloudflarePluginOptions {
    * ```
    */
   exports?: Array<string>;
+  /**
+   * Which Vite environment hosts the Worker, and any child environments it
+   * loads at runtime. Defaults to the single `ssr` environment.
+   *
+   * `@vitejs/plugin-rsc` apps run the Worker in the `rsc` environment (resolved
+   * with the `react-server` condition) and load the `ssr` environment from it,
+   * so they set `{ name: "rsc", childEnvironments: ["ssr"] }`. Every named
+   * environment is given the Worker treatment (workerd resolve conditions,
+   * dependency pre-bundling) and a module runner in dev.
+   *
+   * @default { name: "ssr", childEnvironments: [] }
+   */
+  viteEnvironment?: {
+    name?: string;
+    childEnvironments?: Array<string>;
+  };
 }

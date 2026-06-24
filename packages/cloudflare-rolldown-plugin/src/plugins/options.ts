@@ -1,7 +1,7 @@
 import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
-import type { CloudflarePluginOptions } from "../options.js";
+import type { BasePluginOptions } from "../options.js";
 import { hasNodejsCompat } from "../utils.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
@@ -23,14 +23,17 @@ const DEFAULT_RESOLVE_EXTENSIONS = [
 const TARGET = "es2024";
 
 export interface OptionsApi {
+  environmentNames: WorkerEnvironments;
   input: () => Record<string, string>;
 }
 
 export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (pluginOptions) => {
+  const environmentNames = parseEnvironments(pluginOptions);
   let input: Record<string, string> = {};
   return {
     shared: {
       api: {
+        environmentNames,
         input: () => input,
       },
     },
@@ -56,11 +59,85 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         const vite = await import("vite");
         const isRolldown = "rolldownVersion" in this.meta;
         input = normalizeInput(
-          pluginOptions.main ??
-            userConfig.environments?.ssr?.build?.rolldownOptions?.input ??
-            userConfig.environments?.ssr?.build?.rollupOptions?.input ??
-            {},
+          pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
         );
+        const makeEnvironment = ({
+          name,
+          isEntry,
+        }: {
+          name: string;
+          isEntry: boolean;
+        }): vite.EnvironmentOptions => {
+          const entries = isEntry
+            ? (pluginOptions.main ?? defaultEnvironmentEntries(name, userConfig))
+            : (defaultEnvironmentEntries(name, userConfig) ?? pluginOptions.main);
+          return {
+            resolve: {
+              noExternal: true,
+              conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
+            },
+            optimizeDeps: {
+              noDiscovery: false,
+              ignoreOutdatedRequests: true,
+              entries: asArray(entries)?.map(vite.normalizePath),
+              ...(isRolldown
+                ? {
+                    rolldownOptions: {
+                      platform: "neutral",
+                      resolve: {
+                        conditionNames: [
+                          ...DEFAULT_RESOLVE_CONDITION_NAMES,
+                          "development|production",
+                        ],
+                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                        extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                      },
+                      transform: {
+                        target: TARGET,
+                        define,
+                      },
+                    },
+                  }
+                : {
+                    esbuildOptions: {
+                      platform: "neutral",
+                      conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
+                      resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
+                      mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                      target: TARGET,
+                      define,
+                    },
+                  }),
+            },
+            keepProcessEnv: true,
+            // The entry environment owns the Worker's build input and server
+            // output directory; children (e.g. `ssr`) keep their own build config
+            // from the framework plugin (`@vitejs/plugin-rsc`).
+            ...(isEntry
+              ? {
+                  build: {
+                    ssr: true,
+                    target: TARGET,
+                    emitAssets: true,
+                    copyPublicDir: false,
+                    outDir: getOutputDirectory(userConfig, name),
+                    ...(isRolldown
+                      ? {
+                          rolldownOptions: {
+                            ...rollupOptions,
+                            platform: "neutral",
+                            resolve: {
+                              mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
+                              extensions: DEFAULT_RESOLVE_EXTENSIONS,
+                            },
+                          },
+                        }
+                      : { rollupOptions }),
+                  },
+                }
+              : {}),
+          };
+        };
         const rollupOptions: vite.Rollup.RollupOptions = {
           input: wrapInput(input),
           preserveEntrySignatures: "strict",
@@ -94,71 +171,63 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 outDir: getOutputDirectory(userConfig, "client"),
               },
             },
-            ssr: {
-              resolve: {
-                noExternal: true,
-                conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
-              },
-              build: {
-                ssr: true,
-                target: TARGET,
-                emitAssets: true,
-                copyPublicDir: false,
-                outDir: getOutputDirectory(userConfig, "server"),
-                ...(isRolldown
-                  ? {
-                      rolldownOptions: {
-                        ...rollupOptions,
-                        platform: "neutral",
-                        resolve: {
-                          mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                          extensions: DEFAULT_RESOLVE_EXTENSIONS,
-                        },
-                      },
-                    }
-                  : { rollupOptions }),
-              },
-              optimizeDeps: {
-                noDiscovery: false,
-                ignoreOutdatedRequests: true,
-                entries: pluginOptions.main ? vite.normalizePath(pluginOptions.main) : undefined,
-                ...(isRolldown
-                  ? {
-                      rolldownOptions: {
-                        platform: "neutral",
-                        resolve: {
-                          conditionNames: [
-                            ...DEFAULT_RESOLVE_CONDITION_NAMES,
-                            "development|production",
-                          ],
-                          mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                          extensions: DEFAULT_RESOLVE_EXTENSIONS,
-                        },
-                        transform: {
-                          target: TARGET,
-                          define,
-                        },
-                      },
-                    }
-                  : {
-                      esbuildOptions: {
-                        platform: "neutral",
-                        conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
-                        resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
-                        mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                        target: TARGET,
-                        define,
-                      },
-                    }),
-              },
-              keepProcessEnv: true,
-            },
+            ...Object.fromEntries(
+              environmentNames.map((name, index) => [
+                name,
+                makeEnvironment({ name, isEntry: index === 0 }),
+              ]),
+            ),
           },
         };
       },
     },
   };
 });
+
+export type WorkerEnvironments = [string, ...Array<string>];
+
+const parseEnvironments = (options: BasePluginOptions): WorkerEnvironments => {
+  const entry = options.viteEnvironment?.name ?? "ssr";
+  if (entry === "client") {
+    throw new Error(
+      'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
+    );
+  }
+  const children = (options.viteEnvironment?.childEnvironments ?? []).map((name, index, self) => {
+    if (name === "client") {
+      throw new Error(
+        'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
+      );
+    } else if (self.indexOf(name) !== index) {
+      throw new Error(
+        `The name "${name}" appears more than once in the Vite environment list. Worker environment names must be unique.`,
+      );
+    } else if (name === entry) {
+      throw new Error(
+        `The child environment "${name}" cannot have the same name as the entry environment "${entry}".`,
+      );
+    }
+    return name;
+  });
+  return [entry, ...children];
+};
+
+const defaultEnvironmentEntries = (
+  environmentName: string,
+  userConfig: vite.UserConfig,
+): vite.Rolldown.InputOption | undefined => {
+  const environment = userConfig.environments?.[environmentName];
+  return environment?.build?.rolldownOptions?.input ?? environment?.build?.rollupOptions?.input;
+};
+
+const asArray = (
+  input: string | Array<string> | Record<string, string> | undefined,
+): Array<string> | undefined => {
+  if (!input) return;
+  if (typeof input === "string") return [input];
+  if (Array.isArray(input) && input.length > 0) return input;
+  return Object.values(input);
+};
 
 const normalizeInput = (
   input: string | Array<string> | Record<string, string>,
@@ -177,7 +246,7 @@ const wrapInput = (input: Record<string, string>) =>
     Object.entries(input).map(([key, id]) => [key, `${WORKER_ENTRY_PREFIX}${id}` as const]),
   );
 
-function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<string, string> {
+const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => {
   return {
     "process.env.NODE_ENV": JSON.stringify(nodeEnv),
     "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
@@ -200,13 +269,13 @@ function getDefine(options: CloudflarePluginOptions, nodeEnv: string): Record<st
         }
       : {}),
   };
-}
+};
 
-function getOutputDirectory(userConfig: vite.UserConfig, environmentName: string) {
+const getOutputDirectory = (userConfig: vite.UserConfig, environmentName: string) => {
   const rootOutputDirectory = userConfig.build?.outDir ?? "dist";
 
   return (
     userConfig.environments?.[environmentName]?.build?.outDir ??
     path.join(rootOutputDirectory, environmentName)
   );
-}
+};

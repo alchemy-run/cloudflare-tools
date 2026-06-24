@@ -59,6 +59,14 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         input = normalizeInput(
           pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
         );
+        const rollupOptions: vite.Rollup.RollupOptions = {
+          input: wrapInput(input),
+          preserveEntrySignatures: "strict",
+        };
+        const define = getDefine(
+          pluginOptions,
+          process.env.NODE_ENV || userConfig.mode || "production",
+        );
         const makeEnvironment = ({
           name,
           isEntry,
@@ -136,17 +144,8 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {}),
           };
         };
-        const rollupOptions: vite.Rollup.RollupOptions = {
-          input: wrapInput(input),
-          preserveEntrySignatures: "strict",
-        };
-        const define = getDefine(
-          pluginOptions,
-          process.env.NODE_ENV || userConfig.mode || "production",
-        );
-        const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
         return {
-          appType,
+          appType: userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom"),
           ssr: {
             noExternal: true,
             resolve: {

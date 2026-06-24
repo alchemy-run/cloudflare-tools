@@ -17,7 +17,7 @@ export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin
       order: "pre",
       handler: async (builder) => {
         let assetsDir: string | undefined;
-        let serverEntry: vite.Rolldown.OutputChunk | undefined;
+        let server: BuildResult["server"];
         const serverModules = new Map<
           string,
           vite.Rolldown.OutputChunk | vite.Rolldown.OutputAsset
@@ -33,19 +33,32 @@ export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin
           }
           const chunk = result.output[0];
           if (chunk.facadeModuleId && chunk.facadeModuleId.startsWith(WORKER_ENTRY_PREFIX)) {
-            if (serverEntry) {
+            if (server) {
               throw new Error("Multiple server entries found");
             }
-            serverEntry = chunk;
+            server = [chunk];
           } else {
             for (const chunk of result.output) {
               serverModules.set(chunk.fileName, chunk);
             }
           }
         }
+        const keys = Array.from(serverModules.keys()).sort((a, b) => a.localeCompare(b));
+        if (keys.length > 0) {
+          if (!server) {
+            throw new Error("Server entry not found");
+          }
+          for (const key of keys) {
+            const chunk = serverModules.get(key);
+            if (!chunk) {
+              throw new Error(`Chunk ${key} not found`);
+            }
+            server.push(chunk);
+          }
+        }
         options.onBuildComplete?.({
           assetsDir,
-          server: serverEntry ? [serverEntry, ...serverModules.values()] : undefined,
+          server,
         });
       },
     },

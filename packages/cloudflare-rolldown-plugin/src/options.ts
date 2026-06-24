@@ -38,22 +38,22 @@ export interface BasePluginOptions {
    * environment is given the Worker treatment (workerd resolve conditions,
    * dependency pre-bundling) and a module runner in dev.
    *
-   * @default { name: "ssr", childEnvironments: [] }
+   * @default { entry: "ssr", children: [] }
    */
-  viteEnvironment?: {
-    name?: string;
-    childEnvironments?: Array<string>;
+  viteEnvironments?: {
+    entry?: string;
+    children?: Array<string>;
   };
 }
 
 export const parseViteEnvironments = (options: BasePluginOptions): [string, ...Array<string>] => {
-  const entry = options.viteEnvironment?.name ?? "ssr";
+  const entry = options.viteEnvironments?.entry ?? "ssr";
   if (entry === "client") {
     throw new Error(
       'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
     );
   }
-  const children = (options.viteEnvironment?.childEnvironments ?? []).map((name, index, self) => {
+  const children = (options.viteEnvironments?.children ?? []).map((name, index, self) => {
     if (name === "client") {
       throw new Error(
         'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',

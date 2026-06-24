@@ -3,11 +3,11 @@ import type * as vite from "vite";
 import type { CloudflareVitePluginOptions } from "./plugin";
 
 export interface BuildResult {
-  client?: { dir: string };
-  server?: {
-    entry: string;
-    modules: Map<string, vite.Rolldown.OutputChunk | vite.Rolldown.OutputAsset>;
-  };
+  assetsDir?: string;
+  server?: [
+    vite.Rolldown.OutputChunk,
+    ...Array<vite.Rolldown.OutputChunk | vite.Rolldown.OutputAsset>,
+  ];
 }
 
 export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin => {
@@ -16,8 +16,8 @@ export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin
     buildApp: {
       order: "pre",
       handler: async (builder) => {
-        let clientDir: string | undefined;
-        let serverEntry: string | undefined;
+        let assetsDir: string | undefined;
+        let serverEntry: vite.Rolldown.OutputChunk | undefined;
         const serverModules = new Map<
           string,
           vite.Rolldown.OutputChunk | vite.Rolldown.OutputAsset
@@ -25,7 +25,7 @@ export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin
         for (const environment of Object.values(builder.environments)) {
           const result = await builder.build(environment);
           if (environment.name === "client") {
-            clientDir = environment.config.build.outDir;
+            assetsDir = environment.config.build.outDir;
             continue;
           }
           if (!isRolldownOutput(result)) {
@@ -33,15 +33,19 @@ export const builderPlugin = (options: CloudflareVitePluginOptions): vite.Plugin
           }
           const chunk = result.output[0];
           if (chunk.facadeModuleId && chunk.facadeModuleId.startsWith(WORKER_ENTRY_PREFIX)) {
-            serverEntry = chunk.fileName;
-          }
-          for (const chunk of result.output) {
-            serverModules.set(chunk.fileName, chunk);
+            if (serverEntry) {
+              throw new Error("Multiple server entries found");
+            }
+            serverEntry = chunk;
+          } else {
+            for (const chunk of result.output) {
+              serverModules.set(chunk.fileName, chunk);
+            }
           }
         }
         options.onBuildComplete?.({
-          client: clientDir ? { dir: clientDir } : undefined,
-          server: serverEntry ? { entry: serverEntry, modules: serverModules } : undefined,
+          assetsDir,
+          server: serverEntry ? [serverEntry, ...serverModules.values()] : undefined,
         });
       },
     },

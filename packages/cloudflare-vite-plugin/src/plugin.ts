@@ -27,6 +27,8 @@ export interface CloudflareVitePluginOptions<
   onBuildComplete?: (options: BuildResult) => void;
 }
 
+export type { BuildResult };
+
 export default function cloudflareVitePlugin(
   options: CloudflareVitePluginOptions = {},
 ): Array<vite.Plugin | null> {

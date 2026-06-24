@@ -30,9 +30,6 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       optionsApi = resolvePluginApi<OptionsApi>(plugins ?? [], "distilled-cloudflare:options");
     },
     config() {
-      if (!optionsApi) {
-        throw new Error("Cannot resolve the distilled-cloudflare:options plugin");
-      }
       const environment: vite.EnvironmentOptions = {
         dev: {
           createEnvironment(name, config) {

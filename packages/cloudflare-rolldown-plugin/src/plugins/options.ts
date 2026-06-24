@@ -1,7 +1,7 @@
 import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
-import type { BasePluginOptions } from "../options.js";
+import { parseViteEnvironments, type BasePluginOptions } from "../options.js";
 import { hasNodejsCompat } from "../utils.js";
 import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
 
@@ -23,17 +23,14 @@ const DEFAULT_RESOLVE_EXTENSIONS = [
 const TARGET = "es2024";
 
 export interface OptionsApi {
-  environmentNames: WorkerEnvironments;
   input: () => Record<string, string>;
 }
 
 export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (pluginOptions) => {
-  const environmentNames = parseEnvironments(pluginOptions);
   let input: Record<string, string> = {};
   return {
     shared: {
       api: {
-        environmentNames,
         input: () => input,
       },
     },
@@ -58,6 +55,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
       async config(userConfig) {
         const vite = await import("vite");
         const isRolldown = "rolldownVersion" in this.meta;
+        const environmentNames = parseViteEnvironments(pluginOptions);
         input = normalizeInput(
           pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
         );
@@ -183,34 +181,6 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
     },
   };
 });
-
-export type WorkerEnvironments = [string, ...Array<string>];
-
-const parseEnvironments = (options: BasePluginOptions): WorkerEnvironments => {
-  const entry = options.viteEnvironment?.name ?? "ssr";
-  if (entry === "client") {
-    throw new Error(
-      'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
-    );
-  }
-  const children = (options.viteEnvironment?.childEnvironments ?? []).map((name, index, self) => {
-    if (name === "client") {
-      throw new Error(
-        'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
-      );
-    } else if (self.indexOf(name) !== index) {
-      throw new Error(
-        `The name "${name}" appears more than once in the Vite environment list. Worker environment names must be unique.`,
-      );
-    } else if (name === entry) {
-      throw new Error(
-        `The child environment "${name}" cannot have the same name as the entry environment "${entry}".`,
-      );
-    }
-    return name;
-  });
-  return [entry, ...children];
-};
 
 const defaultEnvironmentEntries = (
   environmentName: string,

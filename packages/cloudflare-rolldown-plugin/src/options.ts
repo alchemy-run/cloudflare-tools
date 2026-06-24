@@ -45,3 +45,29 @@ export interface BasePluginOptions {
     childEnvironments?: Array<string>;
   };
 }
+
+export const parseViteEnvironments = (options: BasePluginOptions): [string, ...Array<string>] => {
+  const entry = options.viteEnvironment?.name ?? "ssr";
+  if (entry === "client") {
+    throw new Error(
+      'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
+    );
+  }
+  const children = (options.viteEnvironment?.childEnvironments ?? []).map((name, index, self) => {
+    if (name === "client") {
+      throw new Error(
+        'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
+      );
+    } else if (self.indexOf(name) !== index) {
+      throw new Error(
+        `The name "${name}" appears more than once in the Vite environment list. Worker environment names must be unique.`,
+      );
+    } else if (name === entry) {
+      throw new Error(
+        `The child environment "${name}" cannot have the same name as the entry environment "${entry}".`,
+      );
+    }
+    return name;
+  });
+  return [entry, ...children];
+};

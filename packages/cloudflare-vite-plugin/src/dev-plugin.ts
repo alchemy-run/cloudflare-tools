@@ -1,3 +1,4 @@
+import { parseViteEnvironments } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import type { OptionsApi } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import { resolvePluginApi } from "@distilled.cloud/cloudflare-rolldown-plugin/utils";
 import type { RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
@@ -12,6 +13,7 @@ import { handleWebSocket } from "./websockets.js";
 let context: Context.Context<RuntimeServices> | undefined;
 
 export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
+  const environmentNames = parseViteEnvironments(options);
   let handle: ServerHandle | undefined;
   let isServerRestarting = false;
   let removeUpgradeListener: (() => void) | undefined;
@@ -46,9 +48,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
         },
       };
       return {
-        environments: Object.fromEntries(
-          optionsApi.environmentNames.map((name) => [name, environment]),
-        ),
+        environments: Object.fromEntries(environmentNames.map((name) => [name, environment])),
       };
     },
     async buildEnd() {
@@ -91,7 +91,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
         options.context ?? context!,
       );
       const address = handle.address;
-      for (const environmentName of optionsApi.environmentNames) {
+      for (const environmentName of environmentNames) {
         const environment = server.environments[environmentName];
         if (environment instanceof DistilledDevEnvironment) {
           await environment.depsOptimizer?.init();

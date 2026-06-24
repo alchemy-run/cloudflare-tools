@@ -153,16 +153,6 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
             },
           },
-          builder:
-            appType === "spa"
-              ? undefined
-              : {
-                  buildApp: async (app) => {
-                    for (const environment of Object.values(app.environments)) {
-                      await app.build(environment);
-                    }
-                  },
-                },
           environments: {
             client: {
               build: {

@@ -16,6 +16,7 @@ import type {
 } from "@distilled.cloud/cloudflare-runtime";
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
+import { builderPlugin, type BuildResult } from "./build-result.js";
 import { dev } from "./dev-plugin.js";
 
 export interface CloudflareVitePluginOptions<
@@ -23,6 +24,7 @@ export interface CloudflareVitePluginOptions<
 > extends BasePluginOptions {
   worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
   context?: Context.Context<RuntimeServices>;
+  onBuildComplete?: (options: BuildResult) => void;
 }
 
 export default function cloudflareVitePlugin(
@@ -45,5 +47,6 @@ export default function cloudflareVitePlugin(
       },
     } as vite.Plugin,
     dev(options),
+    builderPlugin(options),
   ];
 }

@@ -78,6 +78,13 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             ? (pluginOptions.main ?? defaultEnvironmentEntries(name, userConfig))
             : (defaultEnvironmentEntries(name, userConfig) ?? pluginOptions.main);
           return {
+            // Bake `process.env.NODE_ENV` (and friends) into the worker build.
+            // workerd has no value for it at runtime, so without this libraries
+            // like React fall back to their development builds. Setting `define`
+            // at the environment level applies it even though `keepProcessEnv`
+            // stays `true` (so other `process.env` access is preserved at
+            // runtime for `nodejs_compat`).
+            define,
             resolve: {
               noExternal: true,
               conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],

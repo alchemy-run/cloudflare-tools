@@ -144,8 +144,19 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {}),
           };
         };
+        const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
         return {
-          appType: userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom"),
+          appType,
+          builder:
+            appType === "spa"
+              ? undefined
+              : {
+                  buildApp: async (builder) => {
+                    for (const environment of Object.values(builder.environments)) {
+                      await builder.build(environment);
+                    }
+                  },
+                },
           ssr: {
             noExternal: true,
             resolve: {

@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.12.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.0) (2026-06-26)
+
+### Features
+
+- **vite-plugin**: support multiple vite environments - by John Royal in [#55](https://github.com/alchemy-run/cloudflare-tools/pull/55) [(fb1f213)](https://github.com/alchemy-run/cloudflare-tools/commit/fb1f213b74ad82b93183f8b5887c5a4bf79abd1a)
+
+### Bug Fixes
+
+- **vite-plugin**: avoid rebuilding already built environments - by @john-royal [(3afd241)](https://github.com/alchemy-run/cloudflare-tools/commit/3afd241011e9fc360ddee1f3e2b264f6edea1c1f)
+- lazy import workers and adjust build settings - by John Royal in [#54](https://github.com/alchemy-run/cloudflare-tools/pull/54) [(838af64)](https://github.com/alchemy-run/cloudflare-tools/commit/838af64bd16ad1204eb136dce8ab2426ab4aac8a)
+- **vite-plugin**: router inner entrypoint missing - by @john-royal [(5690875)](https://github.com/alchemy-run/cloudflare-tools/commit/5690875cb0d6b0a0c5ca94368283d41fcd91dde7)
+
 ## [v0.11.3](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.11.3) (2026-06-21)
 
 ### Bug Fixes

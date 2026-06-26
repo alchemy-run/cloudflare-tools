@@ -1,0 +1,32 @@
+{
+  "name": "@fixtures/react-router-rsc",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 3200",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "pretest": "playwright install chromium"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "7.16.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@distilled.cloud/test-utils": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-rsc": "latest",
+    "vite": "catalog:"
+  }
+}

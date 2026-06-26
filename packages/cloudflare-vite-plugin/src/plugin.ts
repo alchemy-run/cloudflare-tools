@@ -1,4 +1,4 @@
-import type { CloudflarePluginOptions } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
+import type { BasePluginOptions } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import {
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
@@ -20,7 +20,7 @@ import { dev } from "./dev-plugin.js";
 
 export interface CloudflareVitePluginOptions<
   B extends BindingHooks = BindingHooks,
-> extends CloudflarePluginOptions {
+> extends BasePluginOptions {
   worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
   context?: Context.Context<RuntimeServices>;
 }

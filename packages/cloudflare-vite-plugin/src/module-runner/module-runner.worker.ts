@@ -57,7 +57,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
     globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__ = async (environmentName: string, id: string) => {
       const moduleRunner = this.moduleRunners.get(environmentName);
       if (!moduleRunner) {
-        throw new Error(`Module runner not initialized for environment: "${environmentName}"`);
+        throw new NotInitializedError(environmentName);
       }
       return callbacks.run(this.env, () => moduleRunner.import(id));
     };
@@ -76,7 +76,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
   send(environmentName: string, data: string): void {
     const webSocket = this.webSockets.get(environmentName);
     if (!webSocket) {
-      throw new Error(`Module runner not initialized for environment: "${environmentName}"`);
+      throw new NotInitializedError(environmentName);
     }
     webSocket.send(data);
   }
@@ -170,6 +170,14 @@ export class ModuleRunnerDO extends DurableObject<Env> {
           return await import(filepath);
         },
       },
+    );
+  }
+}
+
+class NotInitializedError extends Error {
+  constructor(environmentName: string) {
+    super(
+      `Module runner not initialized for environment: "${environmentName}". If this is a child environment, make sure to set \`childEnvironments: ["${environmentName}"]\` in the plugin config.`,
     );
   }
 }

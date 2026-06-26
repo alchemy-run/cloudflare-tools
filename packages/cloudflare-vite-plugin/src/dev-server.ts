@@ -21,6 +21,7 @@ import type * as vite from "vite";
 import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker.ts";
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
 import * as ViteAssets from "./assets/ViteAssets";
+import type { EntryEnvironment } from "./module-runner/constants.shared.ts";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin";
 
@@ -28,15 +29,12 @@ export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
 export const startServer = async <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
-  entry: {
-    id: string;
-    name: string;
-  },
+  entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices>,
 ) => {
   const scope = Scope.makeUnsafe();
-  const address = await serve(options, entry, server).pipe(
+  const address = await serve(options, entryEnvironment, server).pipe(
     Effect.provide(ViteAssets.ViteAssetsLive(server)),
     Effect.provide(context),
     Scope.provide(scope),
@@ -83,10 +81,7 @@ const closeScope = async (scope: Scope.Scope) => {
 
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
-  entry: {
-    id: string;
-    name: string;
-  },
+  entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
 ) {
   const runtime = yield* Runtime;
@@ -102,11 +97,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         binding: "__DISTILLED_MODULE_RUNNER__",
         className: "ModuleRunnerDO",
       }),
-      Json.local("__DISTILLED_ENVIRONMENT__", {
-        environmentName: "ssr",
-        entryId: entry.id,
-        entryName: entry.name,
-      }),
+      Json.local("__DISTILLED_ENVIRONMENT__", entryEnvironment),
       Loopback.local({
         binding: "__DISTILLED_INVOKE_MODULE__",
         name: `vite:invoke-module:${name}`,

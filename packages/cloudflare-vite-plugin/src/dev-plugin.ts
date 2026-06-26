@@ -1,3 +1,4 @@
+import { parseViteEnvironments } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import type { OptionsApi } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import { resolvePluginApi } from "@distilled.cloud/cloudflare-rolldown-plugin/utils";
 import type { RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
@@ -12,6 +13,7 @@ import { handleWebSocket } from "./websockets.js";
 let context: Context.Context<RuntimeServices> | undefined;
 
 export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
+  const environmentNames = parseViteEnvironments(options);
   let handle: ServerHandle | undefined;
   let isServerRestarting = false;
   let removeUpgradeListener: (() => void) | undefined;
@@ -28,25 +30,22 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       optionsApi = resolvePluginApi<OptionsApi>(plugins ?? [], "distilled-cloudflare:options");
     },
     config() {
-      return {
-        environments: {
-          ssr: {
-            dev: {
-              createEnvironment(name, config) {
-                const hasConfigureServer = config.plugins.some(
-                  (plugin) =>
-                    plugin.name === "distilled-cloudflare:dev" &&
-                    plugin.configureServer !== undefined,
-                );
-                if (!hasConfigureServer) {
-                  return vite.createRunnableDevEnvironment(name, config);
-                }
-
-                return new DistilledDevEnvironment(name, config);
-              },
-            },
+      const environment: vite.EnvironmentOptions = {
+        dev: {
+          createEnvironment(name, config) {
+            const hasConfigureServer = config.plugins.some(
+              (plugin) =>
+                plugin.name === "distilled-cloudflare:dev" && plugin.configureServer !== undefined,
+            );
+            if (!hasConfigureServer) {
+              return vite.createRunnableDevEnvironment(name, config);
+            }
+            return new DistilledDevEnvironment(name, config);
           },
         },
+      };
+      return {
+        environments: Object.fromEntries(environmentNames.map((name) => [name, environment])),
       };
     },
     async buildEnd() {
@@ -84,14 +83,17 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       const [input] = inputs;
       handle ??= await startServer(
         options,
-        { id: input, name: input },
+        { environmentName: environmentNames[0], entryId: input, entryName: input },
         server,
         options.context ?? context!,
       );
       const address = handle.address;
-      const ssrEnvironment = server.environments.ssr;
-      if (ssrEnvironment instanceof DistilledDevEnvironment) {
-        await ssrEnvironment.connect(address);
+      for (const environmentName of environmentNames) {
+        const environment = server.environments[environmentName];
+        if (environment instanceof DistilledDevEnvironment) {
+          await environment.depsOptimizer?.init();
+          await environment.connect(address);
+        }
       }
       if (!input) {
         // If there is no input, we are in SPA mode, so we don't need to route requests to the server.

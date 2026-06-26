@@ -1,4 +1,4 @@
-export interface CloudflarePluginOptions {
+export interface BasePluginOptions {
   /**
    * The main entry point to use.
    * Defaults to the one from your Rolldown configuration.
@@ -28,4 +28,46 @@ export interface CloudflarePluginOptions {
    * ```
    */
   exports?: Array<string>;
+  /**
+   * Which Vite environment hosts the Worker, and any child environments it
+   * loads at runtime. Defaults to the single `ssr` environment.
+   *
+   * `@vitejs/plugin-rsc` apps run the Worker in the `rsc` environment (resolved
+   * with the `react-server` condition) and load the `ssr` environment from it,
+   * so they set `{ name: "rsc", childEnvironments: ["ssr"] }`. Every named
+   * environment is given the Worker treatment (workerd resolve conditions,
+   * dependency pre-bundling) and a module runner in dev.
+   *
+   * @default { entry: "ssr", children: [] }
+   */
+  viteEnvironments?: {
+    entry?: string;
+    children?: Array<string>;
+  };
 }
+
+export const parseViteEnvironments = (options: BasePluginOptions): [string, ...Array<string>] => {
+  const entry = options.viteEnvironments?.entry ?? "ssr";
+  if (entry === "client") {
+    throw new Error(
+      'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
+    );
+  }
+  const children = (options.viteEnvironments?.children ?? []).map((name, index, self) => {
+    if (name === "client") {
+      throw new Error(
+        'The "client" environment cannot be used as a worker environment because it is reserved for the browser.',
+      );
+    } else if (self.indexOf(name) !== index) {
+      throw new Error(
+        `The name "${name}" appears more than once in the Vite environment list. Worker environment names must be unique.`,
+      );
+    } else if (name === entry) {
+      throw new Error(
+        `The child environment "${name}" cannot have the same name as the entry environment "${entry}".`,
+      );
+    }
+    return name;
+  });
+  return [entry, ...children];
+};

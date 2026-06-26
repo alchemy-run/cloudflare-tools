@@ -158,8 +158,13 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             appType === "spa"
               ? undefined
               : {
+                  // We need to include this for `builder.buildApp()` to work
+                  // because not all frameworks provide it...
                   buildApp: async (builder) => {
                     for (const environment of Object.values(builder.environments)) {
+                      // ...however, if your framework does provide a `buildApp` hook,
+                      // this check prevents us from building the environment twice.
+                      if (environment.isBuilt) continue;
                       await builder.build(environment);
                     }
                   },

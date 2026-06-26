@@ -1,11 +1,10 @@
-import type { BindingHooks, Module, RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
-import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
-import {
-  DurableObjectNamespace,
-  Json,
-  Loopback,
-  UnsafeEval,
-} from "@distilled.cloud/cloudflare-runtime/bindings";
+import type { BindingHooks, Module } from "@distilled.cloud/cloudflare-runtime";
+import * as Runtime from "@distilled.cloud/cloudflare-runtime/Runtime";
+import * as RuntimeServices from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
+import * as DurableObjectNamespace from "@distilled.cloud/cloudflare-runtime/bindings/DurableObjectNamespace";
+import * as Json from "@distilled.cloud/cloudflare-runtime/bindings/Json";
+import * as Loopback from "@distilled.cloud/cloudflare-runtime/bindings/Loopback";
+import * as UnsafeEval from "@distilled.cloud/cloudflare-runtime/bindings/UnsafeEval";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -31,7 +30,7 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
   entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
-  context: Context.Context<RuntimeServices>,
+  context: Context.Context<RuntimeServices.RuntimeServices>,
 ) => {
   const scope = Scope.makeUnsafe();
   const address = await serve(options, entryEnvironment, server).pipe(
@@ -59,10 +58,12 @@ const importPlatformServices = Layer.unwrap(
   }),
 );
 
-export const createDefaultContext = async () => {
+export const createDefaultContext = async (): Promise<
+  Context.Context<RuntimeServices.RuntimeServices>
+> => {
   const scope = Scope.makeUnsafe();
 
-  return await layerRuntime({
+  return await RuntimeServices.layerRuntime({
     api: {
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
@@ -84,11 +85,11 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
 ) {
-  const runtime = yield* Runtime;
+  const runtime = yield* Runtime.Runtime;
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
     name,
-    modules: makeWorkerModules(options),
+    modules: yield* Effect.promise(() => makeWorkerModules(options)),
     compatibilityDate: options.compatibilityDate ?? "2026-05-12",
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
@@ -129,7 +130,11 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   });
 });
 
-function makeWorkerModules(options: CloudflareVitePluginOptions): Array<Module> {
+async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<Array<Module>> {
+  const [moduleRunnerWorker, wrapperWorker] = await Promise.all([
+    ModuleRunnerWorker.worker(),
+    WrapperWorker.worker(),
+  ]);
   const modules = {
     "index.worker.mjs": [
       `import { createWorkerEntrypointWrapper, createDurableObjectWrapper, createWorkflowEntrypointWrapper } from "./module-runner/wrapper.worker.mjs";`,
@@ -140,8 +145,8 @@ function makeWorkerModules(options: CloudflareVitePluginOptions): Array<Module> 
           `export const ${namespace.className} = createDurableObjectWrapper("${namespace.className}");`,
       ),
     ].join("\n"),
-    ...ModuleRunnerWorker.modules,
-    ...WrapperWorker.modules,
+    ...moduleRunnerWorker.modules,
+    ...wrapperWorker.modules,
   };
   return Object.entries(modules).map(([name, content]) => ({
     name,

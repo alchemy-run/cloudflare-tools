@@ -69,8 +69,12 @@ export const make = Effect.fn(function* (accountId: Effect.Effect<string>) {
     options: RemoteWorkerConfig,
     cfPreviewUploadConfigToken: string,
   ) {
-    const files = Object.entries(RemoteWorkerScript.modules).map(
-      ([name, content]) => new File([content], name, { type: "application/javascript+module" }),
+    const files = yield* Effect.promise(RemoteWorkerScript.worker).pipe(
+      Effect.map(({ modules }) =>
+        Object.entries(modules).map(
+          ([name, content]) => new File([content], name, { type: "application/javascript+module" }),
+        ),
+      ),
     );
     return yield* sandboxApi(
       "PreviewUpload",

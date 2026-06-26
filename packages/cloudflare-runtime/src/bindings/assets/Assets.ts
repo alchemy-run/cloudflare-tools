@@ -221,6 +221,11 @@ export const AssetsLive = Layer.effect(
           path.resolve(worker.assets.directory),
         );
         const { assetsConfig, routerConfig } = buildAssetConfigs(worker);
+        const [assetsKvWorker, assetsWorker, routerWorker] = yield* Effect.forEach(
+          [AssetsKvWorker, AssetsWorker, RouterWorker],
+          (worker) => Effect.map(Effect.promise(worker.worker), formatInternalWorkerModules),
+          { concurrency: "unbounded" },
+        );
         return {
           services: [
             {
@@ -246,7 +251,7 @@ export const AssetsLive = Layer.effect(
                     json: JSON.stringify(assetsReverseMap),
                   },
                 ],
-                modules: formatInternalWorkerModules(AssetsKvWorker),
+                modules: assetsKvWorker,
               },
             },
             {
@@ -270,7 +275,7 @@ export const AssetsLive = Layer.effect(
                     json: JSON.stringify(assetsConfig),
                   },
                 ],
-                modules: formatInternalWorkerModules(AssetsWorker),
+                modules: assetsWorker,
               },
             },
           ],
@@ -292,7 +297,7 @@ export const AssetsLive = Layer.effect(
                     json: JSON.stringify(routerConfig),
                   },
                 ],
-                modules: formatInternalWorkerModules(RouterWorker),
+                modules: routerWorker,
               },
               upstreamBindingName: "USER_WORKER",
               order: -1,

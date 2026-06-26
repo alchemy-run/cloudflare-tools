@@ -24,11 +24,10 @@ export default defineConfig([
     },
   },
   {
-    entry: ["src/**/*.ts", "!src/**/*.worker.ts", "!src/global.d.ts"],
+    entry: ["src/plugin.ts"],
     exports: false,
     outDir: "dist/node",
     tsconfig: "tsconfig.node.json",
-    unbundle: true,
     dts: true,
     shims: false,
     target: "esnext",

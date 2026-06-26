@@ -1,5 +1,5 @@
-import { Assets } from "@distilled.cloud/cloudflare-runtime/bindings";
-import { Loopback } from "@distilled.cloud/cloudflare-runtime/globals";
+import * as Assets from "@distilled.cloud/cloudflare-runtime/bindings/assets/Assets";
+import * as Loopback from "@distilled.cloud/cloudflare-runtime/globals/Loopback";
 import { PluginContext } from "@distilled.cloud/cloudflare-runtime/PluginContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -52,6 +52,12 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
             `${prefix}:fetch-html`,
             viteFetchHtmlHandler(viteDevServer),
           );
+          const [assetsWorker, routerWorker] = yield* Effect.forEach(
+            [AssetsWorker, RouterWorker],
+            (worker) =>
+              Effect.map(Effect.promise(worker.worker), ({ modules }) => modulesToWorkerd(modules)),
+            { concurrency: "unbounded" },
+          );
 
           return {
             services: [
@@ -78,7 +84,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                       service: fetchHtmlService,
                     },
                   ],
-                  modules: modulesToWorkerd(AssetsWorker.modules),
+                  modules: assetsWorker,
                 },
               },
             ],
@@ -102,7 +108,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                       json: JSON.stringify(routerConfig),
                     },
                   ],
-                  modules: modulesToWorkerd(RouterWorker.modules),
+                  modules: routerWorker,
                 },
                 upstreamBindingName: "USER_WORKER",
                 order: -1,

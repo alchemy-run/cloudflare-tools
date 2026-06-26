@@ -24,7 +24,7 @@ export const GlobalsLive = Layer.effect(
               "enable_request_signal",
               "service_binding_extra_handlers",
             ],
-            modules: formatInternalWorkerModules(EntryWorker),
+            modules: formatInternalWorkerModules(yield* Effect.promise(EntryWorker.worker)),
           },
           upstreamBindingName: "USER_WORKER",
         },

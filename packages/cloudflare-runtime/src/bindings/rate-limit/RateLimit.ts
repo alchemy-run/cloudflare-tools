@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as RateLimitBindingWorker from "worker:./RateLimitBinding.worker.ts";
 import * as Plugin from "../../Plugin.ts";
@@ -9,19 +10,21 @@ export class RateLimit extends Plugin.Service<RateLimit>()("cloudflare-runtime/p
 
 export const RateLimitLive = Layer.succeed(
   RateLimit,
-  RateLimit.of({
-    extensions: [
-      {
-        modules: [
-          {
-            name: "cloudflare-runtime:rate-limit",
-            internal: true,
-            esModule: formatExtensionModule(RateLimitBindingWorker),
-          },
-        ],
-      },
-    ],
-  }),
+  RateLimit.of(
+    Effect.map(formatExtensionModule(RateLimitBindingWorker), (esModule) => ({
+      extensions: [
+        {
+          modules: [
+            {
+              name: "cloudflare-runtime:rate-limit",
+              internal: true,
+              esModule,
+            },
+          ],
+        },
+      ],
+    })),
+  ),
 );
 
 export const local = (props: RateLimitProps): BindingHook<RateLimit> =>

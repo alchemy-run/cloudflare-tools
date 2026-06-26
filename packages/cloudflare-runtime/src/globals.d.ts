@@ -13,6 +13,5 @@ declare module "workerd" {
 }
 
 declare module "worker:*" {
-  export const main: string;
-  export const modules: Record<string, string>;
+  export const worker: () => Promise<{ main: string; modules: Record<string, string> }>;
 }

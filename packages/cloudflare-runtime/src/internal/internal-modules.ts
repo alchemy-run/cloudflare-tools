@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type { Module } from "../RuntimeWorker.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
 
@@ -9,13 +10,18 @@ export const formatInternalWorkerModules = (worker: {
     esModule: content,
   }));
 
-export const formatExtensionModule = (worker: { modules: Record<string, string> }): string => {
-  const entries = Object.entries(worker.modules);
-  if (entries.length !== 1) {
-    throw new Error(`Expected exactly one module, got ${entries.length}`);
-  }
-  return entries[0][1];
-};
+export const formatExtensionModule = (self: {
+  worker: () => Promise<{ main: string; modules: Record<string, string> }>;
+}): Effect.Effect<string> =>
+  Effect.promise(self.worker).pipe(
+    Effect.map(({ modules }) => {
+      const entries = Object.entries(modules);
+      if (entries.length !== 1) {
+        throw new Error(`Expected exactly one module, got ${entries.length}`);
+      }
+      return entries[0][1];
+    }),
+  );
 
 export const moduleToWorkerd = (module: Module): WorkerdConfig.Worker_Module => {
   switch (module.type) {

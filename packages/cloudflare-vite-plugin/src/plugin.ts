@@ -16,7 +16,7 @@ import type {
 } from "@distilled.cloud/cloudflare-runtime";
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
-import { dev } from "./dev-plugin.js";
+import { dev } from "./dev-plugin.ts";
 
 export interface CloudflareVitePluginOptions<
   B extends BindingHooks = BindingHooks,
@@ -27,7 +27,7 @@ export interface CloudflareVitePluginOptions<
 
 export default function cloudflareVitePlugin(
   options: CloudflareVitePluginOptions = {},
-): Array<vite.Plugin | null> {
+): vite.PluginOption {
   return [
     optionsPlugin.vite(options),
     cloudflareExternalsPlugin.vite(options),

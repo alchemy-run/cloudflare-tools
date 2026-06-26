@@ -6,7 +6,7 @@ import type * as Context from "effect/Context";
 import * as NodeHttp from "node:http";
 import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
-import { createDefaultContext, startServer, type ServerHandle } from "./dev-server.js";
+import type { ServerHandle } from "./dev-server.js";
 import type { CloudflareVitePluginOptions } from "./plugin.js";
 import { handleWebSocket } from "./websockets.js";
 
@@ -77,6 +77,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
           `Expected exactly one entry in the input, got ${inputs.length} entries: ${JSON.stringify(inputs)}`,
         );
       }
+      const { createDefaultContext, startServer } = await import("./dev-server.ts");
       if (!options.context) {
         context ??= await createDefaultContext();
       }

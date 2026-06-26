@@ -65,11 +65,16 @@ export const RemoteBindingsLive = Layer.effect(
       if (config.bindings.length === 0) return {};
       const fiber = yield* Effect.forkDetach(remoteWorker.deploy(config));
       prefetches.set(Hash.structure(config), fiber);
+      const [outboundWorker, clientWorker] = yield* Effect.forEach(
+        [OutboundWorker, ClientWorker],
+        (worker) => Effect.map(Effect.promise(worker.worker), formatInternalWorkerModules),
+        { concurrency: "unbounded" },
+      );
       const outbound = {
         name: "remote-bindings:outbound",
         worker: {
           compatibilityDate: "2026-03-10",
-          modules: formatInternalWorkerModules(OutboundWorker),
+          modules: outboundWorker,
           bindings: [
             {
               name: "PROXY",
@@ -98,7 +103,7 @@ export const RemoteBindingsLive = Layer.effect(
         name: "remote-bindings:client",
         worker: {
           compatibilityDate: "2026-03-10",
-          modules: formatInternalWorkerModules(ClientWorker),
+          modules: clientWorker,
           globalOutbound: { name: outbound.name },
         },
       } satisfies WorkerdConfig.Service;

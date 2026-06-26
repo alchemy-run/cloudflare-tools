@@ -15,22 +15,22 @@ export class Hyperdrive extends Plugin.Service<Hyperdrive, Record<string, Hyperd
 export const HyperdriveLive = Layer.succeed(
   Hyperdrive,
   Hyperdrive.of(
-    PluginContext.useSync(({ worker }) => {
-      if (!worker.hyperdrives || Object.keys(worker.hyperdrives).length === 0) return { api: {} };
-      return {
+    PluginContext.use(({ worker: { hyperdrives } }) => {
+      if (!hyperdrives || Object.keys(hyperdrives).length === 0) return Effect.succeed({ api: {} });
+      return Effect.map(formatExtensionModule(HyperdriveBindingWorker), (esModule) => ({
         extensions: [
           {
             modules: [
               {
                 name: "cloudflare-runtime:hyperdrive",
                 internal: true,
-                esModule: formatExtensionModule(HyperdriveBindingWorker),
+                esModule,
               },
             ],
           },
         ],
-        api: worker.hyperdrives,
-      };
+        api: hyperdrives,
+      }));
     }),
   ),
 );

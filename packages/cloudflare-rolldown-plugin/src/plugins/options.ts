@@ -223,9 +223,21 @@ const normalizeInput = (
   }
 };
 
+// Worker entry ids are embedded into synthetic `\0distilled:worker-entry:` module
+// specifiers and round-tripped through Rolldown/Vite id handling, which expects
+// POSIX-style separators. On Windows the input is an absolute path with `\`
+// separators (e.g. `D:\app\entry-server.ts`), which corrupts the virtual id and
+// breaks resolution (`\0distilled:user-entry:D:\app\…` fails to resolve).
+// Normalize to forward slashes so the virtual id stays valid on every platform —
+// a no-op on POSIX, where ids already use `/`.
+const normalizeEntryId = (id: string): string => id.replace(/\\/g, "/");
+
 const wrapInput = (input: Record<string, string>) =>
   Object.fromEntries(
-    Object.entries(input).map(([key, id]) => [key, `${WORKER_ENTRY_PREFIX}${id}` as const]),
+    Object.entries(input).map(([key, id]) => [
+      key,
+      `${WORKER_ENTRY_PREFIX}${normalizeEntryId(id)}` as const,
+    ]),
   );
 
 const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => {

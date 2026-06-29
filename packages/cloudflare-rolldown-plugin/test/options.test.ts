@@ -106,4 +106,20 @@ describe("options plugin", () => {
     );
     expect(withoutNavigatorOutput.transform?.define?.["navigator.userAgent"]).toBeUndefined();
   });
+
+  it("normalizes Windows backslashes in worker entry ids", () => {
+    const plugin = optionsPlugin.rolldown({});
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
+    const output = plugin.options.call({} as MinimalPluginContext, {
+      input: { worker: "D:\\src\\app\\entry-server.ts" },
+    });
+    assert(output, "output is not defined");
+    assert(!(output instanceof Promise), "output is a promise");
+
+    // The virtual worker-entry id must use POSIX separators so it round-trips
+    // through Rolldown/Vite id handling and resolves on Windows.
+    expect(output.input).toEqual({
+      worker: "\0distilled:worker-entry:D:/src/app/entry-server.ts",
+    });
+  });
 });

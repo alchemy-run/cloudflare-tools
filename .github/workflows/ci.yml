@@ -46,6 +46,8 @@ jobs:
       - name: Test (macOS websocket proxy, isolated)
         if: runner.os == 'macOS'
         working-directory: packages/cloudflare-vite-plugin
+        env:
+          WS_PROXY_DEBUG: "1"
         run: bunx vitest run test/websockets.test.ts --no-file-parallelism --reporter=verbose
 
       - name: Test

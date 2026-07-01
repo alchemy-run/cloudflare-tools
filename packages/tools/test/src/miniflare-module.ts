@@ -47,7 +47,9 @@ export async function miniflareModulesFromDirectory(
           return;
         }
         modules.push({
-          path: path.join(parent ?? "", file.name),
+          // Module paths are used as module specifiers, which must use forward
+          // slashes regardless of the host platform.
+          path: path.posix.join(parent ?? "", file.name),
           type,
           contents: await fs.readFile(path.join(dir, file.name), "utf-8"),
         });
@@ -55,7 +57,7 @@ export async function miniflareModulesFromDirectory(
         modules.push(
           ...(await miniflareModulesFromDirectory(
             path.join(dir, file.name),
-            path.join(parent ?? "", file.name),
+            path.posix.join(parent ?? "", file.name),
           )),
         );
       }

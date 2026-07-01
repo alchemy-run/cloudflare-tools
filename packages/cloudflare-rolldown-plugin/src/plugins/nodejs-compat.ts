@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { defineEnv } from "unenv";
 import { createPlugin } from "../factory.js";
-import { hasNodejsAls, hasNodejsCompat } from "../utils.js";
+import { hasNodejsAls, hasNodejsCompat, toPosixPath } from "../utils.js";
 
 const ASYNC_HOOKS_REGEXP = /^(node:)?async_hooks$/;
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(`^(${nonPrefixedNodeModules.join("|")}|node:.+)$`);
@@ -245,7 +245,8 @@ export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (
             'Do you need to enable the "nodejs_compat" compatibility flag? ',
             "Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n",
             ...filteredImports.map(
-              ({ id, importer }) => ` - "${id}" imported from "${path.relative(root, importer)}"\n`,
+              ({ id, importer }) =>
+                ` - "${id}" imported from "${toPosixPath(path.relative(root, importer))}"\n`,
             ),
           ].join("");
           this.warn(message);

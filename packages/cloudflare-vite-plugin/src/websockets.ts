@@ -79,7 +79,12 @@ export function handleWebSocket(httpServer: vite.HttpServer, address: string | U
       socket.pipe(upstreamSocket).pipe(socket);
     });
 
-    request.pipe(upstream);
+    // WebSocket upgrade requests carry no body, and any early client bytes are
+    // forwarded above via `upstreamSocket.write(head)`. Ending the request
+    // directly flushes the upstream handshake deterministically, rather than
+    // relying on the incoming `request` stream to emit `end` (which can be
+    // delayed by TCP timing) and avoids a second consumer of the client socket.
+    upstream.end();
   };
 
   httpServer.on("upgrade", onUpgrade);

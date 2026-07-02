@@ -97,6 +97,12 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Container binding", (it
 });
 
 const isDockerAvailable = () => {
+  // Containers are not supported on Windows: the Docker daemon there runs
+  // Windows containers and cannot pull the `linux/amd64` images these tests
+  // depend on. This mirrors upstream workers-sdk, which bails out on Windows.
+  if (process.platform === "win32") {
+    return false;
+  }
   try {
     execFileSync(process.env.DOCKER_BIN ?? "docker", ["info"], {
       stdio: "ignore",

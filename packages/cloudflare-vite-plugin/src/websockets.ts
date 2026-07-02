@@ -11,6 +11,17 @@ import type * as vite from "vite";
  */
 export function handleWebSocket(httpServer: vite.HttpServer, address: string | URL): () => void {
   const upstreamBase = typeof address === "string" ? new URL(address) : address;
+
+  // Sockets hijacked by an `upgrade` are not reaped by `server.closeAllConnections()`,
+  // yet `server.close()` still waits on them — so a lingering proxied WebSocket blocks
+  // the HTTP server from closing on restart. Track live sockets and destroy them in the
+  // cleanup function to close deterministically.
+  const sockets = new Set<Duplex>();
+  const track = (socket: Duplex) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  };
+
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
@@ -60,6 +71,9 @@ export function handleWebSocket(httpServer: vite.HttpServer, address: string | U
         return;
       }
 
+      track(socket);
+      track(upstreamSocket);
+
       const statusLine = `HTTP/1.1 ${upstreamRes.statusCode ?? 101} ${
         upstreamRes.statusMessage ?? "Switching Protocols"
       }`;
@@ -90,6 +104,10 @@ export function handleWebSocket(httpServer: vite.HttpServer, address: string | U
   httpServer.on("upgrade", onUpgrade);
   return () => {
     httpServer.off("upgrade", onUpgrade);
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    sockets.clear();
   };
 }
 

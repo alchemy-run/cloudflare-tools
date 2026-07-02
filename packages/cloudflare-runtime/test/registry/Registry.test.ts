@@ -20,7 +20,14 @@ import {
 } from "../../src/registry/RegistryTypes.shared.ts";
 import { configProvider, waitForRegistryEntry } from "../helpers/runtime.ts";
 
-describe.each([true, false])(
+// The `fileSystemSupportsWatcher: true` variant exercises `fs.watch`, which on
+// Windows can abort the process with a libuv assertion
+// (`fs-event.c: !_wcsnicmp(filename, dir, dirlen)`). The runtime never enables
+// the watcher on Windows (it falls back to polling), so there is nothing to
+// test there — and forcing it would crash the whole vitest worker fork.
+const watcherModes = process.platform === "win32" ? [false] : [true, false];
+
+describe.each(watcherModes)(
   "Registry (fileSystemSupportsWatcher: %s)",
   (fileSystemSupportsWatcher) => {
     const services = Registry.RegistryLive.pipe(

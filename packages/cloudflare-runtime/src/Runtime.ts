@@ -14,7 +14,7 @@ import {
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
-import type { RuntimeError } from "./RuntimeError.shared.ts";
+import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
 import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
@@ -53,6 +53,17 @@ export const RuntimeLive = Layer.effect(
       });
       if (!containers.length) {
         return { imageNames: new Map() };
+      }
+      // Local development with containers relies on pulling/building `linux/amd64`
+      // images, which the Docker daemon on Windows cannot do (it runs Windows
+      // containers). Upstream workers-sdk bails out on Windows for the same
+      // reason, directing users to WSL.
+      if (process.platform === "win32") {
+        return yield* new SystemError({
+          subtag: "ContainersUnsupportedOnWindows",
+          message: "Local development with containers is not supported on Windows.",
+          hint: "Use WSL to develop the container part of your application, or remove the container configuration if you do not need it.",
+        });
       }
       const imageNames = new Map<string, string>();
       const [, containerEngine] = yield* Effect.forEach(

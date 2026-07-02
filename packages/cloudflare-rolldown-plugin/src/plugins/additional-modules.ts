@@ -8,7 +8,7 @@ import type {
   SourceMap,
 } from "rolldown";
 import { createPlugin } from "../factory.js";
-import { sanitizePath } from "../utils.js";
+import { sanitizePath, toPosixPath } from "../utils.js";
 
 export const MODULE_RULES = [
   { type: "CompiledWasm", pattern: /\.wasm(\?module)?$/ },
@@ -68,7 +68,7 @@ export const additionalModulesPlugin = createPlugin("additional-modules", () => 
               source,
             });
             const fileName = this.getFileName(referenceId);
-            const relativePath = path.relative(path.dirname(chunk.fileName), fileName);
+            const relativePath = toPosixPath(path.relative(path.dirname(chunk.fileName), fileName));
             const importPath = relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
             magicString.update(match.index, match.index + full.length, importPath);
           }

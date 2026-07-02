@@ -78,7 +78,11 @@ layer(services)((it) => {
     }),
   );
 
-  it.effect("fails on port conflict", () =>
+  // On Windows, workerd/kj does not enforce exclusive socket binding by
+  // default, so binding a second listener to an already-used port succeeds
+  // instead of failing with "Address already in use". This behavior is
+  // specific to workerd on Windows and outside our control.
+  it.effect.skipIf(process.platform === "win32")("fails on port conflict", () =>
     Effect.gen(function* () {
       const workerd = yield* Workerd.Workerd;
       const result = yield* workerd.serve({

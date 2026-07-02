@@ -14,16 +14,16 @@ import * as Globals from "../../src/globals/Globals.ts";
 import * as Internet from "../../src/globals/Internet.ts";
 import * as Storage from "../../src/globals/Storage.ts";
 import * as Paths from "../../src/internal/Paths.ts";
-import * as Registry from "../../src/registry/Registry.ts";
-import * as RegistryProxy from "../../src/registry/RegistryProxy.ts";
-import {
-  resolvedTargetKey,
-  type ResolvedTargetMap,
-  type Subscriber,
-} from "../../src/registry/RegistryTypes.shared.ts";
 import * as Runtime from "../../src/Runtime.ts";
 import * as RuntimeServices from "../../src/RuntimeServices.ts";
 import type { BindingHooks, RuntimeWorker } from "../../src/RuntimeWorker.ts";
+import * as Registry from "../../src/registry/Registry.ts";
+import * as RegistryProxy from "../../src/registry/RegistryProxy.ts";
+import {
+  type ResolvedTargetMap,
+  resolvedTargetKey,
+  type Subscriber,
+} from "../../src/registry/RegistryTypes.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
 
 export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = {}) =>
@@ -53,7 +53,12 @@ export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
   Layer.provideMerge(RuntimeServices.layerProxy()),
   Layer.provide(Globals.GlobalsLive),
   Layer.provideMerge(RuntimeServices.layerLoopback()),
-  Layer.provide(Storage.layerTemp()),
+  Layer.provide(
+    Layer.effect(
+      Storage.Storage,
+      Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),
+    ),
+  ),
   Layer.provide(Internet.InternetLive),
   Layer.provideMerge(RegistryProxy.RegistryProxyLive),
   Layer.provideMerge(Registry.RegistryLive),
@@ -128,3 +133,36 @@ export const poll = <T>(
       times: timeout / 50,
     }),
   );
+
+/**
+ * A real-timer delay that resolves after `millis`. Unlike `Effect.sleep`, it
+ * does not depend on the Effect `Clock`, so it still advances under a
+ * `TestClock` (test suites here run with the default `TestEnv`).
+ */
+const realDelay = (millis: number) =>
+  Effect.callback<void>((resume) => {
+    const timer = setTimeout(() => resume(Effect.void), millis);
+    return Effect.sync(() => clearTimeout(timer));
+  });
+
+/**
+ * `makeTempDirectoryScoped` fails on Windows in CI with "EBUSY: resource busy
+ * or locked": a just-terminated `workerd` process can still hold handles to
+ * files under the directory for a short while after it is killed. This is a
+ * drop-in replacement that retries the removal on a real timer until the
+ * handles are released.
+ */
+export const makeTempDirectory = Effect.fn(function* (prefix?: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const dir = yield* fs.makeTempDirectory({ prefix });
+  const remove = (attempt: number): Effect.Effect<void> =>
+    fs.remove(dir, { recursive: true, force: true }).pipe(
+      Effect.catchIf(
+        (error) => error.reason._tag === "Busy" && attempt < 50,
+        () => realDelay(100).pipe(Effect.andThen(remove(attempt + 1))),
+      ),
+      Effect.orDie,
+    );
+  yield* Effect.addFinalizer(() => remove(0));
+  return dir;
+});

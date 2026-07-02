@@ -6,6 +6,13 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 
+const DEBUG = !!process.env.WS_PROXY_DEBUG;
+const dbg = (...args: Array<unknown>) => {
+  if (DEBUG) {
+    console.error(`[ws-dbg ${Date.now() % 100000}]`, ...args);
+  }
+};
+
 interface UpstreamCall {
   url: string;
   method: string | undefined;
@@ -46,12 +53,14 @@ const setup = async (): Promise<Harness> => {
   });
   const upstreamWss = new WebSocketServer({ noServer: true });
   upstreamServer.on("upgrade", (req, socket, head) => {
+    dbg("upstream received upgrade", req.method, req.url);
     upstreamCalls.push({
       url: req.url ?? "",
       method: req.method,
       headers: { ...req.headers },
     });
     upstreamWss.handleUpgrade(req, socket, head, (ws) => {
+      dbg("upstream handshake completed, emitting connection");
       upstreamConnections.push(ws);
       upstreamWss.emit("connection", ws, req);
     });
@@ -132,16 +141,28 @@ describe("handleWebSocket", () => {
 
     const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/path?x=1`);
     const received: Array<string> = [];
+    client.on("upgrade", (res) => dbg("client received upgrade response", res.statusCode));
+    client.on("unexpected-response", (_req, res) =>
+      dbg("client unexpected-response", res.statusCode),
+    );
+    client.on("close", (code, reason) => dbg("client close", code, reason.toString()));
     await new Promise<void>((resolve, reject) => {
-      client.on("open", () => client.send("ping"));
+      client.on("open", () => {
+        dbg("client open, sending ping");
+        client.send("ping");
+      });
       client.on("message", (data) => {
+        dbg("client message", data.toString());
         received.push(data.toString());
         if (received.length === 2) {
           client.close();
           resolve();
         }
       });
-      client.on("error", reject);
+      client.on("error", (err) => {
+        dbg("client error", err.message);
+        reject(err);
+      });
     });
 
     expect(received).toEqual(["hello", "echo:ping"]);
@@ -182,12 +203,22 @@ describe("handleWebSocket", () => {
     const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/`, "vite-hmr", {
       headers: { host: sandboxHost },
     });
+    client.on("open", () => dbg("sandbox client open"));
+    client.on("upgrade", (res) => dbg("sandbox client received upgrade response", res.statusCode));
+    client.on("unexpected-response", (_req, res) =>
+      dbg("sandbox client unexpected-response", res.statusCode),
+    );
+    client.on("close", (code, reason) => dbg("sandbox client close", code, reason.toString()));
     const message = await new Promise<string>((resolve, reject) => {
       client.on("message", (data) => {
+        dbg("sandbox client message", data.toString());
         resolve(data.toString());
         client.close();
       });
-      client.on("error", reject);
+      client.on("error", (err) => {
+        dbg("sandbox client error", err.message);
+        reject(err);
+      });
     });
 
     expect(message).toBe("ack");

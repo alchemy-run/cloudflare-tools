@@ -1,5 +1,6 @@
 import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import * as NodeNet from "node:net";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 
@@ -71,30 +72,39 @@ export const make = (options: PortsOptions) =>
       },
     );
     const reserve = (port: number) => Cache.set(cache, port, false);
+    // Serializes the search loop so that concurrent lookups for the same
+    // starting port each reserve a distinct port. Without this, concurrent
+    // callers all observe the starting port as available and return it. On
+    // Windows this is the only safeguard, since duplicate binds don't fail
+    // there and so the higher-level bind-and-retry fallback never kicks in.
+    const searchLock = yield* Semaphore.make(1);
+    const search = Effect.fn(function* (start: number) {
+      let port = start;
+      while (port <= MAX_PORT) {
+        const available = yield* Cache.get(cache, port);
+        if (available) {
+          yield* reserve(port);
+          return port;
+        }
+        yield* Effect.logDebug(`Port ${port} is not available, trying ${port + 1}...`);
+        port++;
+      }
+      // This should essentially never happen, so it's a `die` rather than a `fail`.
+      return yield* Effect.die(
+        new SystemError({
+          subtag: "PortExhausted",
+          message: `No available port found starting from ${start}.`,
+          hint: "Free up a port in this range or pick a different starting port.",
+          detail: { start },
+        }),
+      );
+    }, searchLock.withPermits(1));
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {
           return yield* bind(port).pipe(Effect.tap(reserve));
         }
-        const start = port;
-        while (port <= MAX_PORT) {
-          const available = yield* Cache.get(cache, port);
-          if (available) {
-            yield* reserve(port);
-            return port;
-          }
-          yield* Effect.logDebug(`Port ${port} is not available, trying ${port + 1}...`);
-          port++;
-        }
-        // This should essentially never happen, so it's a `die` rather than a `fail`.
-        return yield* Effect.die(
-          new SystemError({
-            subtag: "PortExhausted",
-            message: `No available port found starting from ${start}.`,
-            hint: "Free up a port in this range or pick a different starting port.",
-            detail: { start },
-          }),
-        );
+        return yield* search(port);
       }),
       check: (port) =>
         Cache.get(cache, port).pipe(

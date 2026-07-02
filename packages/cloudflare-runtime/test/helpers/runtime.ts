@@ -25,7 +25,6 @@ import {
   type Subscriber,
 } from "../../src/registry/RegistryTypes.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
-import * as Duration from "effect/Duration";
 
 export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = {}) =>
   ConfigProvider.layer(
@@ -136,32 +135,34 @@ export const poll = <T>(
   );
 
 /**
- * `makeTempDirectoryScoped` fails on Windows in CI with "EBUSY: resource busy or locked".
- * This is a drop-in replacement that retries if busy to make tests pass on Windows.
+ * A real-timer delay that resolves after `millis`. Unlike `Effect.sleep`, it
+ * does not depend on the Effect `Clock`, so it still advances under a
+ * `TestClock` (test suites here run with the default `TestEnv`).
+ */
+const realDelay = (millis: number) =>
+  Effect.callback<void>((resume) => {
+    const timer = setTimeout(() => resume(Effect.void), millis);
+    return Effect.sync(() => clearTimeout(timer));
+  });
+
+/**
+ * `makeTempDirectoryScoped` fails on Windows in CI with "EBUSY: resource busy
+ * or locked": a just-terminated `workerd` process can still hold handles to
+ * files under the directory for a short while after it is killed. This is a
+ * drop-in replacement that retries the removal on a real timer until the
+ * handles are released.
  */
 export const makeTempDirectory = Effect.fn(function* (prefix?: string) {
   const fs = yield* FileSystem.FileSystem;
   const dir = yield* fs.makeTempDirectory({ prefix });
-  yield* Effect.addFinalizer(() =>
+  const remove = (attempt: number): Effect.Effect<void> =>
     fs.remove(dir, { recursive: true, force: true }).pipe(
-      Effect.retry({
-        while: (e) => e.reason._tag === "Busy",
-        times: 3,
-        // Time will not advance in test mode, so we use this workaround with `setTimeout`
-        // instead of `Schedule.spaced("50 millis")`.
-        schedule: Schedule.fromStep(
-          Effect.sync(
-            () => () =>
-              Effect.callback<[null, Duration.Duration]>(() => {
-                setTimeout(() => {
-                  return [null, Duration.millis(0)];
-                }, 50);
-              }),
-          ),
-        ),
-      }),
+      Effect.catchIf(
+        (error) => error.reason._tag === "Busy" && attempt < 50,
+        () => realDelay(100).pipe(Effect.andThen(remove(attempt + 1))),
+      ),
       Effect.orDie,
-    ),
-  );
+    );
+  yield* Effect.addFinalizer(() => remove(0));
   return dir;
 });

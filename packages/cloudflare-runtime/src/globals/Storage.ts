@@ -6,7 +6,7 @@ import type { Service } from "../workerd/Config.ts";
 
 export class Storage extends Context.Service<Storage, Service>()("Storage") {}
 
-const make = (filePath: string): Service => ({
+export const make = (filePath: string): Service => ({
   name: "storage",
   disk: {
     path: filePath,

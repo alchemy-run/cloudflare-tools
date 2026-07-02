@@ -14,17 +14,18 @@ import * as Globals from "../../src/globals/Globals.ts";
 import * as Internet from "../../src/globals/Internet.ts";
 import * as Storage from "../../src/globals/Storage.ts";
 import * as Paths from "../../src/internal/Paths.ts";
-import * as Registry from "../../src/registry/Registry.ts";
-import * as RegistryProxy from "../../src/registry/RegistryProxy.ts";
-import {
-  resolvedTargetKey,
-  type ResolvedTargetMap,
-  type Subscriber,
-} from "../../src/registry/RegistryTypes.shared.ts";
 import * as Runtime from "../../src/Runtime.ts";
 import * as RuntimeServices from "../../src/RuntimeServices.ts";
 import type { BindingHooks, RuntimeWorker } from "../../src/RuntimeWorker.ts";
+import * as Registry from "../../src/registry/Registry.ts";
+import * as RegistryProxy from "../../src/registry/RegistryProxy.ts";
+import {
+  type ResolvedTargetMap,
+  resolvedTargetKey,
+  type Subscriber,
+} from "../../src/registry/RegistryTypes.shared.ts";
 import * as Workerd from "../../src/workerd/Workerd.ts";
+import * as Duration from "effect/Duration";
 
 export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = {}) =>
   ConfigProvider.layer(
@@ -53,7 +54,12 @@ export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
   Layer.provideMerge(RuntimeServices.layerProxy()),
   Layer.provide(Globals.GlobalsLive),
   Layer.provideMerge(RuntimeServices.layerLoopback()),
-  Layer.provide(Storage.layerTemp()),
+  Layer.provide(
+    Layer.effect(
+      Storage.Storage,
+      Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),
+    ),
+  ),
   Layer.provide(Internet.InternetLive),
   Layer.provideMerge(RegistryProxy.RegistryProxyLive),
   Layer.provideMerge(Registry.RegistryLive),
@@ -128,3 +134,32 @@ export const poll = <T>(
       times: timeout / 50,
     }),
   );
+
+/**
+ * `makeTempDirectoryScoped` fails on Windows in CI with "EBUSY: resource busy or locked".
+ * This is a drop-in replacement that retries if busy to make tests pass on Windows.
+ */
+export const makeTempDirectory = Effect.fn(function* (prefix?: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const dir = yield* fs.makeTempDirectory({ prefix });
+  yield* Effect.addFinalizer(() =>
+    fs.remove(dir, { recursive: true, force: true }).pipe(
+      Effect.retry({
+        while: (e) => e.reason._tag === "Busy",
+        times: 3,
+        schedule: Schedule.fromStep(
+          Effect.sync(
+            () => () =>
+              Effect.callback<[null, Duration.Duration]>(() => {
+                setTimeout(() => {
+                  return [null, Duration.millis(0)];
+                }, 50);
+              }),
+          ),
+        ),
+      }),
+      Effect.orDie,
+    ),
+  );
+  return dir;
+});

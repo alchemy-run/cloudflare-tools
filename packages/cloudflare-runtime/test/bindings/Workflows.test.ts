@@ -2,6 +2,7 @@ import type { InstanceStatus } from "@cloudflare/workers-types/experimental";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -18,10 +19,11 @@ import * as Workerd from "../../src/workerd/Workerd.ts";
 import type { TestWorker } from "../helpers/runtime.ts";
 import {
   localRuntimeLayer,
-  poll,
   PredicateFailed,
+  poll,
   startTestWorker,
   waitForRegistryEntry,
+  makeTempDirectory,
 } from "../helpers/runtime.ts";
 
 const WORKFLOW_SCRIPT = `
@@ -53,7 +55,9 @@ describe("Workflows binding", () => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "workflows-persist-" });
+        const path = yield* Path.Path;
+
+        const tmp = yield* makeTempDirectory("workflows-persist-");
 
         const rumtimeLayerTempDir = Runtime.RuntimeLive.pipe(
           Layer.provideMerge(RuntimeServices.layerLocalBindings()),
@@ -106,7 +110,7 @@ describe("Workflows binding", () => {
         const first = yield* runStorageExit();
         expect(first).toBe(COMPLETE_STATUS);
 
-        const persistDir = `${tmp}/workflows`;
+        const persistDir = path.join(tmp, "workflows");
         const names = yield* fs.readDirectory(persistDir);
         expect(names).toContain(encodeURIComponent("MY_WORKFLOW"));
 
@@ -309,7 +313,13 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
           name: "workflows-multi-test",
           compatibilityDate: "2026-03-09",
           compatibilityFlags: [],
-          modules: [{ name: "main.js", type: "ESModule", content: TWO_WORKFLOWS_SCRIPT }],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: TWO_WORKFLOWS_SCRIPT,
+            },
+          ],
           bindings: [
             Workflows.local({
               binding: "ALPHA_WORKFLOW",
@@ -392,7 +402,13 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
             name: "cross-owner",
             compatibilityDate: "2026-03-09",
             compatibilityFlags: [],
-            modules: [{ name: "main.js", type: "ESModule", content: CROSS_INSTANCE_OWNER_SCRIPT }],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: CROSS_INSTANCE_OWNER_SCRIPT,
+              },
+            ],
             bindings: [
               Workflows.local({
                 binding: "CROSS_WORKFLOW",

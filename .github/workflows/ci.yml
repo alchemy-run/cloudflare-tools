@@ -38,18 +38,6 @@ jobs:
       - name: Check (format, lint, typecheck)
         run: bun run check
 
-      # Confirmation step: the websocket proxy tests time out only on the macOS
-      # runner. Running the file in isolation with a single fork isolates the
-      # failure from event-loop starvation caused by `fileParallelism` on the
-      # resource-constrained macOS runner. Verbose output surfaces where it
-      # stalls, since a bare timeout logs nothing.
-      - name: Test (macOS websocket proxy, isolated)
-        if: runner.os == 'macOS'
-        working-directory: packages/cloudflare-vite-plugin
-        env:
-          WS_PROXY_DEBUG: "1"
-        run: bunx vitest run test/websockets.test.ts --no-file-parallelism --reporter=verbose
-
       - name: Test
         run: bun run test
         env:

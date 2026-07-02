@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.12.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.1) (2026-07-02)
+
+### Bug Fixes
+
+- improve cross-platform compatibility - by John Royal in [#57](https://github.com/alchemy-run/cloudflare-tools/pull/57) [(1e42f74)](https://github.com/alchemy-run/cloudflare-tools/commit/1e42f7434ab51eb4b553951b8893a80bed1009f2)
+- **cloudflare-runtime**: websocket proxy sometimes fails on macos - by @john-royal [(c58315e)](https://github.com/alchemy-run/cloudflare-tools/commit/c58315e2b72180579ba32915470799397636aa33)
+- **rolldown-plugin**: normalize Windows backslashes in worker entry ids - by d3lay in [#56](https://github.com/alchemy-run/cloudflare-tools/pull/56) [(9b2a9db)](https://github.com/alchemy-run/cloudflare-tools/commit/9b2a9db232e0950be366c958644c5a16514c7f2e)
+
 ## [v0.12.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.0) (2026-06-26)
 
 ### Features

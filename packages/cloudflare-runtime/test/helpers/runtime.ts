@@ -147,6 +147,8 @@ export const makeTempDirectory = Effect.fn(function* (prefix?: string) {
       Effect.retry({
         while: (e) => e.reason._tag === "Busy",
         times: 3,
+        // Time will not advance in test mode, so we use this workaround with `setTimeout`
+        // instead of `Schedule.spaced("50 millis")`.
         schedule: Schedule.fromStep(
           Effect.sync(
             () => () =>

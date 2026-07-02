@@ -98,13 +98,13 @@ export const make = (options: PortsOptions) =>
           detail: { start },
         }),
       );
-    });
+    }, searchLock.withPermits(1));
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {
           return yield* bind(port).pipe(Effect.tap(reserve));
         }
-        return yield* searchLock.withPermits(1)(search(port));
+        return yield* search(port);
       }),
       check: (port) =>
         Cache.get(cache, port).pipe(

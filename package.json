@@ -35,7 +35,7 @@
     },
     "catalog": {
       "@alchemy.run/node-utils": "^0.0.5",
-      "@distilled.cloud/cloudflare": "^0.26.1",
+      "@distilled.cloud/cloudflare": "^0.28.1",
       "@playwright/test": "^1.52.0",
       "rolldown": "^1.0.1",
       "tsdown": "^0.22.0",

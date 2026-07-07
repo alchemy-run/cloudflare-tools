@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.12.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.2) (2026-07-07)
+
+*No significant changes*
+
 ## [v0.12.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.1) (2026-07-02)
 
 ### Bug Fixes

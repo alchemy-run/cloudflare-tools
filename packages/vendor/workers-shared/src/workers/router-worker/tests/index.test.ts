@@ -1,4 +1,5 @@
-import { SELF, createExecutionContext, env as runtimeEnv } from "cloudflare:test";
+import { createExecutionContext } from "cloudflare:test";
+import { exports, env as runtimeEnv } from "cloudflare:workers";
 import { describe, it } from "vitest";
 import { RouterInnerEntrypoint } from "../src/worker";
 import type { Env } from "../src/worker";
@@ -25,7 +26,7 @@ describe("runtime loopback", () => {
       },
     } as Env["ASSET_WORKER"];
 
-    const response = await SELF.fetch("https://example.com");
+    const response = await (exports as { default: Fetcher }).default.fetch("https://example.com");
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("loopback asset worker");
@@ -46,9 +47,9 @@ describe("inner entrypoint unit tests", () => {
       },
     } as Env;
 
-    await expect(
-      async () => await fetchFromInnerEntrypoint(request, env, ctx),
-    ).rejects.toThrowError("Fetch for user worker without having a user worker binding");
+    await expect(async () => await fetchFromInnerEntrypoint(request, env, ctx)).rejects.toThrow(
+      "Fetch for user worker without having a user worker binding",
+    );
   });
 
   it("returns fetch from user worker when invoke_user_worker_ahead_of_assets true", async ({

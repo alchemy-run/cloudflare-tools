@@ -3,18 +3,22 @@ name: update-vendored-cloudflare
 description: >-
   Update vendored Cloudflare packages under packages/vendor (workers-shared,
   workflows-shared) from the workers-sdk submodule, then sync the coupled
-  bindings in packages/cloudflare-runtime/src/bindings. Use when re-vendoring,
-  bumping, or updating packages/vendor/*, when the workers-sdk submodule is
-  updated, or when asked to pull upstream changes into the vendored Cloudflare
-  worker source.
+  bindings in packages/cloudflare-runtime/src/bindings and any coupled wiring in
+  packages/cloudflare-vite-plugin. Use when re-vendoring, bumping, or updating
+  packages/vendor/*, when the workers-sdk submodule is updated, or when asked to
+  pull upstream changes into the vendored Cloudflare worker source.
 ---
 
 # Update vendored Cloudflare packages
 
-Updating a vendored package is a two-part job: (1) re-vendor the package itself,
-and (2) sync the downstream `cloudflare-runtime` bindings that re-implement the
-corresponding Miniflare plugin. Part 2 is the step people forget — upstream
-worker-source changes frequently require matching binding changes.
+Updating a vendored package is a multi-part job: (1) re-vendor the package
+itself, (2) sync the downstream `cloudflare-runtime` bindings that re-implement
+the corresponding Miniflare plugin, and (3) sync any coupled wiring in
+`cloudflare-vite-plugin`, which composes on top of `cloudflare-runtime` and
+keeps its own copies of some worker sources (e.g. the asset worker). Parts 2 and
+3 are the steps people forget — upstream worker-source changes frequently
+require matching binding changes, and those can ripple further into the vite
+plugin.
 
 `packages/vendor/README.md` is the canonical reference for the per-package
 mechanics (layout, buckets, `effect/Schema` conventions, import rewrites). This
@@ -28,7 +32,8 @@ section before starting.
 - [ ] 1. Bump the submodule and scope the change
 - [ ] 2. Re-vendor each changed package (per packages/vendor/README.md)
 - [ ] 3. Sync downstream cloudflare-runtime bindings (diff Miniflare plugins)
-- [ ] 4. Verify everything (vendor packages + cloudflare-runtime)
+- [ ] 4. Sync coupled cloudflare-vite-plugin wiring (if affected)
+- [ ] 5. Verify everything (vendor packages + cloudflare-runtime + cloudflare-vite-plugin)
 ```
 
 ## Step 1 — Bump the submodule and scope the change
@@ -127,24 +132,56 @@ required.
 > internal `.worker.ts` file** — the `worker:` imports are bundled at build
 > time, so typecheck/test won't reflect edits until you rebuild.
 
-## Step 4 — Verify
+## Step 4 — Sync coupled cloudflare-vite-plugin wiring
+
+`cloudflare-vite-plugin` composes on top of `cloudflare-runtime` but keeps its
+own copies of some worker sources and service wiring — notably the dev-mode
+asset worker under `packages/cloudflare-vite-plugin/src/assets` (`ViteAssets.ts`,
+`assets.worker.ts`, `router.worker.ts`). When a `cloudflare-runtime` binding
+change in Step 3 alters an entrypoint, env binding, or compat flag that these
+copies re-export or replicate, mirror the change here too.
+
+Concrete couplings that show up:
+
+- **Re-exported entrypoints.** If a vendored worker gains a new named export
+  (e.g. `router.worker.ts` re-exporting `RouterInnerEntrypoint` from
+  `@distilled.cloud/vendor-workers-shared/workers/router-worker`), the vite
+  plugin's matching `*.worker.ts` re-export must add it too.
+- **Compatibility flags.** If the `cloudflare-runtime` service/middleware gained
+  a flag (e.g. `enable_ctx_exports`), add the same flag to the corresponding
+  service in `ViteAssets.ts` (`ViteAssetsLive`) — both the `assets:worker`
+  service and the `assets:router` middleware.
+
+The vite plugin mirrors `workers-sdk/packages/vite-plugin-cloudflare` (e.g.
+`src/miniflare-options.ts` and `src/workers/*`), so diff that package between the
+same two SHAs when a change looks vite-specific.
+
+> Same rule applies: re-run `bun run build` in `cloudflare-vite-plugin` after
+> editing any `.worker.ts` file, since the `worker:` imports are bundled at
+> build time.
+
+## Step 5 — Verify
 
 ```bash
 # vendored packages
-bunx oxlint packages/vendor
-bunx oxfmt format --check packages/vendor
+bun lint:write packages/vendor
+bun format:write packages/vendor
 bun run turbo run typecheck test build --filter "@distilled.cloud/vendor-*"
 
-# downstream
+# downstream: cloudflare-runtime
 cd packages/cloudflare-runtime && bun run build && cd -
 bun run turbo run typecheck --filter @distilled.cloud/cloudflare-runtime
 # target the affected binding suites, e.g.:
-( cd packages/cloudflare-runtime && bunx vitest run test/bindings/Assets.test.ts test/bindings/Workflows.test.ts )
+( cd packages/cloudflare-runtime && bun run test test/bindings/Assets.test.ts test/bindings/Workflows.test.ts )
+
+# downstream: cloudflare-vite-plugin (only if Step 4 touched it)
+cd packages/cloudflare-vite-plugin && bun run build && cd -
+bun run turbo run typecheck test --filter @distilled.cloud/cloudflare-vite-plugin
 ```
 
-All four must be green: vendored tests guard semantic regressions, typecheck
-guards shape changes, lint/format guards style, and the binding tests guard the
-downstream wiring.
+All of these must be green: vendored tests guard semantic regressions, typecheck
+guards shape changes, lint/format guards style, and the binding + vite-plugin
+tests guard the downstream wiring.
 
 ## Worked example (last update)
 
@@ -159,3 +196,10 @@ required these coupled binding changes, all derived from the Miniflare diffs:
   engine binding (the vendored `WorkflowBinding` now reads `env.WORKFLOW_NAME`),
   and `bindings/workflows/wrapped-binding.worker.ts` `restart()` now forwards
   `WorkflowInstanceRestartOptions`.
+- **cloudflare-vite-plugin** (rippled from the Assets change): the plugin keeps
+  its own copy of the dev-mode asset worker, so
+  `packages/cloudflare-vite-plugin/src/assets/router.worker.ts` also had to
+  re-export `RouterInnerEntrypoint`, and
+  `packages/cloudflare-vite-plugin/src/assets/ViteAssets.ts` added the
+  `enable_ctx_exports` compat flag to both the `assets:worker` service and the
+  `assets:router` middleware.

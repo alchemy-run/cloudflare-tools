@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.13.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.0) (2026-07-08)
+
+### Features
+
+- **vite-plugin**: resolve the client-facing host via X-Forwarded-Host in dev - by @danielgangl in [#59](https://github.com/alchemy-run/cloudflare-tools/pull/59) [(f66b242)](https://github.com/alchemy-run/cloudflare-tools/commit/f66b242ba1aed274fef1787cc9509d29e3207382)
+- **runtime**: allow env variables to be passed to containers - by John Royal in [#60](https://github.com/alchemy-run/cloudflare-tools/pull/60) [(cdbc07e)](https://github.com/alchemy-run/cloudflare-tools/commit/cdbc07ea1b44455e489b6d46c95227261e87484a)
+
 ## [v0.12.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.2) (2026-07-07)
 
 *No significant changes*

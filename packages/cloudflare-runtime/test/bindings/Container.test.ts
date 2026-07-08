@@ -8,6 +8,7 @@ import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const FIXTURE_DIR = getFixture("container");
+const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
 
 // A Durable Object with an attached container. It starts the container and
 // proxies the incoming request to the HTTP server listening on `port`.
@@ -123,41 +124,70 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
           port: 80,
           expected: "Welcome to nginx!",
           container: { imageUri: NGINX_IMAGE },
-        }),
+        }).pipe(Effect.ensuring(Effect.sync(() => removeImage(NGINX_IMAGE)))),
       { concurrent: true },
     );
   },
 );
 
-const testContainer = Effect.fn(function* (options: {
-  index: number;
-  port: number;
-  expected: string;
-  container: ContainerImage;
-}) {
-  const worker = yield* startTestWorker({
-    name: `container-binding-${options.index}`,
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: [],
-    bindings: [
-      DurableObjectNamespace.local({
-        binding: "MY_CONTAINER",
-        className: `MyContainer${options.index}`,
-      }),
-    ],
-    modules: [{ name: "main.js", type: "ESModule", content: SCRIPT(options.index, options.port) }],
-    durableObjectNamespaces: [
-      {
-        className: `MyContainer${options.index}`,
-        sql: true,
-        container: options.container,
-      },
-    ],
-  });
+const testContainer = Effect.fn(
+  function* (options: {
+    index: number;
+    port: number;
+    expected: string;
+    container: ContainerImage;
+  }) {
+    const worker = yield* startTestWorker({
+      name: `container-binding-${options.index}`,
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: [],
+      bindings: [
+        DurableObjectNamespace.local({
+          binding: "MY_CONTAINER",
+          className: `MyContainer${options.index}`,
+        }),
+      ],
+      modules: [
+        { name: "main.js", type: "ESModule", content: SCRIPT(options.index, options.port) },
+      ],
+      durableObjectNamespaces: [
+        {
+          className: `MyContainer${options.index}`,
+          sql: true,
+          container: options.container,
+        },
+      ],
+    });
 
-  const text = yield* worker.fetchText("/");
-  expect(text).toContain(options.expected);
-});
+    const text = yield* worker.fetchText("/");
+    expect(text).toContain(options.expected);
+  },
+  (self, options) =>
+    self.pipe(
+      Effect.scoped,
+      Effect.ensuring(Effect.sync(() => removeImage(`alchemy-dev/mycontainer${options.index}`))),
+    ),
+);
+
+const removeImage = (reference: string) => {
+  const output = execFileSync(
+    DOCKER_BIN,
+    ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", `reference=${reference}`],
+    {
+      stdio: "pipe",
+      encoding: "utf-8",
+    },
+  );
+  const images = output
+    .split("\n")
+    .map((image) => image.trim())
+    .filter(Boolean);
+  if (images.length > 0) {
+    execFileSync(DOCKER_BIN, ["rmi", ...images], {
+      stdio: "ignore",
+    });
+  }
+};
 
 const isDockerAvailable = () => {
   // Containers are not supported on Windows: the Docker daemon there runs
@@ -167,7 +197,7 @@ const isDockerAvailable = () => {
     return false;
   }
   try {
-    execFileSync(process.env.DOCKER_BIN ?? "docker", ["info"], {
+    execFileSync(DOCKER_BIN, ["info"], {
       stdio: "ignore",
     });
     return true;

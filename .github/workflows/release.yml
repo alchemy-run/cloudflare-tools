@@ -181,10 +181,11 @@ jobs:
           registry-url: https://registry.npmjs.org/
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+      # Node 24 ships npm 11.12+, which already exceeds Trusted Publishing's
+      # >= 11.5.1 OIDC-client floor and bundles sigstore for provenance. We
+      # deliberately do NOT run `npm install -g npm@latest`: npm's in-place
+      # self-upgrade has a known race where arborist drops bundled deps
+      # mid-rebuild, leaving publish unable to `require('sigstore')`.
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -236,10 +237,11 @@ jobs:
           registry-url: https://registry.npmjs.org/
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+      # Node 24 ships npm 11.12+, which already exceeds Trusted Publishing's
+      # >= 11.5.1 OIDC-client floor and bundles sigstore for provenance. We
+      # deliberately do NOT run `npm install -g npm@latest`: npm's in-place
+      # self-upgrade has a known race where arborist drops bundled deps
+      # mid-rebuild, leaving publish unable to `require('sigstore')`.
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -291,10 +293,11 @@ jobs:
           registry-url: https://registry.npmjs.org/
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Upgrade npm for OIDC trusted publishing
-        run: |
-          npm install -g npm@latest && npm --version
-          sed -i '/always-auth/d' ~/.npmrc 2>/dev/null || true
+      # Node 24 ships npm 11.12+, which already exceeds Trusted Publishing's
+      # >= 11.5.1 OIDC-client floor and bundles sigstore for provenance. We
+      # deliberately do NOT run `npm install -g npm@latest`: npm's in-place
+      # self-upgrade has a known race where arborist drops bundled deps
+      # mid-rebuild, leaving publish unable to `require('sigstore')`.
 
       - uses: oven-sh/setup-bun@v2
         with:

@@ -27,6 +27,11 @@ export function handleWebSocket(httpServer: vite.HttpServer, address: string | U
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
 
+    // The URL — and thus the Sandbox-origin check below — is built from the
+    // resolved (forwarded) host, not the raw `Host` header. This diverges from
+    // upstream, which keys the origin off `Host`; here it's intentional so a
+    // tunnel-fronted Sandbox preview still matches. Direct Sandbox hits carry no
+    // `X-Forwarded-Host`, so they fall back to `Host` and behave identically.
     const rawHost = resolveForwardedHost(request.headers, "localhost");
     const base = /^https?:\/\//i.test(rawHost) ? rawHost : `http://${rawHost}`;
     const url = new URL(request.url ?? "/", base);

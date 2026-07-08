@@ -170,7 +170,7 @@ describe("handleWebSocket", () => {
     const call = harness.upstreamCalls[0]!;
     expect(call.url).toBe("/path?x=1");
     expect(call.method).toBe("GET");
-    expect(call.headers.host).toBe(`127.0.0.1:${harness.upstreamPort}`);
+    expect(call.headers.host).toBe(`127.0.0.1:${harness.clientPort}`);
     expect(call.headers.upgrade).toBe("websocket");
   });
 
@@ -223,8 +223,29 @@ describe("handleWebSocket", () => {
 
     expect(message).toBe("ack");
     expect(harness.upstreamCalls).toHaveLength(1);
-    expect(harness.upstreamCalls[0]!.headers.host).toBe(`127.0.0.1:${harness.upstreamPort}`);
+    expect(harness.upstreamCalls[0]!.headers.host).toBe(sandboxHost);
     expect(harness.upstreamCalls[0]!.headers["sec-websocket-protocol"]).toBe("vite-hmr");
+  });
+
+  test("prefers X-Forwarded-Host over Host when set by a tunnel", async () => {
+    harness.upstreamWss.on("connection", (ws) => {
+      ws.send("ack");
+    });
+
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/`, {
+      headers: { "x-forwarded-host": "example.ngrok.app" },
+    });
+    const message = await new Promise<string>((resolve, reject) => {
+      client.on("message", (data) => {
+        resolve(data.toString());
+        client.close();
+      });
+      client.on("error", reject);
+    });
+
+    expect(message).toBe("ack");
+    expect(harness.upstreamCalls).toHaveLength(1);
+    expect(harness.upstreamCalls[0]!.headers.host).toBe("example.ngrok.app");
   });
 
   // https://github.com/cloudflare/workers-sdk/issues/12047

@@ -2,6 +2,7 @@ import * as NodeHttp from "node:http";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
+import { resolveForwardedHost } from "./forwarded-host.js";
 
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the
@@ -26,7 +27,12 @@ export function handleWebSocket(httpServer: vite.HttpServer, address: string | U
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
 
-    const rawHost = request.headers.host ?? "localhost";
+    // The URL — and thus the Sandbox-origin check below — is built from the
+    // resolved (forwarded) host, not the raw `Host` header. This diverges from
+    // upstream, which keys the origin off `Host`; here it's intentional so a
+    // tunnel-fronted Sandbox preview still matches. Direct Sandbox hits carry no
+    // `X-Forwarded-Host`, so they fall back to `Host` and behave identically.
+    const rawHost = resolveForwardedHost(request.headers, "localhost");
     const base = /^https?:\/\//i.test(rawHost) ? rawHost : `http://${rawHost}`;
     const url = new URL(request.url ?? "/", base);
 
@@ -44,7 +50,9 @@ export function handleWebSocket(httpServer: vite.HttpServer, address: string | U
       port: target.port,
       path: target.pathname + target.search,
       method: request.method,
-      headers: { ...request.headers, host: target.host },
+      // Forward the client-facing host so the worker sees the URL the client
+      // requested rather than the local workerd address.
+      headers: { ...request.headers, host: url.host },
     });
 
     const cleanup = () => {

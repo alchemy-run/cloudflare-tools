@@ -7,6 +7,7 @@ import * as NodeHttp from "node:http";
 import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
 import type { ServerHandle } from "./dev-server.js";
+import { resolveForwardedHost } from "./forwarded-host.js";
 import type { CloudflareVitePluginOptions } from "./plugin.js";
 import { handleWebSocket } from "./websockets.js";
 
@@ -108,7 +109,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
           const url = new URL(req.url ?? "/", address);
           const request = NodeHttp.request(url, {
             method: req.method,
-            headers: { ...req.headers, host: url.hostname },
+            headers: { ...req.headers, host: resolveForwardedHost(req.headers, url.host) },
           });
           req.pipe(request);
           request.on("response", (response) => {

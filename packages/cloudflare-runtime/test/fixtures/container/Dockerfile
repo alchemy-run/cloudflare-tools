@@ -1,4 +1,4 @@
 FROM busybox
-RUN mkdir -p /www && echo "hello from container" > /www/index.html
+RUN mkdir -p /www
 EXPOSE 8080
-CMD ["httpd", "-f", "-p", "8080", "-h", "/www"]
+CMD ["sh", "-c", "echo \"hello from container${CONTAINER_GREETING:+ }${CONTAINER_GREETING}\" > /www/index.html && httpd -f -p 8080 -h /www"]

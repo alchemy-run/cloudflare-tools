@@ -71,7 +71,13 @@ export const RuntimeLive = Layer.effect(
         ({ className, container }) => {
           if ("tag" in container) {
             imageNames.set(className, container.tag);
-            return docker.validate(container.tag);
+            return docker
+              .validate(container.tag)
+              .pipe(
+                Effect.andThen(
+                  container.env ? docker.setEnv(container.tag, container.env) : Effect.void,
+                ),
+              );
           }
           const tag = docker.generateImageTag(className);
           imageNames.set(className, tag);
@@ -87,6 +93,7 @@ export const RuntimeLive = Layer.effect(
                   .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
               );
             }),
+            Effect.tap(() => (container.env ? docker.setEnv(tag, container.env) : Effect.void)),
             Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );
         },

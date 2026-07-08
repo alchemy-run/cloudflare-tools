@@ -4,12 +4,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeHttp from "node:http";
-import { Transform } from "node:stream";
+import * as NodeStream from "node:stream";
 import { getAddress } from "./internal/get-address.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
@@ -22,6 +23,10 @@ export class Docker extends Context.Service<
       SystemError
     >;
     readonly generateImageTag: (className: string, suffix?: string) => string;
+    readonly setEnv: (
+      tag: string,
+      env: Record<string, string>,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly build: (tag: string, image: ContainerImage.Build) => Effect.Effect<void, SystemError>;
     readonly pull: (tag: string, image: ContainerImage.Pull) => Effect.Effect<void, SystemError>;
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
@@ -34,15 +39,18 @@ export class Docker extends Context.Service<
 export type ContainerImage = ContainerImage.Build | ContainerImage.Pull | ContainerImage.Ref;
 
 export declare namespace ContainerImage {
-  export interface Build {
+  interface Base {
+    readonly env?: Record<string, string>;
+  }
+  export interface Build extends Base {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
   }
-  export interface Pull {
+  export interface Pull extends Base {
     readonly imageUri: string;
   }
-  export interface Ref {
+  export interface Ref extends Base {
     readonly tag: string;
   }
 }
@@ -61,24 +69,6 @@ const ContainerEgressInterceptorImage = Config.string("CONTAINER_EGRESS_INTERCEP
   ),
 );
 
-const collectBody = (metadata: string, log: boolean) => {
-  const chunks: Array<Buffer> = [];
-  return new Transform({
-    transform(chunk, encoding, callback) {
-      chunks.push(chunk);
-      this.push(chunk, encoding);
-      callback();
-    },
-    flush(callback) {
-      this.push(null);
-      if (log) {
-        console.log("[Proxy]", metadata, Buffer.concat(chunks).toString());
-      }
-      callback();
-    },
-  });
-};
-
 export const DockerLive = Layer.effect(
   Docker,
   Effect.gen(function* () {
@@ -88,48 +78,7 @@ export const DockerLive = Layer.effect(
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
-
-    const makeProxy = (socketPath: string) =>
-      Effect.suspend(() => {
-        const server = NodeHttp.createServer((req, res) => {
-          const path = req.url ?? "";
-          // const log = true;
-          const log =
-            req.method === "POST" &&
-            path.startsWith("/containers/create") &&
-            !path.endsWith("-proxy");
-          const dockerReq = NodeHttp.request(
-            {
-              socketPath: socketPath!.replace(/^unix:/, ""),
-              path,
-              method: req.method,
-              headers: req.headers,
-            },
-            (dockerRes) => {
-              res.writeHead(dockerRes.statusCode || 500, dockerRes.headers);
-              dockerRes
-                .pipe(
-                  collectBody(
-                    `Response ${req.method} ${path} > ${dockerRes.statusCode} ${JSON.stringify(dockerRes.headers)}`,
-                    log,
-                  ),
-                )
-                .pipe(res, { end: true });
-            },
-          );
-          dockerReq.on("error", (err) => {
-            res.writeHead(502, { "content-type": "text/plain" });
-            res.end(`Proxy error: ${(err && err.message) || err}`);
-          });
-          req
-            .pipe(
-              collectBody(`Request ${req.method} ${path} < ${JSON.stringify(req.headers)}`, log),
-            )
-            .pipe(dockerReq, { end: true });
-        });
-        server.listen(0);
-        return getAddress(server);
-      });
+    const envsByTag = new Map<string, Record<string, string>>();
 
     const getSocketPathFromContext = () =>
       ChildProcess.make(bin, ["context", "ls", "--format", "json"], {
@@ -160,7 +109,6 @@ export const DockerLive = Layer.effect(
           ),
         ),
         Effect.scoped,
-        Effect.flatMap(makeProxy),
       );
 
     const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
@@ -251,18 +199,34 @@ export const DockerLive = Layer.effect(
       );
 
     return Docker.of({
-      getWorkerdDockerConfiguration: yield* DockerHost.pipe(
-        Effect.catchTag("ConfigError", getSocketPathFromContext),
-        Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
-        Effect.tap(() => pull({ imageUri: containerEgressInterceptorImage })),
-        Effect.map((socketPath) => ({
-          localDocker: {
-            socketPath,
-            containerEgressInterceptorImage,
-          },
-        })),
-        Effect.cached,
+      getWorkerdDockerConfiguration: yield* Effect.cached(
+        DockerHost.pipe(
+          Effect.catchTag("ConfigError", getSocketPathFromContext),
+          Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
+          Effect.flatMap((socketPath) => {
+            const server = makeDockerProxy(socketPath, envsByTag);
+            server.listen(0);
+            return getAddress(server);
+          }),
+          Effect.zip(pull({ imageUri: containerEgressInterceptorImage }), { concurrent: true }),
+          Effect.map(([socketPath]) => ({
+            localDocker: {
+              socketPath,
+              containerEgressInterceptorImage,
+            },
+          })),
+        ),
       ),
+      setEnv: (tag, env) =>
+        Effect.acquireRelease(
+          Effect.sync(() => envsByTag.set(tag, env)),
+          () =>
+            Effect.sync(() => {
+              if (envsByTag.get(tag) === env) {
+                envsByTag.delete(tag);
+              }
+            }),
+        ),
       generateImageTag: (className, suffix = crypto.randomUUID().slice(0, 8)) =>
         `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix}`,
       build: (tag, image) =>
@@ -413,4 +377,88 @@ export const DockerLive = Layer.effect(
 const parseImageTag = (tag: string) => {
   const index = tag.lastIndexOf(":");
   return index === -1 ? { name: tag } : { name: tag.slice(0, index), suffix: tag.slice(index + 1) };
+};
+
+const makeDockerProxy = (socketPath: string, envsByTag: Map<string, Record<string, string>>) => {
+  const sendRequest = (input: {
+    path: string | undefined;
+    method: string | undefined;
+    headers: NodeHttp.OutgoingHttpHeaders;
+    res: NodeHttp.ServerResponse;
+  }) => {
+    const req = NodeHttp.request(
+      {
+        socketPath: socketPath.replace(/^unix:/, ""),
+        path: input.path,
+        method: input.method,
+        headers: input.headers,
+      },
+      (res) => {
+        input.res.writeHead(res.statusCode || 500, res.headers);
+        res.pipe(input.res, { end: true });
+      },
+    );
+    req.on("error", (err) => {
+      input.res.writeHead(502, { "content-type": "text/plain" });
+      input.res.end(`Proxy error: ${(err && err.message) || err}`);
+    });
+    return req;
+  };
+  const server = NodeHttp.createServer(async (req, res) => {
+    if (
+      req.method === "POST" &&
+      req.url?.startsWith("/containers/create") &&
+      !req.url.endsWith("-proxy")
+    ) {
+      const body = await transformJsonBody<{ Image: string; Env: Array<string> }>(req, (body) => ({
+        ...body,
+        Env: [
+          ...(body.Env ?? []),
+          ...Object.entries(envsByTag.get(body.Image) ?? {}).map(
+            ([name, value]) => `${name}=${value}`,
+          ),
+        ],
+      }));
+      const proxy = sendRequest({
+        path: req.url,
+        method: req.method,
+        headers: {
+          ...req.headers,
+          "content-length": Buffer.byteLength(body).toString(),
+        },
+        res,
+      });
+      proxy.end(body);
+    } else {
+      const proxy = sendRequest({
+        path: req.url,
+        method: req.method,
+        headers: req.headers,
+        res,
+      });
+      req.pipe(proxy, { end: true });
+    }
+  });
+  return server;
+};
+
+const transformJsonBody = <T>(req: NodeHttp.IncomingMessage, transform: (json: T) => T) => {
+  const promise = Promise.withResolvers<string>();
+  const chunks: Array<Buffer> = [];
+  req.pipe(
+    new NodeStream.Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(chunk);
+        callback();
+      },
+      final(callback) {
+        const json = JSON.parse(Buffer.concat(chunks).toString());
+        const transformed = transform(json);
+        promise.resolve(JSON.stringify(transformed));
+        callback();
+      },
+    }),
+    { end: true },
+  );
+  return promise.promise;
 };

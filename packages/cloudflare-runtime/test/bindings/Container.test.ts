@@ -96,11 +96,30 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    it.effect.only(
+    test(
+      "injects configured environment variables into the container",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          yield* testContainer({
+            index: 11,
+            port: 8080,
+            expected: "hello from container howdy",
+            container: {
+              dockerfile: path.join(FIXTURE_DIR, "Dockerfile"),
+              context: FIXTURE_DIR,
+              env: { CONTAINER_GREETING: "howdy" },
+            },
+          });
+        }),
+      { concurrent: true },
+    );
+
+    test(
       "pulls an existing image by imageUri and proxies requests to it",
       () =>
         testContainer({
-          index: 11,
+          index: 12,
           port: 80,
           expected: "Welcome to nginx!",
           container: { imageUri: NGINX_IMAGE },
@@ -138,7 +157,7 @@ const testContainer = Effect.fn(function* (options: {
 
   const text = yield* worker.fetchText("/");
   expect(text).toContain(options.expected);
-}, Effect.scoped);
+});
 
 const isDockerAvailable = () => {
   // Containers are not supported on Windows: the Docker daemon there runs

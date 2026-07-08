@@ -66,21 +66,28 @@ export const RuntimeLive = Layer.effect(
         });
       }
       const imageNames = new Map<string, string>();
+
+      const registerImage = (className: string, tag: string, env?: Record<string, string>) => {
+        if (env) {
+          // To prevent collisions between images with the same tag but different env,
+          // `registerImageEnv` returns a unique alias for the image, which our Docker
+          // proxy server then maps to the actual tag and injects the env variables.
+          return docker
+            .registerImageEnv(className, tag, env)
+            .pipe(Effect.andThen((alias) => Effect.sync(() => imageNames.set(className, alias))));
+        }
+        return Effect.sync(() => imageNames.set(className, tag));
+      };
+
       const [, containerEngine] = yield* Effect.forEach(
         containers,
         ({ className, container }) => {
           if ("tag" in container) {
-            imageNames.set(className, container.tag);
             return docker
               .validate(container.tag)
-              .pipe(
-                Effect.andThen(
-                  container.env ? docker.setEnv(container.tag, container.env) : Effect.void,
-                ),
-              );
+              .pipe(Effect.andThen(registerImage(className, container.tag, container.env)));
           }
           const tag = docker.generateImageTag(className);
-          imageNames.set(className, tag);
           const prepare =
             "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
           return prepare.pipe(
@@ -93,7 +100,7 @@ export const RuntimeLive = Layer.effect(
                   .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
               );
             }),
-            Effect.tap(() => (container.env ? docker.setEnv(tag, container.env) : Effect.void)),
+            Effect.tap(() => registerImage(className, tag, container.env)),
             Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );
         },

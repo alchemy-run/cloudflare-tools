@@ -9,6 +9,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { isRuntimeError, SystemError } from "../RuntimeError.shared.ts";
+import { getAddress } from "../internal/get-address.ts";
 import { makeErrorEnvelope } from "../internal/response.shared.ts";
 
 export class LoopbackServer extends Context.Service<
@@ -137,25 +138,6 @@ const timingSafeEqual = (a: string, b: string) => {
     return false;
   }
   return NodeCrypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-};
-
-const getAddress = (server: NodeHttp.Server): Effect.Effect<string, SystemError> => {
-  const address = server.address();
-  if (address === null) {
-    return Effect.fail(
-      new SystemError({
-        subtag: "ServerAddressNotAvailable",
-        message: "Server address is not available.",
-        detail: { server },
-      }),
-    );
-  }
-  if (typeof address === "string") {
-    return Effect.succeed(address);
-  }
-  return Effect.succeed(
-    `${address.address === "::" ? "0.0.0.0" : address.address}:${address.port}`,
-  );
 };
 
 const writeErrorResponse = (

@@ -8,6 +8,9 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as NodeChildProcess from "node:child_process";
+import * as NodeHttp from "node:http";
+import { Transform } from "node:stream";
+import { getAddress } from "./internal/get-address.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 
@@ -58,6 +61,24 @@ const ContainerEgressInterceptorImage = Config.string("CONTAINER_EGRESS_INTERCEP
   ),
 );
 
+const collectBody = (metadata: string, log: boolean) => {
+  const chunks: Array<Buffer> = [];
+  return new Transform({
+    transform(chunk, encoding, callback) {
+      chunks.push(chunk);
+      this.push(chunk, encoding);
+      callback();
+    },
+    flush(callback) {
+      this.push(null);
+      if (log) {
+        console.log("[Proxy]", metadata, Buffer.concat(chunks).toString());
+      }
+      callback();
+    },
+  });
+};
+
 export const DockerLive = Layer.effect(
   Docker,
   Effect.gen(function* () {
@@ -67,6 +88,48 @@ export const DockerLive = Layer.effect(
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
+
+    const makeProxy = (socketPath: string) =>
+      Effect.suspend(() => {
+        const server = NodeHttp.createServer((req, res) => {
+          const path = req.url ?? "";
+          // const log = true;
+          const log =
+            req.method === "POST" &&
+            path.startsWith("/containers/create") &&
+            !path.endsWith("-proxy");
+          const dockerReq = NodeHttp.request(
+            {
+              socketPath: socketPath!.replace(/^unix:/, ""),
+              path,
+              method: req.method,
+              headers: req.headers,
+            },
+            (dockerRes) => {
+              res.writeHead(dockerRes.statusCode || 500, dockerRes.headers);
+              dockerRes
+                .pipe(
+                  collectBody(
+                    `Response ${req.method} ${path} > ${dockerRes.statusCode} ${JSON.stringify(dockerRes.headers)}`,
+                    log,
+                  ),
+                )
+                .pipe(res, { end: true });
+            },
+          );
+          dockerReq.on("error", (err) => {
+            res.writeHead(502, { "content-type": "text/plain" });
+            res.end(`Proxy error: ${(err && err.message) || err}`);
+          });
+          req
+            .pipe(
+              collectBody(`Request ${req.method} ${path} < ${JSON.stringify(req.headers)}`, log),
+            )
+            .pipe(dockerReq, { end: true });
+        });
+        server.listen(0);
+        return getAddress(server);
+      });
 
     const getSocketPathFromContext = () =>
       ChildProcess.make(bin, ["context", "ls", "--format", "json"], {
@@ -97,6 +160,7 @@ export const DockerLive = Layer.effect(
           ),
         ),
         Effect.scoped,
+        Effect.flatMap(makeProxy),
       );
 
     const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>

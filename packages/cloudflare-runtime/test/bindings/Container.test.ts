@@ -3,14 +3,15 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { execFileSync } from "node:child_process";
 import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
+import type { ContainerImage } from "../../src/Docker.ts";
 import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const FIXTURE_DIR = getFixture("container");
 
 // A Durable Object with an attached container. It starts the container and
-// proxies the incoming request to the busybox httpd listening on port 8080.
-const SCRIPT = (index: number) => `
+// proxies the incoming request to the HTTP server listening on `port`.
+const SCRIPT = (index: number, port: number) => `
 import { DurableObject } from "cloudflare:workers";
 
 export class MyContainer${index} extends DurableObject {
@@ -22,7 +23,7 @@ export class MyContainer${index} extends DurableObject {
     if (!container.running) {
       container.start();
     }
-    const port = container.getTcpPort(8080);
+    const port = container.getTcpPort(${port});
     let lastError = "";
     for (let i = 0; i < 100; i++) {
       try {
@@ -48,53 +49,96 @@ export default {
 };
 `;
 
-const testContainer = Effect.fn(function* (index: number) {
-  const path = yield* Path.Path;
+// A public image with an HTTP server that exposes a port and serves a stable
+// response, used to exercise the `imageUri` (pull) path without a Dockerfile.
+const NGINX_IMAGE = "nginx:1.27-alpine";
+
+layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
+  "Container binding",
+  (it) => {
+    const test = it.effect.skipIf(!isDockerAvailable());
+
+    test(
+      "builds a container image and proxies requests to it via ctx.container",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          yield* testContainer({
+            index: 0,
+            port: 8080,
+            expected: "hello from container",
+            container: { dockerfile: path.join(FIXTURE_DIR, "Dockerfile"), context: FIXTURE_DIR },
+          });
+        }),
+      { concurrent: true },
+    );
+
+    test(
+      "proxies requests to multiple containers",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          yield* Effect.forEach(
+            Array.from({ length: 10 }),
+            (_, i) =>
+              testContainer({
+                index: i + 1,
+                port: 8080,
+                expected: "hello from container",
+                container: {
+                  dockerfile: path.join(FIXTURE_DIR, "Dockerfile"),
+                  context: FIXTURE_DIR,
+                },
+              }),
+            { concurrency: "unbounded" },
+          );
+        }),
+      { concurrent: true },
+    );
+
+    it.effect.only(
+      "pulls an existing image by imageUri and proxies requests to it",
+      () =>
+        testContainer({
+          index: 11,
+          port: 80,
+          expected: "Welcome to nginx!",
+          container: { imageUri: NGINX_IMAGE },
+        }),
+      { concurrent: true },
+    );
+  },
+);
+
+const testContainer = Effect.fn(function* (options: {
+  index: number;
+  port: number;
+  expected: string;
+  container: ContainerImage;
+}) {
   const worker = yield* startTestWorker({
-    name: `container-binding-${index}`,
+    name: `container-binding-${options.index}`,
     compatibilityDate: "2026-03-10",
     compatibilityFlags: [],
     bindings: [
       DurableObjectNamespace.local({
         binding: "MY_CONTAINER",
-        className: `MyContainer${index}`,
+        className: `MyContainer${options.index}`,
       }),
     ],
-    modules: [{ name: "main.js", type: "ESModule", content: SCRIPT(index) }],
+    modules: [{ name: "main.js", type: "ESModule", content: SCRIPT(options.index, options.port) }],
     durableObjectNamespaces: [
       {
-        className: `MyContainer${index}`,
+        className: `MyContainer${options.index}`,
         sql: true,
-        container: {
-          dockerfile: path.join(FIXTURE_DIR, "Dockerfile"),
-          context: FIXTURE_DIR,
-        },
+        container: options.container,
       },
     ],
   });
 
   const text = yield* worker.fetchText("/");
-  expect(text).toContain("hello from container");
+  expect(text).toContain(options.expected);
 }, Effect.scoped);
-
-layer(localRuntimeLayer, { excludeTestServices: true })("Container binding", (it) => {
-  it.effect.skipIf(!isDockerAvailable())(
-    "builds a container image and proxies requests to it via ctx.container",
-    () => testContainer(0),
-    { concurrent: true, timeout: 30_000 },
-  );
-
-  it.effect.skipIf(!isDockerAvailable())(
-    "proxies requests to multiple containers",
-    () =>
-      Effect.gen(function* () {
-        yield* Effect.forEach(Array.from({ length: 10 }), (_, i) => testContainer(i + 1), {
-          concurrency: "unbounded",
-        });
-      }),
-    { concurrent: true, timeout: 30_000 },
-  );
-});
 
 const isDockerAvailable = () => {
   // Containers are not supported on Windows: the Docker daemon there runs

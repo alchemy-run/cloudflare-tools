@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
@@ -56,8 +57,12 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         const vite = await import("vite");
         const isRolldown = "rolldownVersion" in this.meta;
         const environmentNames = parseViteEnvironments(pluginOptions);
-        input = normalizeInput(
-          pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
+        const root = path.resolve(userConfig.root ?? ".");
+        input = resolveInputPaths(
+          normalizeInput(
+            pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
+          ),
+          root,
         );
         const rollupOptions: vite.Rollup.RollupOptions = {
           input: wrapInput(input),
@@ -221,6 +226,32 @@ const normalizeInput = (
   } else {
     return input;
   }
+};
+
+/**
+ * Resolve path-like input entries against the Vite root. Worker entries are
+ * round-tripped through a synthetic `\0distilled:user-entry:` id and resolved
+ * with no importer, so a relative input (`./workers/app.ts`) would otherwise
+ * resolve against `process.cwd()` — the wrong base whenever the build runs
+ * outside the project root (e.g. from a monorepo infra package). A bare
+ * specifier that names a real file under the root (`workers/app.ts`) is
+ * treated as a path input, matching Vite's own input semantics; anything else
+ * (virtual modules, package specifiers) passes through and resolves via
+ * plugins.
+ */
+const resolveInputPaths = (
+  input: Record<string, string>,
+  root: string,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(input).map(([key, id]) => [key, resolveInputPath(id, root)]),
+  );
+
+const resolveInputPath = (id: string, root: string): string => {
+  if (path.isAbsolute(id)) return id;
+  if (id.startsWith("./") || id.startsWith("../")) return path.resolve(root, id);
+  const resolved = path.resolve(root, id);
+  return fs.existsSync(resolved) ? resolved : id;
 };
 
 // Worker entry ids are embedded into synthetic `\0distilled:worker-entry:` module

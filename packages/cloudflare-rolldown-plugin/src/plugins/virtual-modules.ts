@@ -10,6 +10,14 @@ const USER_ENTRY_PREFIX = "\0distilled:user-entry:" as const;
 const INJECT_PREFIX = "\0distilled:inject:" as const;
 const EXPORT_TYPES_ID = "\0distilled:export-types" as const;
 
+const missingDefaultExportMessage = (userEntryName: string): string =>
+  `The worker entry module "${userEntryName}" has no default export. ` +
+  `A Cloudflare Worker must default-export its handlers (e.g. \`export default { fetch }\`) ` +
+  `or export a WorkerEntrypoint, DurableObject, or WorkflowEntrypoint class. ` +
+  `If the entry is a framework server build without a default export ` +
+  `(e.g. React Router's "virtual:react-router/server-build"), set the plugin's ` +
+  `"main" option to a module that wraps the framework's request handler.`;
+
 export const virtualModulesPlugin = createPlugin("virtual-modules", (options) => {
   let unenvApi: UnenvApi | undefined;
   const inject = () => {
@@ -52,6 +60,7 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
         handler(id) {
           if (id.startsWith(WORKER_ENTRY_PREFIX)) {
             const userEntryId = id.replace(WORKER_ENTRY_PREFIX, USER_ENTRY_PREFIX);
+            const userEntryName = id.slice(WORKER_ENTRY_PREFIX.length);
 
             return [
               ...inject(),
@@ -60,6 +69,34 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
                 : [
                     `import * as userEntry from "${userEntryId}";`,
                     `export * from "${userEntryId}";`,
+                    // A worker entry without a default export is almost always
+                    // a misconfiguration — e.g. React Router's
+                    // `virtual:react-router/server-build` is a build manifest,
+                    // not a worker. Silently deploying `export default {}`
+                    // surfaces as Cloudflare's opaque "The uploaded script has
+                    // no registered event handlers"; throw an actionable error
+                    // instead. A default-less entry stays valid when it exports
+                    // entrypoint classes (Durable Objects, Workflows,
+                    // WorkerEntrypoints).
+                    `import {`,
+                    `  WorkerEntrypoint as __distilled_WorkerEntrypoint,`,
+                    `  DurableObject as __distilled_DurableObject,`,
+                    `  WorkflowEntrypoint as __distilled_WorkflowEntrypoint,`,
+                    `} from "cloudflare:workers";`,
+                    `if (userEntry.default === undefined) {`,
+                    `  const hasEntrypointExport = Object.entries(userEntry).some(`,
+                    `    ([key, value]) =>`,
+                    `      key !== "default" &&`,
+                    `      typeof value === "function" &&`,
+                    `      value.prototype != null &&`,
+                    `      (__distilled_WorkerEntrypoint.prototype.isPrototypeOf(value.prototype) ||`,
+                    `        __distilled_DurableObject.prototype.isPrototypeOf(value.prototype) ||`,
+                    `        __distilled_WorkflowEntrypoint.prototype.isPrototypeOf(value.prototype)),`,
+                    `  );`,
+                    `  if (!hasEntrypointExport) {`,
+                    `    throw new Error(${JSON.stringify(missingDefaultExportMessage(userEntryName))});`,
+                    `  }`,
+                    `}`,
                     `export default userEntry.default ?? {};`,
                   ]),
               "if (import.meta.hot) {",

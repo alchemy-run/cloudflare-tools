@@ -9,54 +9,28 @@ import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 const FIXTURE_DIR = getFixture("container");
 const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
 
-// A Durable Object with an attached container. It starts the container and
-// proxies the incoming request to the HTTP server listening on `port`.
-const SCRIPT = (index: number, port: number) => `
-import { DurableObject } from "cloudflare:workers";
-
-export class MyContainer${index} extends DurableObject {
-  async fetch(request) {
-    const container = this.ctx.container;
-    if (!container) {
-      return new Response("no container binding", { status: 500 });
-    }
-    if (!container.running) {
-      container.start();
-    }
-    const port = container.getTcpPort(${port});
-    let lastError = "";
-    for (let i = 0; i < 100; i++) {
-      try {
-        const res = await port.fetch("http://container/");
-        if (res.ok) {
-          return new Response(await res.text());
-        }
-        lastError = "status " + res.status;
-      } catch (error) {
-        lastError = String(error);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    return new Response("container not ready: " + lastError, { status: 504 });
-  }
-}
-
-export default {
-  async fetch(request, env) {
-    const id = env.MY_CONTAINER.idFromName("singleton");
-    return env.MY_CONTAINER.get(id).fetch(request);
-  },
-};
-`;
-
-// A public image with an HTTP server that exposes a port and serves a stable
-// response, used to exercise the `imageUri` (pull) path without a Dockerfile.
-const NGINX_IMAGE = "nginx:1.27-alpine";
-
 layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
   "Container binding",
   (it) => {
-    const test = it.effect.skipIf(!isDockerAvailable());
+    // Containers are not supported on Windows: the Docker daemon there runs
+    // Windows containers and cannot pull the `linux/amd64` images these tests
+    // depend on. This mirrors upstream workers-sdk, which bails out on Windows.
+    const isWindows = process.platform === "win32";
+    const test = it.effect.skipIf(isWindows);
+
+    it.beforeAll(() => {
+      if (isWindows) {
+        console.warn("Cloudflare Containers are not supported on Windows; skipping tests.");
+        return;
+      }
+      try {
+        runDockerSync(["info"], "ignore");
+      } catch (cause) {
+        throw new Error("Docker is not available. Ensure Docker is running and try again.", {
+          cause,
+        });
+      }
+    });
 
     test(
       "builds a container image and proxies requests to it via ctx.container",
@@ -108,13 +82,18 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
 
     test(
       "pulls an existing image by imageUri and proxies requests to it",
-      () =>
-        testContainer({
+      () => {
+        // A public image with an HTTP server that exposes a port and serves a stable
+        // response, used to exercise the `imageUri` (pull) path without a Dockerfile.
+        const NGINX_IMAGE = "nginx:1.27-alpine";
+
+        return testContainer({
           index: 12,
           port: 80,
           expected: "Welcome to nginx!",
           container: { imageUri: NGINX_IMAGE },
-        }).pipe(Effect.ensuring(Effect.sync(() => removeImage(NGINX_IMAGE)))),
+        }).pipe(Effect.ensuring(Effect.sync(() => removeImage(NGINX_IMAGE))));
+      },
       { concurrent: true },
     );
   },
@@ -159,43 +138,75 @@ const testContainer = Effect.fn(
     ),
 );
 
+// A Durable Object with an attached container. It starts the container and
+// proxies the incoming request to the HTTP server listening on `port`.
+const SCRIPT = (index: number, port: number) => `
+import { DurableObject } from "cloudflare:workers";
+
+export class MyContainer${index} extends DurableObject {
+  async fetch(request) {
+    const container = this.ctx.container;
+    if (!container) {
+      return new Response("no container binding", { status: 500 });
+    }
+    if (!container.running) {
+      container.start();
+    }
+    const port = container.getTcpPort(${port});
+    let lastError = "";
+    for (let i = 0; i < 100; i++) {
+      try {
+        const res = await port.fetch("http://container/");
+        if (res.ok) {
+          return new Response(await res.text());
+        }
+        lastError = "status " + res.status;
+      } catch (error) {
+        lastError = String(error);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return new Response("container not ready: " + lastError, { status: 504 });
+  }
+}
+
+export default {
+  async fetch(request, env) {
+    const id = env.MY_CONTAINER.idFromName("singleton");
+    return env.MY_CONTAINER.get(id).fetch(request);
+  },
+};
+`;
+
+const runDockerSync: {
+  (args: Array<string>): string;
+  (args: Array<string>, stdio: "pipe"): string;
+  (args: Array<string>, stdio: "ignore"): void;
+} = (args: Array<string>, stdio: "pipe" | "ignore" = "pipe") => {
+  return execFileSync(
+    DOCKER_BIN,
+    args,
+    stdio === "ignore" ? { stdio: "ignore" } : { stdio: "pipe", encoding: "utf-8" },
+  ) as any;
+};
+
 const removeImage = (reference: string) => {
   try {
-    const output = execFileSync(
-      DOCKER_BIN,
-      ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", `reference=${reference}`],
-      {
-        stdio: "pipe",
-        encoding: "utf-8",
-      },
-    );
+    const output = runDockerSync([
+      "images",
+      "--format",
+      "{{.Repository}}:{{.Tag}}",
+      "--filter",
+      `reference=${reference}`,
+    ]);
     const images = output
       .split("\n")
       .map((image) => image.trim())
       .filter(Boolean);
     if (images.length > 0) {
-      execFileSync(DOCKER_BIN, ["rmi", ...images], {
-        stdio: "ignore",
-      });
+      runDockerSync(["rmi", ...images], "ignore");
     }
   } catch {
     // ignore errors - best effort
-  }
-};
-
-const isDockerAvailable = () => {
-  // Containers are not supported on Windows: the Docker daemon there runs
-  // Windows containers and cannot pull the `linux/amd64` images these tests
-  // depend on. This mirrors upstream workers-sdk, which bails out on Windows.
-  if (process.platform === "win32") {
-    return false;
-  }
-  try {
-    execFileSync(DOCKER_BIN, ["info"], {
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
   }
 };

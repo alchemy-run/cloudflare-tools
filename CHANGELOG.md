@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.13.3](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.3) (2026-07-09)
+
+### Bug Fixes
+
+- **runtime**: handle fiber.interrupt in docker client - by @john-royal [(572876f)](https://github.com/alchemy-run/cloudflare-tools/commit/572876fc778ab915ac0b09970f3fa38f0191765b)
+
 ## [v0.13.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.2) (2026-07-09)
 
 ### Bug Fixes

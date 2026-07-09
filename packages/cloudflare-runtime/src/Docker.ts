@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -239,28 +240,28 @@ export const DockerLive = Layer.effect(
         ),
       );
 
-    return Docker.of({
-      getWorkerdDockerConfiguration: yield* Effect.cached(
-        Effect.zipWith(
-          DockerHost.pipe(
-            Effect.catchTag("ConfigError", getSocketPathFromContext),
-            Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
-            Effect.flatMap((socketPath) => {
-              const server = makeDockerProxyServer(socketPath);
-              server.listen(0);
-              return getAddress(server);
-            }),
-          ),
-          pull({ imageUri: containerEgressInterceptorImage }),
-          (socketPath) => ({
-            localDocker: {
-              socketPath,
-              containerEgressInterceptorImage,
-            },
-          }),
-          { concurrent: true },
-        ),
+    const docker = yield* Effect.zipWith(
+      DockerHost.pipe(
+        Effect.catchTag("ConfigError", getSocketPathFromContext),
+        Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
+        Effect.flatMap((socketPath) => {
+          const server = makeDockerProxyServer(socketPath);
+          server.listen(0);
+          return getAddress(server);
+        }),
       ),
+      pull({ imageUri: containerEgressInterceptorImage }),
+      (socketPath) => ({
+        localDocker: {
+          socketPath,
+          containerEgressInterceptorImage,
+        },
+      }),
+      { concurrent: true },
+    ).pipe(Effect.forkDetach({ startImmediately: false, uninterruptible: true }));
+
+    return Docker.of({
+      getWorkerdDockerConfiguration: Fiber.join(docker),
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(

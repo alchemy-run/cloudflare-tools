@@ -83,7 +83,12 @@ export class WorkerProxy extends DurableObject<Env> {
   private async routeUserWorkerRequest(request: Request, target: URL): Promise<Response> {
     const original = new URL(request.url);
     try {
-      const proxied = new URL(original.pathname + original.search, target);
+      // This used to be new URL(original.pathname + original.search, target);
+      // but that caused a bug where requests with a path beginning in // were
+      // treated as protocol-relative URLs.
+      const proxied = new URL(target);
+      proxied.pathname = original.pathname;
+      proxied.search = original.search;
       const headers = new Headers(request.headers);
       headers.set("x-forwarded-host", original.host);
       headers.set("x-forwarded-proto", original.protocol.replace(/:$/, ""));

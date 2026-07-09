@@ -17,6 +17,6 @@ export const getAddress = (server: NodeHttp.Server): Effect.Effect<string, Syste
     return Effect.succeed(address);
   }
   return Effect.succeed(
-    `${address.address === "::" ? "0.0.0.0" : address.address}:${address.port}`,
+    `${address.address === "::" ? "127.0.0.1" : address.address}:${address.port}`,
   );
 };

@@ -139,7 +139,7 @@ const testContainer = Effect.fn(
   }) {
     const worker = yield* startTestWorker({
       name: `container-binding-${options.index}`,
-      compatibilityDate: "2026-03-10",
+      compatibilityDate: "2026-03-17",
       compatibilityFlags: [],
       bindings: [
         DurableObjectNamespace.local({
@@ -170,22 +170,26 @@ const testContainer = Effect.fn(
 );
 
 const removeImage = (reference: string) => {
-  const output = execFileSync(
-    DOCKER_BIN,
-    ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", `reference=${reference}`],
-    {
-      stdio: "pipe",
-      encoding: "utf-8",
-    },
-  );
-  const images = output
-    .split("\n")
-    .map((image) => image.trim())
-    .filter(Boolean);
-  if (images.length > 0) {
-    execFileSync(DOCKER_BIN, ["rmi", ...images], {
-      stdio: "ignore",
-    });
+  try {
+    const output = execFileSync(
+      DOCKER_BIN,
+      ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", `reference=${reference}`],
+      {
+        stdio: "pipe",
+        encoding: "utf-8",
+      },
+    );
+    const images = output
+      .split("\n")
+      .map((image) => image.trim())
+      .filter(Boolean);
+    if (images.length > 0) {
+      execFileSync(DOCKER_BIN, ["rmi", ...images], {
+        stdio: "ignore",
+      });
+    }
+  } catch {
+    // ignore errors - best effort
   }
 };
 

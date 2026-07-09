@@ -114,6 +114,17 @@ export const DockerLive = Layer.effect(
 
     const makeDockerProxyServer = (socketPath: string) =>
       NodeHttp.createServer(async (req, res) => {
+        // `transfer-encoding` is a hop-by-hop header and must not be forwarded
+        // verbatim. workerd sends its `DELETE /containers/<name>-proxy?force=true`
+        // cleanup request with `transfer-encoding: chunked` and an empty body;
+        // Bun's `node:http` client hangs indefinitely on such a request to a
+        // unix socket (it never flushes the terminating zero-chunk), so the
+        // docker daemon never responds and workerd blocks forever before it can
+        // create the container. Strip the header and let the runtime derive the
+        // framing from the body we actually write. (Node tolerates it, Bun does
+        // not — and Alchemy dev runs the runtime under Bun.)
+        const forwardHeaders = { ...req.headers };
+        delete forwardHeaders["transfer-encoding"];
         const isContainerCreateRequest =
           req.method === "POST" &&
           req.url?.startsWith("/containers/create") &&
@@ -134,7 +145,7 @@ export const DockerLive = Layer.effect(
             path: req.url,
             method: req.method,
             headers: {
-              ...req.headers,
+              ...forwardHeaders,
               "content-length": Buffer.byteLength(transformed).toString(),
             },
             res,
@@ -145,7 +156,7 @@ export const DockerLive = Layer.effect(
             socketPath,
             path: req.url,
             method: req.method,
-            headers: req.headers,
+            headers: forwardHeaders,
             res,
           });
           req.pipe(proxy, { end: true });

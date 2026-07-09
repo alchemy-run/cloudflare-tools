@@ -1,5 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { execFileSync } from "node:child_process";
 import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
 import type { ContainerImage } from "../../src/Docker.ts";
@@ -32,11 +33,35 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       }
     });
 
+    let i = 0;
+    const nextIndex = () => i++;
+
+    test(
+      "recovers from interruptions",
+      () =>
+        Effect.gen(function* () {
+          const fiber = yield* testContainer({
+            index: nextIndex(),
+            port: 8080,
+            expected: "hello from container",
+            container: { dockerfile: "Dockerfile", context: FIXTURE_DIR },
+          }).pipe(Effect.forkDetach);
+          yield* Fiber.interrupt(fiber);
+          yield* testContainer({
+            index: nextIndex(),
+            port: 8080,
+            expected: "hello from container",
+            container: { dockerfile: "Dockerfile", context: FIXTURE_DIR },
+          });
+        }),
+      { concurrent: true },
+    );
+
     test(
       "builds a container image and proxies requests to it via ctx.container",
       () =>
         testContainer({
-          index: 0,
+          index: nextIndex(),
           port: 8080,
           expected: "hello from container",
           container: { dockerfile: "Dockerfile", context: FIXTURE_DIR },
@@ -49,9 +74,9 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       () =>
         Effect.forEach(
           Array.from({ length: 10 }),
-          (_, i) =>
+          () =>
             testContainer({
-              index: i + 1,
+              index: nextIndex(),
               port: 8080,
               expected: "hello from container",
               container: {
@@ -68,7 +93,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       "injects configured environment variables into the container",
       () =>
         testContainer({
-          index: 11,
+          index: nextIndex(),
           port: 8080,
           expected: "hello from container howdy",
           container: {
@@ -88,7 +113,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
         const NGINX_IMAGE = "nginx:1.27-alpine";
 
         return testContainer({
-          index: 12,
+          index: nextIndex(),
           port: 80,
           expected: "Welcome to nginx!",
           container: { imageUri: NGINX_IMAGE },

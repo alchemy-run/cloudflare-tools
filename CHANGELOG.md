@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.13.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.1) (2026-07-09)
+
+### Bug Fixes
+
+- **runtime**: docker proxy fails in bun due to transfer-encoding header - by @john-royal [(c176088)](https://github.com/alchemy-run/cloudflare-tools/commit/c176088b872c37c9e4423a60f49aa3c19c8e4476)
+
 ## [v0.13.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.0) (2026-07-08)
 
 ### Features

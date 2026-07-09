@@ -109,13 +109,14 @@ export const LoopbackServerLive = Layer.effect(
     yield* Effect.callback<void>((resume) => {
       server.listen(0, "127.0.0.1", () => resume(Effect.void));
     });
+    const address = yield* getAddress(server);
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()));
     const scope = yield* Effect.scope;
     const makeHandler = yield* Effect.promise(
       async () => await import("@effect/platform-node/NodeHttpServer").then((m) => m.makeHandler),
     );
     return LoopbackServer.of({
-      address: yield* getAddress(server),
+      address,
       secret,
       route: (name, handler) =>
         Effect.isEffect(handler)

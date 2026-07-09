@@ -40,12 +40,14 @@ jobs:
 
       # Docker Desktop is not available on macOS runners (licensing / nested
       # virt). Colima provides a Linux Docker daemon on Intel runners.
-      - name: Set up Docker (macOS)
+      - name: Setup Docker (macOS)
         if: runner.os == 'macOS'
-        run: |
-          brew install docker colima
-          colima start --runtime docker
-          docker info
+        id: setup-docker
+        uses: douglascamata/setup-docker-macos-action@v1.0.1
+        with:
+          lima: v1.2.1
+          colima: v0.9.1
+          colima-network-address: false
 
       - name: Check (format, lint, typecheck)
         run: bun run check

@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.13.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.2) (2026-07-09)
+
+### Bug Fixes
+
+- **runtime**: handle url pathname starting with // in workerproxy - by @john-royal [(3c5d561)](https://github.com/alchemy-run/cloudflare-tools/commit/3c5d561806f6c0e25d9082ffeaffd64e15cc17fa)
+- **runtime**: grab loopback address before adding finalizer - by @john-royal [(5616ceb)](https://github.com/alchemy-run/cloudflare-tools/commit/5616ceb09011c041913cea54513e15ae4c75f7f5)
+- **runtime**: delete docker proxy transfer-encoding header - by @john-royal [(e14afc9)](https://github.com/alchemy-run/cloudflare-tools/commit/e14afc922cee8abc8a126123fda8a61195824f18)
+- **runtime**: allow dockerfile path to be relative to context dir - by @john-royal [(9c5b738)](https://github.com/alchemy-run/cloudflare-tools/commit/9c5b738ba8f8a527069899b21a198eb8c09c4270)
+
 ## [v0.13.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.1) (2026-07-09)
 
 ### Bug Fixes

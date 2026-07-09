@@ -1,6 +1,5 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
 import { execFileSync } from "node:child_process";
 import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
 import type { ContainerImage } from "../../src/Docker.ts";
@@ -62,14 +61,11 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
     test(
       "builds a container image and proxies requests to it via ctx.container",
       () =>
-        Effect.gen(function* () {
-          const path = yield* Path.Path;
-          yield* testContainer({
-            index: 0,
-            port: 8080,
-            expected: "hello from container",
-            container: { dockerfile: path.join(FIXTURE_DIR, "Dockerfile"), context: FIXTURE_DIR },
-          });
+        testContainer({
+          index: 0,
+          port: 8080,
+          expected: "hello from container",
+          container: { dockerfile: "Dockerfile", context: FIXTURE_DIR },
         }),
       { concurrent: true },
     );
@@ -77,41 +73,35 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
     test(
       "proxies requests to multiple containers",
       () =>
-        Effect.gen(function* () {
-          const path = yield* Path.Path;
-          yield* Effect.forEach(
-            Array.from({ length: 10 }),
-            (_, i) =>
-              testContainer({
-                index: i + 1,
-                port: 8080,
-                expected: "hello from container",
-                container: {
-                  dockerfile: path.join(FIXTURE_DIR, "Dockerfile"),
-                  context: FIXTURE_DIR,
-                },
-              }),
-            { concurrency: "unbounded" },
-          );
-        }),
+        Effect.forEach(
+          Array.from({ length: 10 }),
+          (_, i) =>
+            testContainer({
+              index: i + 1,
+              port: 8080,
+              expected: "hello from container",
+              container: {
+                dockerfile: "Dockerfile",
+                context: FIXTURE_DIR,
+              },
+            }),
+          { concurrency: "unbounded" },
+        ),
       { concurrent: true },
     );
 
     test(
       "injects configured environment variables into the container",
       () =>
-        Effect.gen(function* () {
-          const path = yield* Path.Path;
-          yield* testContainer({
-            index: 11,
-            port: 8080,
-            expected: "hello from container howdy",
-            container: {
-              dockerfile: path.join(FIXTURE_DIR, "Dockerfile"),
-              context: FIXTURE_DIR,
-              env: { CONTAINER_GREETING: "howdy" },
-            },
-          });
+        testContainer({
+          index: 11,
+          port: 8080,
+          expected: "hello from container howdy",
+          container: {
+            dockerfile: "Dockerfile",
+            context: FIXTURE_DIR,
+            env: { CONTAINER_GREETING: "howdy" },
+          },
         }),
       { concurrent: true },
     );

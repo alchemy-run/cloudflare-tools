@@ -297,7 +297,14 @@ export const DockerLive = Layer.effect(
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
           ];
-          return run(args, fs.stream(image.dockerfile)).pipe(
+          return run(
+            args,
+            fs.stream(
+              image.context
+                ? path.resolve(image.context, image.dockerfile)
+                : path.resolve(image.dockerfile),
+            ),
+          ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
             Effect.asVoid,
             Effect.mapError(

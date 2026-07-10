@@ -40,11 +40,10 @@ describe("vite worker entry resolution", () => {
   const callConfig = async (userConfig: vite.UserConfig) => {
     const plugin = optionsPlugin.vite({ compatibilityDate: "2025-07-01" });
     assert(typeof plugin.config === "function", "plugin.config is not a function");
-    return (await plugin.config.call(
-      { meta: {} } as never,
-      userConfig,
-      { command: "build", mode: "production" } as vite.ConfigEnv,
-    )) as vite.UserConfig;
+    return (await plugin.config.call({ meta: {} } as never, userConfig, {
+      command: "build",
+      mode: "production",
+    } as vite.ConfigEnv)) as vite.UserConfig;
   };
 
   it("resolves a relative ssr input against the vite root", async () => {

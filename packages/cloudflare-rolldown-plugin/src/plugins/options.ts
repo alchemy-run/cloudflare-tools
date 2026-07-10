@@ -239,13 +239,8 @@ const normalizeInput = (
  * (virtual modules, package specifiers) passes through and resolves via
  * plugins.
  */
-const resolveInputPaths = (
-  input: Record<string, string>,
-  root: string,
-): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(input).map(([key, id]) => [key, resolveInputPath(id, root)]),
-  );
+const resolveInputPaths = (input: Record<string, string>, root: string): Record<string, string> =>
+  Object.fromEntries(Object.entries(input).map(([key, id]) => [key, resolveInputPath(id, root)]));
 
 const resolveInputPath = (id: string, root: string): string => {
   if (path.isAbsolute(id)) return id;

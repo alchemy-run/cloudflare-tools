@@ -21,11 +21,11 @@
     ],
     "catalogs": {
       "effect": {
-        "@effect/platform-bun": ">=4.0.0-beta.78 || >=4.0.0",
-        "@effect/platform-node": ">=4.0.0-beta.78 || >=4.0.0",
-        "@effect/sql-pg": ">=4.0.0-beta.78 || >=4.0.0",
-        "@effect/vitest": ">=4.0.0-beta.78 || >=4.0.0",
-        "effect": ">=4.0.0-beta.78 || >=4.0.0"
+        "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0",
+        "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0",
+        "@effect/sql-pg": ">=4.0.0-beta.97 || >=4.0.0",
+        "@effect/vitest": ">=4.0.0-beta.97 || >=4.0.0",
+        "effect": ">=4.0.0-beta.97 || >=4.0.0"
       },
       "workers": {
         "@cloudflare/workers-types": "^5.20260704.1",

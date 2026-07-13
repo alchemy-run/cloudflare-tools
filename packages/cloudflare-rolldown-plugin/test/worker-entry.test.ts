@@ -23,7 +23,10 @@ describe("vite worker entry resolution", () => {
       },
     });
     expect(config.environments?.ssr?.build?.rollupOptions?.input).toEqual({
-      app: "\0distilled:worker-entry:/project/workers/app.ts",
+      app:
+        process.platform === "win32"
+          ? "\0distilled:worker-entry:D:/project/workers/app.ts"
+          : "\0distilled:worker-entry:/project/workers/app.ts",
     });
   });
 

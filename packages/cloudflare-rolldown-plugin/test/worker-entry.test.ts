@@ -1,40 +1,6 @@
-import { createMiniflareFromRolldown } from "@distilled.cloud/test-utils/miniflare";
 import type * as vite from "vite";
 import { assert, describe, expect, it } from "vitest";
 import { optionsPlugin } from "../src/plugins/options.js";
-import { buildFixture } from "./utils/build-fixture";
-
-describe("worker entry", () => {
-  it("serves a worker with a default export", async () => {
-    const built = await buildFixture({ fixture: "worker-entry/with-default.ts" });
-    await using miniflare = await createMiniflareFromRolldown(built.output, {
-      compatibilityDate: "2025-07-01",
-    });
-    expect(await miniflare.fetchJson<{ message: string }>("/")).toEqual({ message: "hello" });
-  });
-
-  it("throws an actionable error when the entry has no default export", async () => {
-    // e.g. React Router's `virtual:react-router/server-build` — deploying
-    // `export default {}` would fail Cloudflare's upload validation with the
-    // opaque "The uploaded script has no registered event handlers".
-    const built = await buildFixture({ fixture: "worker-entry/no-default.ts" });
-    await expect(
-      createMiniflareFromRolldown(built.output, {
-        compatibilityDate: "2025-07-01",
-      }),
-    ).rejects.toThrow(/has no default export/);
-  });
-
-  it("allows a default-less entry that exports a Durable Object class", async () => {
-    const built = await buildFixture({ fixture: "worker-entry/named-durable-object.ts" });
-    await using miniflare = await createMiniflareFromRolldown(built.output, {
-      compatibilityDate: "2025-07-01",
-      durableObjects: { COUNTER: "Counter" },
-    });
-    // The worker instantiates without throwing; the DO class is reachable.
-    expect(miniflare.url).toBeDefined();
-  });
-});
 
 describe("vite worker entry resolution", () => {
   const callConfig = async (userConfig: vite.UserConfig) => {

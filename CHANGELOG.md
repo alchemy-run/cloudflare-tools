@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.13.6](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.6) (2026-07-14)
+
+### Bug Fixes
+
+- **rolldown-plugin**: resolve relative worker entries against the vite root - by sam in [#62](https://github.com/alchemy-run/cloudflare-tools/pull/62) [(06c160d)](https://github.com/alchemy-run/cloudflare-tools/commit/06c160de726b34cf258133139f6a830e08020e96)
+
 ## [v0.13.5](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.5) (2026-07-12)
 
 *No significant changes*

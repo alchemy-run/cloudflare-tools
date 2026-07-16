@@ -30,7 +30,9 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
         resolve();
       });
       ws.addEventListener("error", (event) => {
-        reject(event.error);
+        // Depending on which global WebSocket type wins (bun-types vs
+        // @types/node's undici), the event may or may not carry `error`.
+        reject("error" in event ? event.error : new Error("WebSocket connection error"));
       });
     });
     this.transport.ws = ws;

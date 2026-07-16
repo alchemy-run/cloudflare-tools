@@ -1,4 +1,6 @@
 import MagicString from "magic-string";
+import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import type {
   Plugin,
@@ -19,6 +21,10 @@ export const MODULE_RULES = [
 const MODULE_REFERENCE_PATTERN = `__CLOUDFLARE_MODULE__(${MODULE_RULES.map((rule) => rule.type).join("|")})__(.*?)__CLOUDFLARE_MODULE__`;
 const MODULE_REFERENCE_REGEX = new RegExp(MODULE_REFERENCE_PATTERN);
 const MODULE_REFERENCE_GLOBAL_REGEX = new RegExp(MODULE_REFERENCE_PATTERN, "g");
+
+// Matches the virtual IDs that `resolveId` produces (e.g.
+// `__CLOUDFLARE_MODULE__CompiledWasm__/Users/.../foo.wasm__CLOUDFLARE_MODULE__`).
+const MODULE_REFERENCE_ID_REGEX = new RegExp(`^${MODULE_REFERENCE_PATTERN}$`);
 
 export const additionalModulesPlugin = createPlugin("additional-modules", () => {
   const additionalModulePaths = new Set<string>();
@@ -53,6 +59,50 @@ export const additionalModulesPlugin = createPlugin("additional-modules", () => 
             id: moduleReferenceId(rule.type, filePath),
             external: true,
           };
+        },
+      },
+      // In dev mode (no `renderChunk`), vite's Node-side SSR runner
+      // resolves then tries to load the virtual IDs we produce above.
+      // The URL is just a marker — the file at that path is a real
+      // `.wasm` / `.bin` / text file — so we read it HERE (in the
+      // plugin, in the Vite Node main process) and inline its contents
+      // as a base64 string literal in the returned module source.
+      //
+      // The consumer code runs inside `new AsyncFunction(...)` where
+      // top-level `import` statements are illegal, so the returned
+      // source contains no `import`s — just a `Buffer.from(b64, 'base64')`
+      // expression that produces the original binary.
+      load: {
+        filter: { id: MODULE_REFERENCE_ID_REGEX },
+        handler(id) {
+          const match = MODULE_REFERENCE_ID_REGEX.exec(id);
+          if (!match) return null;
+          const type = match[1];
+          const filePath = match[2];
+
+          let bytes: Buffer;
+          try {
+            bytes = readFileSync(filePath);
+          } catch {
+            return null;
+          }
+
+          const b64 = bytes.toString("base64");
+          if (type === "CompiledWasm") {
+            return [
+              `const __b64 = ${JSON.stringify(b64)};`,
+              `const __bin = Buffer.from(__b64, 'base64');`,
+              `export default __bin;`,
+            ].join("\n");
+          }
+          if (type === "Text") {
+            return [
+              `const __b64 = ${JSON.stringify(b64)};`,
+              `export default Buffer.from(__b64, 'base64').toString('utf8');`,
+            ].join("\n");
+          }
+          // Data: raw bytes as base64.
+          return `export default ${JSON.stringify(b64)};`;
         },
       },
       renderChunk: {

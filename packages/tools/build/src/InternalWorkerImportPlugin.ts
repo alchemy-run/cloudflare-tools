@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import path from "node:path";
+import path from "node:path/posix";
 import type * as rolldown from "rolldown";
 
 export const InternalWorkerImportPlugin = (

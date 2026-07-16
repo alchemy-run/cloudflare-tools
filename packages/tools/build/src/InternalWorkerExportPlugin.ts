@@ -1,4 +1,4 @@
-import path from "node:path";
+import path from "node:path/posix";
 import type * as rolldown from "rolldown";
 import { RolldownMagicString } from "rolldown";
 

@@ -70,9 +70,8 @@ export const createDefaultContext = async (): Promise<
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provide(
-      Layer.mergeAll(Credentials.fromEnv(), importPlatformServices, FetchHttpClient.layer),
-    ),
+    Layer.provideMerge(importPlatformServices),
+    Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,
   );

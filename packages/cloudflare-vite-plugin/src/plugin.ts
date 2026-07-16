@@ -15,6 +15,7 @@ import type {
   RuntimeWorker,
 } from "@distilled.cloud/cloudflare-runtime";
 import type * as Context from "effect/Context";
+import type * as FileSystem from "effect/FileSystem";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.ts";
 
@@ -22,7 +23,7 @@ export interface CloudflareVitePluginOptions<
   B extends BindingHooks = BindingHooks,
 > extends BasePluginOptions {
   worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
-  context?: Context.Context<RuntimeServices>;
+  context?: Context.Context<RuntimeServices | FileSystem.FileSystem>;
 }
 
 export default function cloudflareVitePlugin(

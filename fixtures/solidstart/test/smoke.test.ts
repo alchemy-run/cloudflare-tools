@@ -6,7 +6,12 @@ for (const method of Playwright.SERVER_METHODS) {
     const it = Playwright.make(method);
 
     it("renders the homepage", async ({ page, server }) => {
-      const response = await page.goto(server.url.toString());
+      const response = await page.goto(server.url.toString()).then(async (response) => {
+        // solidstart has a bug where the first request is not always successful in dev mode.
+        // Retry the request if it is not successful as a temporary workaround.
+        if (response?.ok()) return response;
+        return page.goto(server.url.toString());
+      });
       expect(response?.status()).toBe(200);
       await page.waitForLoadState("networkidle");
       await page.evaluate(() => document.fonts.ready);

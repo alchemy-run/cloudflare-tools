@@ -1,4 +1,6 @@
 import MagicString from "magic-string";
+import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import type {
   Plugin,
@@ -73,6 +75,39 @@ export const additionalModulesPlugin = createPlugin("additional-modules", () => 
             magicString.update(match.index, match.index + full.length, importPath);
           }
         }),
+      },
+      load: {
+        filter: { id: MODULE_REFERENCE_REGEX },
+        handler(id) {
+          const m = MODULE_REFERENCE_REGEX.exec(id);
+          if (!m) {
+            return null;
+          }
+          const type = m[1];
+          const filePath = m[2];
+          let bytes: Buffer;
+          try {
+            bytes = readFileSync(filePath);
+          } catch {
+            return null;
+          }
+          const b64 = bytes.toString("base64");
+          if (type === "CompiledWasm") {
+            return [
+              `const __b64 = ${JSON.stringify(b64)};`,
+              `const __bin = Buffer.from(__b64, 'base64');`,
+              `export default __bin;`,
+            ].join("\n");
+          }
+          if (type === "Text") {
+            return [
+              `const __b64 = ${JSON.stringify(b64)};`,
+              `export default Buffer.from(__b64, 'base64').toString('utf8');`,
+            ].join("\n");
+          }
+          // type === "Data" — emit base64 string; consumers can decode as needed.
+          return `export default ${JSON.stringify(b64)};`;
+        },
       },
     },
   };

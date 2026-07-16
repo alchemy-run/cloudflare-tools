@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import type { Done } from "effect/Cause";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -109,6 +110,49 @@ describe.each(watcherModes)(
 
         expect(yield* registry.read([subscriberEntry])).toEqual({});
       }).pipe(Effect.provide(services)),
+    );
+
+    it.live("resolves entries written before the registry starts", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        // Both registries must share the same home directory, so we can't use
+        // the per-layer temp directory from `configProvider`.
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "cloudflare-runtime-test" });
+        const sharedServices = Registry.RegistryLive.pipe(
+          Layer.provideMerge(Paths.PathsLive),
+          Layer.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                CLOUDFLARE_RUNTIME_HOME: home,
+                CLOUDFLARE_RUNTIME_FILE_SYSTEM_SUPPORTS_WATCHER: fileSystemSupportsWatcher,
+              }),
+            ),
+          ),
+          Layer.provideMerge(NodeServices.layer),
+        );
+
+        const scriptName = `test-worker-${fileSystemSupportsWatcher ? "watcher" : "polling"}-6`;
+        const entry = registryEntry(scriptName);
+        const subscriber = subscriberEntry(scriptName);
+
+        // Provider: write the entry, keeping it alive for the test duration.
+        const providerScope = yield* Scope.make();
+        yield* Effect.addFinalizer(() => Scope.close(providerScope, Exit.void));
+        yield* Registry.Registry.pipe(
+          Effect.flatMap((registry) => registry.write(entry)),
+          Effect.provide(sharedServices),
+          Scope.provide(providerScope),
+        );
+
+        // Consumer: a registry started after the entry was written must
+        // resolve it on the first read, without waiting for a future
+        // filesystem event (e.g. the provider's heartbeat).
+        const resolved = yield* Registry.Registry.pipe(
+          Effect.flatMap((registry) => registry.read([subscriber])),
+          Effect.provide(sharedServices),
+        );
+        expect(resolved).toEqual(registryServiceMap(scriptName));
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     it.live("subscribe fires when the registry changes", () =>

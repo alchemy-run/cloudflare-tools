@@ -91,14 +91,25 @@ export const RegistryLive = Layer.effect(
       ),
     );
 
-    const ref = yield* SubscriptionRef.make(MutableHashMap.empty<string, RegistryEntry>());
+    // Seed the registry with the entries that already exist on disk, so that
+    // workers registered before this process started are resolvable
+    // immediately (the watcher only reports future changes).
+    const ref = yield* SubscriptionRef.make(yield* readAll);
 
     // The `fileSystemSupportsWatcher` flag is set to false on Windows and true everywhere else.
     // The flag can be overridden using a ConfigProvider, e.g. for testing.
     // If the watcher is not supported, we fall back to polling every 100ms.
     yield* (
       (yield* System.fileSystemSupportsWatcher)
-        ? fs.watch(directory).pipe(Stream.mapEffect(() => readAll))
+        ? fs.watch(directory).pipe(
+            Stream.map(() => undefined),
+            // Trigger one more read once the watcher is running, to cover
+            // changes made between the initial snapshot above and the watcher
+            // subscription. `mapEffect` runs the reads sequentially, so a
+            // watcher-triggered read cannot be overwritten by an older one.
+            Stream.merge(Stream.succeed(undefined)),
+            Stream.mapEffect(() => readAll),
+          )
         : Stream.fromEffect(readAll).pipe(Stream.repeat(Schedule.spaced(100)))
     ).pipe(
       Stream.tap((newValue) => SubscriptionRef.set(ref, newValue)),

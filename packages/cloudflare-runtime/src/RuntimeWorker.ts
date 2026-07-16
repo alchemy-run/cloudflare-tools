@@ -2,6 +2,7 @@ import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.sh
 import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
 import type { BindingHook } from "./PluginContext.ts";
+import type * as WorkerdConfig from "./workerd/Config.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
@@ -18,6 +19,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * (local or in other dev instances) deliver to it.
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
+  readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;

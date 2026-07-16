@@ -5,17 +5,20 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start": "vite",
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview"
+    "dev": "e2e dev",
+    "build": "e2e build",
+    "preview": "e2e preview",
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "pretest": "playwright install chromium"
   },
   "dependencies": {
     "@solidjs/router": "^0.15.1",
     "solid-js": "^1.9.5"
   },
   "devDependencies": {
-    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@distilled.cloud/e2e": "workspace:*",
+    "@playwright/test": "catalog:",
     "@tailwindcss/postcss": "^4.1.13",
     "postcss": "^8.4.49",
     "solid-devtools": "^0.34.3",

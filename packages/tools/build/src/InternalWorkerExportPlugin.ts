@@ -37,7 +37,7 @@ export const InternalWorkerExportPlugin = (): rolldown.Plugin => {
   };
 
   const getRelativeModulePath = (importer: string, imported: string) => {
-    const relativePath = path.relative(path.dirname(importer), imported);
+    const relativePath = path.posix.relative(path.posix.dirname(importer), imported);
     return relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
   };
 

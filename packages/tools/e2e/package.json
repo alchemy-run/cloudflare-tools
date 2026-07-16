@@ -1,0 +1,29 @@
+{
+  "name": "@distilled.cloud/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "e2e": "./src/Cli.ts"
+  },
+  "type": "module",
+  "exports": {
+    "./Options": "./src/Options.ts",
+    "./Harness": "./src/Harness.ts",
+    "./Playwright": "./src/Playwright.ts"
+  },
+  "scripts": {
+    "e2e": "bun run src/Cli.ts",
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect"
+  },
+  "devDependencies": {
+    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@distilled.cloud/test-utils": "workspace:*",
+    "@playwright/test": "catalog:",
+    "vite": "catalog:"
+  }
+}

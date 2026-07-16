@@ -22,7 +22,7 @@
       "outputs": [".cache/**/*.tsbuildinfo"]
     },
     "test": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": ["^build"],
       "env": ["TEST_MYSQL_URL", "TEST_POSTGRES_URL"],
       "outputs": []
     }

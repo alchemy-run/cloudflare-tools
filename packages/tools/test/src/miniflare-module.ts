@@ -74,6 +74,8 @@ export function moduleTypeFromExtension(ext: string): MiniflareModule["type"] | 
     case ".txt":
     case ".html":
     case ".sql":
+    case ".css":
+    case ".json":
     case ".custom":
       return "Text";
     case ".bin":

@@ -6,9 +6,9 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vite dev --port 3000",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "e2e dev --port 3000",
+    "build": "e2e build",
+    "preview": "e2e preview",
     "test": "playwright test",
     "test:update-snapshots": "playwright test --update-snapshots",
     "pretest": "playwright install chromium"
@@ -29,10 +29,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
-    "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-runtime": "workspace:*",
-    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
-    "@distilled.cloud/test-utils": "workspace:*",
+    "@distilled.cloud/e2e": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "@playwright/test": "catalog:",
     "@tailwindcss/typography": "^0.5.16",
@@ -41,7 +39,6 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "dotenv": "^17.4.2",
     "effect": "catalog:effect",
     "vite": "catalog:"
   },

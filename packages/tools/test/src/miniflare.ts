@@ -1,6 +1,6 @@
 import { Miniflare, type MiniflareOptions, type Response } from "miniflare";
 import type { RolldownOutput } from "rolldown";
-import { miniflareModulesFromRolldownOutput } from "./miniflare-module";
+import { miniflareModulesFromRolldownOutput } from "./miniflare-module.ts";
 
 export interface MiniflareInstance {
   url: URL;
@@ -10,7 +10,7 @@ export interface MiniflareInstance {
   [Symbol.asyncDispose]: () => Promise<void>;
 }
 
-type Options = Extract<MiniflareOptions, { modules: Array<any> }>;
+export type Options = Extract<MiniflareOptions, { modules: Array<any> }>;
 
 export async function createMiniflare(options: Options): Promise<MiniflareInstance> {
   const miniflare = new Miniflare(options);

@@ -12,9 +12,12 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect",
     "miniflare": "catalog:workers"
   },
   "devDependencies": {
-    "rolldown": "catalog:"
+    "rolldown": "catalog:",
+    "vite": "catalog:"
   }
 }

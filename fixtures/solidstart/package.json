@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "start": "vite start",
-    "preview": "vite preview",
+    "dev": "e2e dev",
+    "build": "e2e build",
+    "preview": "e2e preview",
     "test": "playwright test",
     "test:update-snapshots": "playwright test --update-snapshots",
     "pretest": "playwright install chromium"
@@ -20,8 +19,7 @@
     "vite": "^7.0.0"
   },
   "devDependencies": {
-    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
-    "@distilled.cloud/test-utils": "workspace:*",
+    "@distilled.cloud/e2e": "workspace:*",
     "@playwright/test": "catalog:"
   },
   "engines": {

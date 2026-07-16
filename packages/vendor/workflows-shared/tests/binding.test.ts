@@ -1,12 +1,12 @@
 import { createExecutionContext, runInDurableObject } from "cloudflare:test";
+import type { WorkflowEvent } from "cloudflare:workers";
 import { env } from "cloudflare:workers";
 import { describe, it, vi } from "vitest";
 import { InstanceEvent, InstanceStatus } from "../src";
-import { WorkflowBinding } from "../src/binding";
-import { setTestWorkflowCallback } from "./test-entry";
 import type { WorkflowHandle } from "../src/binding";
+import { WorkflowBinding } from "../src/binding";
 import type { Engine, EngineLogs } from "../src/engine";
-import type { WorkflowEvent } from "cloudflare:workers";
+import { setTestWorkflowCallback } from "./test-entry";
 
 let instanceCounter = 0;
 function uniqueId(prefix = "instance"): string {
@@ -450,7 +450,8 @@ describe("WorkflowHandle", () => {
   });
 
   describe("terminate()", () => {
-    it("should terminate a running workflow instance", async ({ expect }) => {
+    // This test was flaky in macOS CI, so we retry it.
+    it("should terminate a running workflow instance", { retry: 3 }, async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));

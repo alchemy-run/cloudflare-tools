@@ -2,6 +2,7 @@ import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as NodeChildProcess from "node:child_process";
@@ -393,5 +394,20 @@ const classifyWorkerdError = (
   });
 };
 
-export const isAddressInUseError = (error: ConfigError | SystemError): error is ConfigError =>
-  error._tag === "ConfigError" && error.subtag === ADDRESS_IN_USE_SUBTAG;
+export const isAddressInUseError = (error: ConfigError | SystemError) => {
+  if (error._tag === "ConfigError" && error.subtag === ADDRESS_IN_USE_SUBTAG) {
+    return true;
+  }
+  // Windows-specific check for address-in-use errors; it doesn't always fail with a clear message.
+  if (
+    process.platform === "win32" &&
+    error._tag === "SystemError" &&
+    error.subtag === "WorkerdStartFailed" &&
+    Predicate.hasProperty(error.detail, "stderr") &&
+    Predicate.isString(error.detail.stderr) &&
+    error.detail.stderr.includes("*** std::terminate() called with no exception")
+  ) {
+    return true;
+  }
+  return false;
+};

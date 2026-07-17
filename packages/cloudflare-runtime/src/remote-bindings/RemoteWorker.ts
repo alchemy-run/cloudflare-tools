@@ -1,3 +1,4 @@
+import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -20,7 +21,17 @@ export class RemoteWorker extends Context.Service<
   }
 >()("cloudflare-runtime/remote-bindings/RemoteWorker") {}
 
-export const make = Effect.fn(function* (accountId: Effect.Effect<string>) {
+// Explicit annotation: the inferred type references `Credentials` from
+// `@distilled.cloud/cloudflare`, which the dts bundler cannot name on its
+// own — without this it degrades `make`/`layer` (and everything composed
+// from them, e.g. `RuntimeServices.layerRuntime`) to `any, any`.
+export const make: (
+  accountId: Effect.Effect<string>,
+) => Effect.Effect<
+  RemoteWorker["Service"],
+  never,
+  Access.Access | Credentials | HttpClient.HttpClient
+> = Effect.fn(function* (accountId: Effect.Effect<string>) {
   const http = yield* HttpClient.HttpClient;
   const access = yield* Access.Access;
 
@@ -123,7 +134,9 @@ export const make = Effect.fn(function* (accountId: Effect.Effect<string>) {
   });
 });
 
-export const layer = (accountId: Effect.Effect<string>) =>
+export const layer = (
+  accountId: Effect.Effect<string>,
+): Layer.Layer<RemoteWorker, never, Access.Access | Credentials | HttpClient.HttpClient> =>
   Layer.effect(RemoteWorker, make(accountId));
 
 /**

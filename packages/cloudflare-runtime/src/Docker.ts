@@ -71,6 +71,13 @@ const ContainerEgressInterceptorImage = Config.string("CONTAINER_EGRESS_INTERCEP
   ),
 );
 
+/**
+ * Docker's containerd image store rejects combined `repo:tag@digest` pull
+ * refs ("cannot overwrite digest"); the digest fully pins the image, so the
+ * tag is dropped when both are present.
+ */
+export const toPullRef = (imageUri: string) => imageUri.replace(/:[^@\/]+(?=@sha256:)/, "");
+
 export const DockerLive = Layer.effect(
   Docker,
   Effect.gen(function* () {
@@ -183,7 +190,7 @@ export const DockerLive = Layer.effect(
       );
 
     const pull = ({ imageUri }: ContainerImage.Pull) =>
-      run(["pull", imageUri, "--platform", "linux/amd64"]).pipe(
+      run(["pull", toPullRef(imageUri), "--platform", "linux/amd64"]).pipe(
         Effect.mapError(
           (cause) =>
             new SystemError({

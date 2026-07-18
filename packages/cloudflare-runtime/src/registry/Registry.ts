@@ -127,23 +127,36 @@ export const RegistryLive = Layer.effect(
         ),
       write: (entry) => {
         const entryPath = path.join(directory, `${encodeURIComponent(entry.scriptName)}.json`);
-        return fs.writeFileString(entryPath, JSON.stringify(entry, null, 2)).pipe(
+        const serialized = JSON.stringify(entry, null, 2);
+        return fs.writeFileString(entryPath, serialized).pipe(
           Effect.andThen(
             // Immediately update the in-memory registry so it's available without waiting on IO.
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
           Effect.tap(() => {
-            // Remove the entry from the filesystem when the scope closes.
+            // Remove the entry from the filesystem when the scope closes — but
+            // only while the file still holds THIS write's content. A
+            // replacement instance of the same script re-registers under the
+            // same key; a graceful handoff closes the old scope after the new
+            // instance has already overwritten the file, and removing it here
+            // would unregister the live replacement.
             // If scope finalizers fail to run, a synchronous exit hook ensures the entry is removed.
-            const unregister = exitHook(() => {
+            const unregisterSync = () => {
               try {
-                NodeFs.unlinkSync(entryPath);
+                if (NodeFs.readFileSync(entryPath, "utf8") === serialized) {
+                  NodeFs.unlinkSync(entryPath);
+                }
               } catch {}
-            });
+            };
+            const unregister = exitHook(unregisterSync);
             return Effect.addFinalizer(() =>
-              fs
-                .remove(entryPath)
-                .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+              fs.readFileString(entryPath).pipe(
+                Effect.flatMap((current) =>
+                  current === serialized ? fs.remove(entryPath) : Effect.void,
+                ),
+                Effect.ignore,
+                Effect.andThen(Effect.sync(() => unregister())),
+              ),
             );
           }),
           Effect.tap(() =>

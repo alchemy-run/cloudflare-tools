@@ -12,6 +12,7 @@ export * as Flagship from "./Flagship.ts";
 export * as Hyperdrive from "./hyperdrive/index.ts";
 export * as Images from "./Images.ts";
 export * as Json from "./Json.ts";
+export * as Kv from "./kv/index.ts";
 export * as KvNamespace from "./KvNamespace.ts";
 export * as Loopback from "./Loopback.ts";
 export * as Media from "./Media.ts";

@@ -5,6 +5,7 @@ import {
   Assets,
   DispatchNamespace,
   Hyperdrive,
+  Kv,
   Queue,
   RateLimit,
   SendEmail,
@@ -52,6 +53,7 @@ export const layerLocalBindings = () =>
     Assets.AssetsLive,
     DispatchNamespace.DispatchNamespaceLive,
     Hyperdrive.HyperdriveLive,
+    Kv.KvLive,
     Queue.QueueLive,
     RateLimit.RateLimitLive,
     SendEmail.SendEmailLive,
@@ -63,6 +65,7 @@ export type BindingServices =
   | Assets.Assets
   | DispatchNamespace.DispatchNamespace
   | Hyperdrive.Hyperdrive
+  | Kv.Kv
   | Loopback.Loopback
   | Queue.Queue
   | RateLimit.RateLimit

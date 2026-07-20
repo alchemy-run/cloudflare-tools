@@ -112,7 +112,7 @@ The Layer is built inside the harness runtime, which provides
 process working directory is the fixture root. Anything else the layer needs,
 it must provide itself.
 
-Load the *project's* framework module (its `vite`, `waku`, `astro`, ...) with
+Load the _project's_ framework module (its `vite`, `waku`, `astro`, ...) with
 framework-core's `loadProjectModule(root, specifier)` /
 `resolveProjectPackageDirectory` — never a bare `import` from your own
 dependency tree.
@@ -122,12 +122,16 @@ dependency tree.
 Defined in `@distilled.cloud/framework-core` (`Framework.ts`):
 
 ```ts
-class Framework extends Context.Service<Framework, {
-  readonly build: (options?: FrameworkBuildOptions) => Effect<BuildOutput, FrameworkError>;
-  readonly dev: (options?: FrameworkDevOptions) =>
-    Effect<FrameworkDevServer, FrameworkError, Scope.Scope>; // { url: string }
-  readonly readBuildOutput: () => Effect<BuildOutput, PlatformError>;
-}>()("@distilled.cloud/framework-core/Framework") {}
+class Framework extends Context.Service<
+  Framework,
+  {
+    readonly build: (options?: FrameworkBuildOptions) => Effect<BuildOutput, FrameworkError>;
+    readonly dev: (
+      options?: FrameworkDevOptions,
+    ) => Effect<FrameworkDevServer, FrameworkError, Scope.Scope>; // { url: string }
+    readonly readBuildOutput: () => Effect<BuildOutput, PlatformError>;
+  }
+>()("@distilled.cloud/framework-core/Framework") {}
 ```
 
 Semantics every implementation must honor:

@@ -17,7 +17,7 @@ export const MODULE_RULES = [
 ] as const;
 
 const MODULE_REFERENCE_PATTERN = `__CLOUDFLARE_MODULE__(${MODULE_RULES.map((rule) => rule.type).join("|")})__(.*?)__CLOUDFLARE_MODULE__`;
-const MODULE_REFERENCE_REGEX = new RegExp(MODULE_REFERENCE_PATTERN);
+export const MODULE_REFERENCE_REGEX = new RegExp(MODULE_REFERENCE_PATTERN);
 const MODULE_REFERENCE_GLOBAL_REGEX = new RegExp(MODULE_REFERENCE_PATTERN, "g");
 
 export const additionalModulesPlugin = createPlugin("additional-modules", () => {

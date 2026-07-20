@@ -1,4 +1,4 @@
-import { MODULE_RULES } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
+import { MODULE_REFERENCE_REGEX } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import assert from "node:assert";
 import * as vite from "vite";
 import type { FetchFunctionOptions } from "vite/module-runner";
@@ -42,8 +42,10 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
     importer?: string,
     options?: FetchFunctionOptions,
   ): Promise<vite.FetchResult> {
-    // Additional modules (CompiledWasm, Data, Text)
-    if (MODULE_RULES.some((rule) => rule.pattern.test(id))) {
+    // Additional modules (CompiledWasm, Data, Text) are resolved to
+    // `__CLOUDFLARE_MODULE__...` ids and must be externalized so the module
+    // runner loads them via native `import()` → workerd's module fallback.
+    if (MODULE_REFERENCE_REGEX.test(id)) {
       return {
         externalize: id,
         type: "module",

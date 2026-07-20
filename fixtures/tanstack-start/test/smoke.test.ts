@@ -29,5 +29,10 @@ for (const mode of Playwright.SERVER_METHODS) {
       const response = await server.fetchJson<[{ "?column?": number }]>("/api/db");
       expect(response).toMatchObject([{ "?column?": 1 }]);
     });
+
+    it("fetches WASM", async ({ server }) => {
+      const response = await server.fetchJson<{ result: number }>("/api/wasm");
+      expect(response).toMatchObject({ result: 3 });
+    });
   });
 }

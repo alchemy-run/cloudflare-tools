@@ -1,3 +1,4 @@
+import { MODULE_REFERENCE_REGEX } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import type { BindingHooks, Module } from "@distilled.cloud/cloudflare-runtime";
 import * as Runtime from "@distilled.cloud/cloudflare-runtime/Runtime";
 import * as RuntimeServices from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
@@ -16,6 +17,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodeFs from "node:fs/promises";
+import * as NodeHttp from "node:http";
 import type * as vite from "vite";
 import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker.ts";
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
@@ -68,9 +71,8 @@ export const createDefaultContext = async (): Promise<
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provide(
-      Layer.mergeAll(Credentials.fromEnv(), importPlatformServices, FetchHttpClient.layer),
-    ),
+    Layer.provideMerge(importPlatformServices),
+    Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,
   );
@@ -80,12 +82,91 @@ const closeScope = async (scope: Scope.Scope) => {
   await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
 };
 
+const makeModuleFallbackService = Effect.gen(function* () {
+  const server = NodeHttp.createServer(async (req, res) => {
+    try {
+      const request = await parseModuleFallbackRequest(req);
+      if (!request) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("Invalid module fallback request");
+        return;
+      }
+
+      const candidate = request.rawSpecifier ?? request.specifier;
+      const match = MODULE_REFERENCE_REGEX.exec(candidate);
+      if (!match) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end(`No match for module: ${candidate}`);
+        return;
+      }
+
+      const [, moduleType, modulePath] = match;
+      if (!moduleType || !modulePath) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end(`Invalid module type or path: ${match[0]}`);
+        return;
+      }
+
+      let content: Buffer;
+      try {
+        content = await NodeFs.readFile(modulePath);
+      } catch {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end(`Module not found: ${modulePath}`);
+        return;
+      }
+
+      switch (moduleType) {
+        case "CompiledWasm": {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ wasm: Array.from(content) }));
+          return;
+        }
+        case "Data": {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ data: Array.from(content) }));
+          return;
+        }
+        case "Text": {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ text: content.toString() }));
+          return;
+        }
+        default: {
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end(`Invalid module type: ${moduleType}`);
+        }
+      }
+    } catch (error) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    }
+  });
+
+  yield* Effect.callback<void>((resume) => {
+    server.listen(0, "127.0.0.1", () => resume(Effect.void));
+  });
+  yield* Effect.addFinalizer(() =>
+    Effect.callback<void>((resume) => {
+      server.close(() => resume(Effect.void));
+    }),
+  );
+
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    return yield* Effect.die(new Error("Module fallback server address unavailable"));
+  }
+  return `127.0.0.1:${address.port}`;
+});
+
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
   entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
 ) {
   const runtime = yield* Runtime.Runtime;
+  const moduleFallback = yield* makeModuleFallbackService;
+
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
     name,
@@ -127,8 +208,63 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     ],
     hyperdrives: options.worker?.hyperdrives,
     assets: options.worker?.assets,
+    unsafe: {
+      moduleFallback,
+      ...(options.worker?.unsafe ?? {}),
+    },
   });
 });
+
+type ModuleFallbackRequest =
+  | {
+      protocol: "v1";
+      type: "import" | "require";
+      specifier: string;
+      rawSpecifier?: string;
+      referrer?: string;
+    }
+  | {
+      protocol: "v2";
+      type: "import" | "require" | "internal";
+      specifier: string;
+      rawSpecifier?: string;
+      referrer?: string;
+      attributes?: Array<{ name: string; value: string }>;
+    };
+
+const parseModuleFallbackRequest = async (
+  req: NodeHttp.IncomingMessage,
+): Promise<ModuleFallbackRequest | undefined> => {
+  if (req.method === "GET" && req.headers["x-resolve-method"]) {
+    const url = new URL(req.url ?? "", "http://localhost");
+    const specifier = url.searchParams.get("specifier");
+    if (!specifier) {
+      return;
+    }
+    const resolveMethod = req.headers["x-resolve-method"];
+    return {
+      protocol: "v1",
+      type: resolveMethod === "require" ? "require" : "import",
+      specifier,
+      rawSpecifier: url.searchParams.get("rawSpecifier") ?? undefined,
+      referrer: url.searchParams.get("referrer") ?? undefined,
+    };
+  }
+
+  if (req.method === "POST") {
+    const chunks: Array<Buffer> = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    }
+    const json: unknown = JSON.parse(Buffer.concat(chunks).toString());
+    if (typeof json === "object" && json !== null && "specifier" in json) {
+      return {
+        protocol: "v2",
+        ...(json as Omit<Extract<ModuleFallbackRequest, { protocol: "v2" }>, "protocol">),
+      };
+    }
+  }
+};
 
 async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<Array<Module>> {
   const [moduleRunnerWorker, wrapperWorker] = await Promise.all([

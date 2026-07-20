@@ -10,6 +10,7 @@ export interface Env extends Cloudflare.Env {
   };
   __DISTILLED_INVOKE_MODULE__: Fetcher;
   __DISTILLED_ENVIRONMENT__: EntryEnvironment;
+  __DISTILLED_MODULE_FALLBACK__: Fetcher;
   [key: string]: unknown;
 }
 
@@ -19,6 +20,7 @@ export function stripInternalEnv(env: Env) {
     __DISTILLED_UNSAFE_EVAL__,
     __DISTILLED_INVOKE_MODULE__,
     __DISTILLED_ENVIRONMENT__,
+    __DISTILLED_MODULE_FALLBACK__,
     ...userEnv
   } = env;
   return userEnv;

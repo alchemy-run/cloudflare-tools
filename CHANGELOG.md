@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.13.7](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.7) (2026-07-20)
+
+### Bug Fixes
+
+- **vite-plugin**: use module fallback service to handle wasm imports - by John Royal in [#68](https://github.com/alchemy-run/cloudflare-tools/pull/68) [(cadb3bc)](https://github.com/alchemy-run/cloudflare-tools/commit/cadb3bc014447961d1502786a9959707b8ab1d96)
+- **runtime**: drop tag from digest-pinned docker pull refs - by Erik Müller in [#70](https://github.com/alchemy-run/cloudflare-tools/pull/70) [(3d99965)](https://github.com/alchemy-run/cloudflare-tools/commit/3d999655498f390f04dc703dc578c6802e955864)
+- **runtime**: owner-aware registry entry removal - by sam in [#72](https://github.com/alchemy-run/cloudflare-tools/pull/72) [(ca3ab56)](https://github.com/alchemy-run/cloudflare-tools/commit/ca3ab56f16af56ade8ab2983c7dcef9ad215defa)
+- **runtime**: annotate RemoteWorker make/layer so dts keeps typed error/requirement channels - by sam in [#71](https://github.com/alchemy-run/cloudflare-tools/pull/71) [(a26fbb3)](https://github.com/alchemy-run/cloudflare-tools/commit/a26fbb380474f68e91c08bea2179c9309108c106)
+- **runtime**: improve address in use detection on windows - by John Royal in [#69](https://github.com/alchemy-run/cloudflare-tools/pull/69) [(aac4842)](https://github.com/alchemy-run/cloudflare-tools/commit/aac48424698cbee2bed088ba21a02e585c6d5917)
+- **vite-plugin**: tolerate WebSocket error events without an error property - by @john-royal [(d9b95da)](https://github.com/alchemy-run/cloudflare-tools/commit/d9b95dafc3ccfcb33281b4049cb8cd7061b147ba)
+- **runtime**: seed registry with existing entries before watching - by John Royal in [#65](https://github.com/alchemy-run/cloudflare-tools/pull/65) [(bb379bf)](https://github.com/alchemy-run/cloudflare-tools/commit/bb379bf6dfd583c8419e8e57e5c8d22d5382781d)
+
 ## [v0.13.6](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.6) (2026-07-14)
 
 ### Bug Fixes

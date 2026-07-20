@@ -388,3 +388,15 @@ then `bun generate:api-reference`. Tests follow `Vite.test.ts`/`StaticSite.test.
 `@experimental`/`unstable_`/unexported — pin exact framework versions in the package
 `peerDependencies`/`devDependencies`, e2e-test against real apps in CI, and treat version
 bumps as deliberate migrations, not routine updates.
+
+## Amendment (2026-07-20): platform proxy policy
+
+Maintainer guidance: wherever an upstream integration uses wrangler's
+`getPlatformProxy` (SvelteKit `adapter-cloudflare`, OpenNext
+`initOpenNextCloudflareForDev`, Astro `platformProxy`), the fix is to
+**reimplement the feature in `@distilled.cloud/cloudflare-runtime`**
+(workerd-backed Node-side proxies for env/cf/ctx/caches, configured
+in-memory) — never to take a wrangler dependency. This promotes the
+"Node-side bindings proxy" from Phase 6 backlog to a scheduled
+workstream: it unblocks SvelteKit real dev bindings, Next dev v2 (HMR),
+and Astro dev parity.

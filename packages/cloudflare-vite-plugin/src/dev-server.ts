@@ -10,7 +10,6 @@ import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -34,7 +33,7 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
   entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
-  context: Context.Context<RuntimeServices.RuntimeServices | FileSystem.FileSystem>,
+  context: Context.Context<RuntimeServices.RuntimeServices>,
 ) => {
   const scope = Scope.makeUnsafe();
   const address = await serve(options, entryEnvironment, server).pipe(

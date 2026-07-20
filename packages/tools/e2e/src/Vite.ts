@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import type * as Scope from "effect/Scope";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
@@ -278,7 +279,16 @@ export const ViteLive = Layer.effect(
       }),
       readBuildOutput: Effect.fn(function* () {
         const content = yield* fs.readFileString(path.resolve(cwd, "dist/build.json"));
-        return JSON.parse(content) as BuildOutput;
+        return JSON.parse(content, (_, value) => {
+          if (
+            Predicate.hasProperty(value, "type") &&
+            value.type === "Buffer" &&
+            Predicate.hasProperty(value, "data")
+          ) {
+            return Buffer.from(value.data as Array<number>);
+          }
+          return value;
+        }) as BuildOutput;
       }),
     });
   }),

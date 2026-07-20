@@ -166,7 +166,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
               env: stripInternalEnv(env as Env),
             });
           }
-
           return await import(filepath);
         },
       },

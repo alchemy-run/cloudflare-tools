@@ -10,7 +10,7 @@ import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
+import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -18,6 +18,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodeFs from "node:fs/promises";
+import * as NodeHttp from "node:http";
 import type * as vite from "vite";
 import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker.ts";
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
@@ -81,13 +83,90 @@ const closeScope = async (scope: Scope.Scope) => {
   await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
 };
 
+const makeModuleFallbackService = Effect.gen(function* () {
+  const server = NodeHttp.createServer(async (req, res) => {
+    try {
+      const request = await parseModuleFallbackRequest(req);
+      if (!request) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("Invalid module fallback request");
+        return;
+      }
+
+      const candidate = request.rawSpecifier ?? request.specifier;
+      const match = MODULE_REFERENCE_REGEX.exec(candidate);
+      if (!match) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end(`No match for module: ${candidate}`);
+        return;
+      }
+
+      const [, moduleType, modulePath] = match;
+      if (!moduleType || !modulePath) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end(`Invalid module type or path: ${match[0]}`);
+        return;
+      }
+
+      let content: Buffer;
+      try {
+        content = await NodeFs.readFile(modulePath);
+      } catch {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end(`Module not found: ${modulePath}`);
+        return;
+      }
+
+      switch (moduleType) {
+        case "CompiledWasm": {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ wasm: Array.from(content) }));
+          return;
+        }
+        case "Data": {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ data: Array.from(content) }));
+          return;
+        }
+        case "Text": {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ text: content.toString() }));
+          return;
+        }
+        default: {
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end(`Invalid module type: ${moduleType}`);
+        }
+      }
+    } catch (error) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    }
+  });
+
+  yield* Effect.callback<void>((resume) => {
+    server.listen(0, "127.0.0.1", () => resume(Effect.void));
+  });
+  yield* Effect.addFinalizer(() =>
+    Effect.callback<void>((resume) => {
+      server.close(() => resume(Effect.void));
+    }),
+  );
+
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    return yield* Effect.die(new Error("Module fallback server address unavailable"));
+  }
+  return `127.0.0.1:${address.port}`;
+});
+
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
   entryEnvironment: EntryEnvironment,
   server: vite.ViteDevServer,
 ) {
   const runtime = yield* Runtime.Runtime;
-  const fs = yield* FileSystem.FileSystem;
+  const moduleFallback = yield* makeModuleFallbackService;
 
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
@@ -118,46 +197,6 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
           return HttpServerResponse.jsonUnsafe(result);
         }),
       }),
-      Loopback.local({
-        binding: "__DISTILLED_MODULE_FALLBACK__",
-        name: `vite:module-fallback:${name}`,
-        handler: Effect.gen(function* () {
-          const request = yield* ModuleFallbackRequest.pipe(Effect.orElseSucceed(() => undefined));
-          if (!request) {
-            return HttpServerResponse.text("Invalid module fallback request", { status: 400 });
-          }
-          const match = MODULE_REFERENCE_REGEX.exec(request.specifier);
-          if (!match) {
-            return HttpServerResponse.text(`No match for module: ${request.specifier}`, {
-              status: 400,
-            });
-          }
-          const [full, moduleType, modulePath] = match;
-          if (!moduleType || !modulePath) {
-            return HttpServerResponse.text(`Invalid module type or path: ${full}`, { status: 400 });
-          }
-          const content = yield* fs
-            .readFile(modulePath)
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-          if (!content) {
-            return HttpServerResponse.text(`Module not found: ${modulePath}`, { status: 404 });
-          }
-          switch (moduleType) {
-            case "CompiledWasm": {
-              return yield* HttpServerResponse.json({ wasm: Array.from(content) });
-            }
-            case "Data": {
-              return yield* HttpServerResponse.json({ data: Array.from(content) });
-            }
-            case "Text": {
-              return yield* HttpServerResponse.json({ text: content.toString() });
-            }
-            default: {
-              return HttpServerResponse.text(`Invalid module type: ${moduleType}`, { status: 400 });
-            }
-          }
-        }),
-      }),
       ...(options.worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [
@@ -171,75 +210,62 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     hyperdrives: options.worker?.hyperdrives,
     assets: options.worker?.assets,
     unsafe: {
-      moduleFallback: `vite:module-fallback:${name}`,
+      moduleFallback,
       ...(options.worker?.unsafe ?? {}),
     },
   });
 });
 
-const ModuleFallbackRequest = Effect.gen(function* () {
-  const request = yield* HttpServerRequest.HttpServerRequest;
-  if (request.method === "GET") {
-    const url = new URL(request.url, "http://localhost");
-    const specifier = url.searchParams.get("specifier");
+type ModuleFallbackRequest =
+  | {
+      protocol: "v1";
+      type: "import" | "require";
+      specifier: string;
+      rawSpecifier?: string;
+      referrer?: string;
+    }
+  | {
+      protocol: "v2";
+      type: "import" | "require" | "internal";
+      specifier: string;
+      rawSpecifier?: string;
+      referrer?: string;
+      attributes?: Array<{ name: string; value: string }>;
+    };
 
+const parseModuleFallbackRequest = async (
+  req: NodeHttp.IncomingMessage,
+): Promise<ModuleFallbackRequest | undefined> => {
+  if (req.method === "GET" && req.headers["x-resolve-method"]) {
+    const url = new URL(req.url ?? "", "http://localhost");
+    const specifier = url.searchParams.get("specifier");
     if (!specifier) {
       return;
     }
-
-    const resolveMethod = Headers.get(request.headers, "X-Resolve-Method").pipe(Option.getOrThrow);
-
+    const resolveMethod = req.headers["x-resolve-method"];
     return {
       protocol: "v1",
       type: resolveMethod === "require" ? "require" : "import",
       specifier,
       rawSpecifier: url.searchParams.get("rawSpecifier") ?? undefined,
       referrer: url.searchParams.get("referrer") ?? undefined,
-    } as ModuleFallbackRequest.V1;
-  } else if (request.method === "POST") {
-    const json = yield* request.json;
-    if (!isV2ModuleFallbackProtocol(json)) {
-      return;
+    };
+  }
+
+  if (req.method === "POST") {
+    const chunks: Array<Buffer> = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
     }
-    return { protocol: "v2", ...json } as ModuleFallbackRequest.V2;
+    const json: unknown = JSON.parse(Buffer.concat(chunks).toString());
+    if (typeof json === "object" && json !== null && "specifier" in json) {
+      return {
+        protocol: "v2",
+        ...(json as Omit<Extract<ModuleFallbackRequest, { protocol: "v2" }>, "protocol">),
+      };
+    }
   }
-});
-
-const isV2ModuleFallbackProtocol = (
-  json: unknown,
-): json is Omit<ModuleFallbackRequest.V2, "protocol"> => {
-  return typeof json === "object" && json !== null && "specifier" in json;
 };
-
-declare namespace ModuleFallbackRequest {
-  /** V1 protocol request (legacy module registry) */
-  export interface V1 {
-    protocol: "v1";
-    /** Import type: "import" for ES modules, "require" for CommonJS */
-    type: "import" | "require";
-    /** Module specifier as a path (e.g., "/my-module.js") */
-    specifier: string;
-    /** Original specifier as written in source code */
-    rawSpecifier?: string;
-    /** Referrer module path */
-    referrer?: string;
-  }
-
-  /** V2 protocol request (new module registry) */
-  export interface V2 {
-    protocol: "v2";
-    /** Import type: includes "internal" for runtime-originated imports */
-    type: "import" | "require" | "internal";
-    /** Module specifier as a URL (e.g., "file:///bundle/my-module.js") */
-    specifier: string;
-    /** Original specifier as written in source code */
-    rawSpecifier?: string;
-    /** Referrer module URL */
-    referrer?: string;
-    /** Import attributes from the import statement */
-    attributes?: Array<{ name: string; value: string }>;
-  }
-}
 
 async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<Array<Module>> {
   const [moduleRunnerWorker, wrapperWorker] = await Promise.all([

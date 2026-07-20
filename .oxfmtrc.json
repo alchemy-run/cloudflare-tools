@@ -3,8 +3,19 @@
   "overrides": [
     {
       "files": ["**/*.{json,jsonc}"],
-      "options": { "trailingComma": "none" }
+      "options": {
+        "trailingComma": "none"
+      }
     }
   ],
-  "ignorePatterns": ["upstream", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"]
+  "ignorePatterns": [
+    "upstream",
+    "**/dist/**",
+    "**/routeTree.gen.ts",
+    "**/__snapshots__/**",
+    "fixtures/spike-*",
+    "research",
+    "**/.svelte-kit/**",
+    "**/test-results/**"
+  ]
 }

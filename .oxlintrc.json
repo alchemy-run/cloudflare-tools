@@ -89,7 +89,15 @@
       }
     ]
   },
-  "ignorePatterns": ["upstream", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"],
+  "ignorePatterns": [
+    "upstream",
+    "**/dist/**",
+    "**/routeTree.gen.ts",
+    "**/__snapshots__/**",
+    "fixtures/spike-*",
+    "research",
+    "**/.svelte-kit/**"
+  ],
   "overrides": [
     {
       "files": [

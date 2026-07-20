@@ -76,7 +76,7 @@ const ContainerEgressInterceptorImage = Config.string("CONTAINER_EGRESS_INTERCEP
  * refs ("cannot overwrite digest"); the digest fully pins the image, so the
  * tag is dropped when both are present.
  */
-export const toPullRef = (imageUri: string) => imageUri.replace(/:[^@\/]+(?=@sha256:)/, "");
+export const toPullRef = (imageUri: string) => imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
 
 export const DockerLive = Layer.effect(
   Docker,

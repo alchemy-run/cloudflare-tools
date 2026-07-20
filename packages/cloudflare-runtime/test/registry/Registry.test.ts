@@ -82,6 +82,39 @@ describe.each(watcherModes)(
       }).pipe(Effect.provide(services)),
     );
 
+    // Make-before-break handoff: a replacement instance re-registers under
+    // the same script name before the old instance's scope closes. The old
+    // instance's unregister finalizer must not delete the replacement's
+    // registration — removal is owner-aware (only removes the file while it
+    // still holds that write's content).
+    it.live("unregistering a superseded entry keeps the replacement registration", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const registry = yield* Registry.Registry;
+        const { entryPath, registryEntry } = yield* makeTestData("7");
+        const replacementEntry: RegistryEntry = {
+          ...registryEntry,
+          debugPortAddress: "127.0.0.1:23456",
+        };
+
+        const oldScope = yield* Scope.make();
+        yield* registry.write(registryEntry).pipe(Scope.provide(oldScope));
+
+        const replacementScope = yield* Scope.make();
+        yield* registry.write(replacementEntry).pipe(Scope.provide(replacementScope));
+
+        // Closing the superseded instance's scope must not delete the file —
+        // it now belongs to the replacement.
+        yield* Scope.close(oldScope, Exit.void);
+        expect(yield* fs.exists(entryPath)).toBe(true);
+        expect(JSON.parse(yield* fs.readFileString(entryPath))).toEqual(replacementEntry);
+
+        // Closing the replacement's own scope removes it.
+        yield* Scope.close(replacementScope, Exit.void);
+        expect(yield* fs.exists(entryPath)).toBe(false);
+      }).pipe(Effect.provide(services)),
+    );
+
     it.live("read skips entries that don't match the subscriber", () =>
       Effect.gen(function* () {
         const registry = yield* Registry.Registry;

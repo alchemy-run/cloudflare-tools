@@ -156,7 +156,11 @@ export const RuntimeLive = Layer.effect(
             ],
             extensions: config.extensions,
           },
-          { "debug-port": "127.0.0.1:0" },
+          {
+            "debug-port": "127.0.0.1:0",
+            ...(worker.logging?.verbose ? { verbose: true } : undefined),
+          },
+          { onOutput: worker.logging?.onOutput },
         );
         yield* context.start(ports);
         return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);

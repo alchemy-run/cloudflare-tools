@@ -1,8 +1,9 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as WorkerProxy from "../src/proxy/WorkerProxy.ts";
 import * as Runtime from "../src/Runtime.ts";
-import { localRuntimeLayer } from "./helpers/runtime.ts";
+import { localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
 
 const HELLO_SCRIPT = `
 export default {
@@ -89,5 +90,55 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
         expect(new Set(urls).size).toBe(count);
       }),
     { timeout: 60_000 },
+  );
+
+  it.effect(
+    "surfaces uncaught worker exceptions via logging.verbose + onOutput",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        let captured = "";
+        const url = yield* runtime.start({
+          name: "throwing",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `
+                export default {
+                  fetch() {
+                    throw new Error("kaboom-marker");
+                  },
+                };
+              `,
+            },
+          ],
+          logging: {
+            verbose: true,
+            onOutput: (chunk) => {
+              captured += chunk;
+            },
+          },
+        });
+        const res = yield* Effect.promise(() => fetch(new URL("/", url)));
+        expect(res.status).toBe(500);
+        // workerd writes the exception asynchronously; wait for it to land.
+        yield* Effect.suspend(() =>
+          captured.includes("kaboom-marker")
+            ? Effect.void
+            : Effect.fail(new PredicateFailed({ value: captured })),
+        ).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "PredicateFailed",
+            schedule: Schedule.spaced("50 millis"),
+            times: 100,
+          }),
+        );
+        expect(captured).toContain("kaboom-marker");
+      }),
+    { timeout: 30_000 },
   );
 });

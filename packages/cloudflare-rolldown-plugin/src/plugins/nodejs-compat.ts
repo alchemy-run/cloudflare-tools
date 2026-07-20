@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { defineEnv } from "unenv";
 import { createPlugin } from "../factory.js";
+import { isSkippedEnvironment } from "../options.js";
 import { hasNodejsAls, hasNodejsCompat, toPosixPath } from "../utils.js";
 
 const ASYNC_HOOKS_REGEXP = /^(node:)?async_hooks$/;
@@ -162,8 +163,16 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         async configureServer(server) {
           await Promise.all(
             Object.values(server.environments).flatMap(async (environment) => {
+              // Framework-owned Node-side environments (e.g. Astro's `astro`
+              // and `prerender`) must be left untouched — this is a
+              // server-level hook, so `applyToEnvironment` cannot gate it.
+              if (isSkippedEnvironment(options, environment.name)) return;
               const depsOptimizer = environment.depsOptimizer;
               if (!depsOptimizer) return;
+              // Environments using Vite's no-discovery ("explicit") optimizer
+              // throw on `registerMissingImport` by design; pre-bundling the
+              // unenv polyfills is best-effort, so skip them.
+              if (!supportsMissingImportRegistration(environment)) return;
               await depsOptimizer.init();
               return Array.from(entries).map((entry) => {
                 const resolved = resolve(entry);
@@ -179,7 +188,11 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
           handler(source, importer, options) {
             const resolved = resolve(source);
             if (!resolved) return;
-            if (this.environment.mode === "dev" && this.environment.depsOptimizer) {
+            if (
+              this.environment.mode === "dev" &&
+              this.environment.depsOptimizer &&
+              supportsMissingImportRegistration(this.environment)
+            ) {
               // We are in dev mode (rather than build).
               // So let's pre-bundle this polyfill entry-point using the dependency optimizer.
               const { id } = this.environment.depsOptimizer.registerMissingImport(source, resolved);
@@ -194,6 +207,18 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
     };
   },
 );
+
+/**
+ * Vite's no-discovery ("explicit") dependency optimizer throws on
+ * `registerMissingImport` by design, and third-party environments may not
+ * implement it at all. Feature-detect before registering polyfill entries.
+ */
+const supportsMissingImportRegistration = (environment: {
+  config: { optimizeDeps?: { noDiscovery?: boolean } };
+  depsOptimizer?: { registerMissingImport?: unknown } | undefined;
+}): boolean =>
+  environment.config.optimizeDeps?.noDiscovery !== true &&
+  typeof environment.depsOptimizer?.registerMissingImport === "function";
 
 export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (options) => {
   if (hasNodejsCompat(options.compatibilityFlags)) return;

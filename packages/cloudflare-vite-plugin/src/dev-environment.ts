@@ -37,6 +37,13 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
     });
     this.transport.ws = ws;
   }
+  override async close(): Promise<void> {
+    await super.close();
+    // `transport.close()` is idempotent; make sure the module-runner socket is
+    // released even if Vite didn't close the hot channel itself.
+    this.transport.close();
+  }
+
   override async fetchModule(
     id: string,
     importer?: string,
@@ -98,8 +105,14 @@ class HotChannel implements vite.HotChannel {
   }
 
   close() {
-    assert(this.#ws, "WebSocket is not connected");
+    // The channel can be closed before a runner ever connected (e.g. a dev
+    // server created and torn down during a framework's type generation), so
+    // tolerate a missing socket — and close it so the runtime connection does
+    // not leak across server restarts.
+    if (!this.#ws) return;
     this.#ws.removeEventListener("message", this.boundDispatch);
+    this.#ws.close();
+    this.#ws = undefined;
   }
 
   private dispatch(event: MessageEvent) {

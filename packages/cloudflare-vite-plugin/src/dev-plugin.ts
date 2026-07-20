@@ -13,7 +13,7 @@ import { handleWebSocket } from "./websockets.js";
 
 let context: Context.Context<RuntimeServices> | undefined;
 
-export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
+export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
   const environmentNames = parseViteEnvironments(options);
   let handle: ServerHandle | undefined;
   let isServerRestarting = false;
@@ -25,7 +25,31 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
     handle = undefined;
   };
   let optionsApi: OptionsApi | undefined;
-  return {
+  const plugins: Array<vite.Plugin> = [];
+  // The proxy middleware registers in a `configureServer` post callback, which
+  // Vite runs in plugin order — so when this plugin is appended after a
+  // framework's plugins, the framework's own post middlewares (e.g. a Node
+  // request bridge that assumes a runnable environment) would see requests
+  // first. With `middlewareOrder: "pre"` the proxy is instead inserted
+  // directly after Vite's internal middlewares, ahead of every other plugin's
+  // post middlewares. This companion plugin records that insertion point: its
+  // post callback runs before all normal plugins' post callbacks (it is
+  // `enforce: "pre"`), i.e. right after Vite registered its internal
+  // middlewares and before any other plugin registered post middlewares.
+  let middlewareBoundary: number | undefined;
+  if (options.dev?.middlewareOrder === "pre") {
+    plugins.push({
+      name: "distilled-cloudflare:dev-middleware-boundary",
+      enforce: "pre",
+      configureServer(server) {
+        middlewareBoundary = undefined;
+        return () => {
+          middlewareBoundary = server.middlewares.stack.length;
+        };
+      },
+    });
+  }
+  const plugin: vite.Plugin = {
     name: "distilled-cloudflare:dev",
     configResolved({ plugins }) {
       optionsApi = resolvePluginApi<OptionsApi>(plugins ?? [], "distilled-cloudflare:options");
@@ -34,11 +58,14 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       const environment: vite.EnvironmentOptions = {
         dev: {
           createEnvironment(name, config) {
-            const hasConfigureServer = config.plugins.some(
-              (plugin) =>
-                plugin.name === "distilled-cloudflare:dev" && plugin.configureServer !== undefined,
-            );
-            if (!hasConfigureServer) {
+            // Framework integrations strip `configureServer` off this plugin
+            // when they create throwaway dev servers (e.g. Astro's type-gen
+            // during `build`/`sync`) so we don't boot workerd mid-build. In
+            // that case there is no runtime to proxy to — degrade to Vite's
+            // default runnable environment. Check this exact plugin instance
+            // (not the resolved plugin list) so multiple instances and
+            // renamed/wrapped plugins behave predictably.
+            if (!hasConfigureServerHook(plugin)) {
               return vite.createRunnableDevEnvironment(name, config);
             }
             return new DistilledDevEnvironment(name, config);
@@ -105,7 +132,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
         removeUpgradeListener = handleWebSocket(server.httpServer, address);
       }
       return () => {
-        server.middlewares.use((req, res) => {
+        server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res) {
           const url = new URL(req.url ?? "/", address);
           const request = NodeHttp.request(url, {
             method: req.method,
@@ -117,7 +144,25 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
             response.pipe(res);
           });
         });
+        if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
+          // Move the proxy middleware from the end of the stack to directly
+          // after Vite's internal middlewares, ahead of the post middlewares
+          // other plugins registered.
+          const stack = server.middlewares.stack;
+          const entry = stack.pop();
+          if (entry) {
+            stack.splice(middlewareBoundary, 0, entry);
+          }
+        }
       };
     },
   };
+  plugins.push(plugin);
+  return plugins;
 }
+
+const hasConfigureServerHook = (plugin: vite.Plugin): boolean => {
+  const hook = plugin.configureServer;
+  if (hook == null) return false;
+  return typeof hook === "function" || typeof hook.handler === "function";
+};

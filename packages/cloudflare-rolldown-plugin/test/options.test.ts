@@ -1,6 +1,22 @@
 import type { MinimalPluginContext } from "rolldown";
+import type * as vite from "vite";
 import { assert, describe, expect, it } from "vitest";
 import { optionsPlugin } from "../src/plugins/options.js";
+
+const callViteConfig = async (
+  plugin: vite.Plugin | null,
+  userConfig: vite.UserConfig,
+): Promise<vite.UserConfig> => {
+  assert(plugin, "plugin is not defined");
+  const hook = plugin.config;
+  assert(typeof hook === "function", "plugin.config is not a function");
+  const result = await hook.call({ meta: {} } as never, userConfig, {
+    command: "build",
+    mode: "production",
+  } as never);
+  assert(result, "config hook returned nothing");
+  return result as vite.UserConfig;
+};
 
 describe("options plugin", () => {
   it("applies the Cloudflare defaults", () => {
@@ -121,5 +137,54 @@ describe("options plugin", () => {
     expect(output.input).toEqual({
       worker: "\0distilled:worker-entry:D:/src/app/entry-server.ts",
     });
+  });
+
+  it("defaults builder.buildApp when the user config does not define one", async () => {
+    const plugin = optionsPlugin.vite({ main: "./worker.ts" });
+    const result = await callViteConfig(plugin, {});
+    expect(typeof result.builder?.buildApp).toBe("function");
+  });
+
+  it("does not clobber a framework-provided builder.buildApp", async () => {
+    // Vite merges plugin `config` results over the user config, so returning a
+    // default here would replace the framework's orchestrator (e.g. Astro's
+    // prerender -> ssr -> client pipeline).
+    const buildApp = async () => {};
+    const plugin = optionsPlugin.vite({ main: "./worker.ts" });
+    const result = await callViteConfig(plugin, { builder: { buildApp } });
+    expect(result.builder).toBeUndefined();
+  });
+
+  it("does not provide a builder in SPA mode", async () => {
+    const plugin = optionsPlugin.vite({});
+    const result = await callViteConfig(plugin, {});
+    expect(result.appType).toBe("spa");
+    expect(result.builder).toBeUndefined();
+  });
+
+  it("skips skipEnvironments in the default buildApp", async () => {
+    const plugin = optionsPlugin.vite({
+      main: "./worker.ts",
+      skipEnvironments: ["prerender"],
+    });
+    const result = await callViteConfig(plugin, {});
+    const buildApp = result.builder?.buildApp;
+    assert(typeof buildApp === "function", "buildApp is not a function");
+
+    const built: Array<string> = [];
+    const builder = {
+      environments: {
+        ssr: { name: "ssr", isBuilt: false },
+        client: { name: "client", isBuilt: false },
+        // Framework-owned environment with no build input of its own.
+        prerender: { name: "prerender", isBuilt: false },
+        already: { name: "already", isBuilt: true },
+      },
+      build: async (environment: { name: string }) => {
+        built.push(environment.name);
+      },
+    };
+    await buildApp(builder as never);
+    expect(built).toEqual(["ssr", "client"]);
   });
 });

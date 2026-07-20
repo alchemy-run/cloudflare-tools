@@ -1,3 +1,4 @@
+import { Framework, type FrameworkError } from "@distilled.cloud/framework-core";
 import * as Miniflare from "@distilled.cloud/test-utils/miniflare";
 import {
   moduleTypeFromExtension,
@@ -10,7 +11,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import * as Options from "./Options.ts";
-import * as Vite from "./Vite.ts";
 
 export interface Instance {
   url: URL;
@@ -27,21 +27,21 @@ declare namespace Instance {
 export class Server extends Context.Service<
   Server,
   {
-    readonly live: () => Effect.Effect<Instance.Raw, Vite.ViteError, Scope.Scope>;
-    readonly dev: () => Effect.Effect<Instance.Raw, Vite.ViteError, Scope.Scope>;
+    readonly live: () => Effect.Effect<Instance.Raw, FrameworkError, Scope.Scope>;
+    readonly dev: () => Effect.Effect<Instance.Raw, FrameworkError, Scope.Scope>;
   }
 >()("@distilled.cloud/e2e/Server") {}
 
 export const layer = Layer.effect(
   Server,
   Effect.gen(function* () {
-    const vite = yield* Vite.Vite;
+    const framework = yield* Framework;
     const path = yield* Path.Path;
     const options = yield* Options.load();
 
     const live = () =>
-      vite.readBuildOutput().pipe(
-        Effect.catch(() => vite.build(options.vite)),
+      framework.readBuildOutput().pipe(
+        Effect.catch(() => framework.build()),
         Effect.flatMap((build) => {
           const modules = build.serverModules?.flatMap(
             (module): MiniflareModule | Array<MiniflareModule> => {
@@ -76,9 +76,9 @@ export const layer = Layer.effect(
       );
 
     const dev = () =>
-      vite.dev(options.vite).pipe(
-        Effect.map((output) => {
-          const url = new URL(output.url);
+      framework.dev().pipe(
+        Effect.map((server) => {
+          const url = new URL(server.url);
           const baseFetch = (path: string, init?: RequestInit) => fetch(new URL(path, url), init);
           return {
             url,

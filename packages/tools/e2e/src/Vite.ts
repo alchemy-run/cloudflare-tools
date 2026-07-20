@@ -11,7 +11,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import type * as ViteModule from "vite";
-import * as Runtime from "./Runtime.ts";
+import { Cwd } from "./Cwd.ts";
 
 export class ViteError extends Data.TaggedError<"ViteError">("ViteError")<{
   readonly message: string;
@@ -40,7 +40,7 @@ export const ViteLive = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const cwd = yield* Runtime.Cwd;
+    const cwd = yield* Cwd;
 
     const load = (root: string = cwd): Effect.Effect<typeof ViteModule, ViteError> =>
       FrameworkCore.loadProjectModule<typeof ViteModule>(root, "vite").pipe(

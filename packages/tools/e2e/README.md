@@ -1,0 +1,182 @@
+# @distilled.cloud/e2e
+
+The e2e harness that drives a fixture's dev server, production build, and
+miniflare preview, and exposes them to Playwright. The harness is
+framework-pluggable: every fixture is driven through framework-core's
+`Framework` service, and a fixture selects its implementation in
+`e2e.config.ts`. When no framework is named, the built-in Vite implementation
+(over `@distilled.cloud/cloudflare-vite-plugin`) is used — existing Vite
+fixtures need no changes.
+
+## How a fixture uses the harness
+
+A fixture's `package.json` scripts call the `e2e` bin:
+
+```jsonc
+{
+  "scripts": {
+    "dev": "e2e dev", // Framework.dev — the framework's dev server
+    "build": "e2e build", // Framework.build — persists dist/build.json
+    "preview": "e2e preview", // miniflare over dist/build.json
+    "test": "playwright test",
+  },
+}
+```
+
+`e2e.config.ts` at the fixture root default-exports `Options.make({...})` (or
+an `Effect` of it, for config that reads env via `Config`):
+
+```ts
+import * as Options from "@distilled.cloud/e2e/Options";
+
+export default Options.make({
+  framework: "@distilled.cloud/waku", // ← optional; omit for the Vite default
+  vite: {
+    compatibilityDate: "2026-03-10",
+    compatibilityFlags: ["nodejs_compat"],
+    worker: { name: "fixtures-waku", bindings: [], assets: {} },
+  },
+  miniflare: {
+    compatibilityDate: "2026-03-10",
+    compatibilityFlags: ["nodejs_compat"],
+    assets: {
+      /* router/asset config */
+    },
+  },
+});
+```
+
+Playwright fixtures come from `@distilled.cloud/e2e/Playwright`:
+`Playwright.make("live")` boots the miniflare preview (building first if
+`dist/build.json` is absent), `Playwright.make("dev")` boots the framework dev
+server. Both dispatch through the `Framework` service.
+
+## The `framework` option
+
+`Options.framework` selects the `Framework`-service implementation. Accepted
+forms:
+
+1. **Omitted** — the built-in Vite implementation, configured by
+   `options.vite`. Zero behavior change for existing fixtures.
+2. **A package specifier string** (e.g. `"@distilled.cloud/waku"`) — resolved
+   and imported from the **fixture's own `node_modules`** via framework-core's
+   `loadProjectModule(cwd, specifier)`, so the fixture's installed copy of the
+   framework (its `waku`, `astro`, `next`, ... dependency tree) is the one
+   driven — never whatever is hoisted next to the harness. Relative specifiers
+   that the fixture's resolution can reach work too.
+3. **A factory function** — called with the fixture's full `Options`.
+4. **A `Layer<Framework>`** — used as-is. Build it yourself in `e2e.config.ts`
+   by importing the framework package directly; this is the fully-typed path
+   for framework-specific options that don't fit the shared `Options` shape.
+
+## What a framework package must export
+
+A package named by the string form must **default-export** (or named-export
+`framework`) one of:
+
+- a factory `(options: Options) => Layer<Framework>` — the primary contract;
+- a factory returning `Effect<Layer<Framework>>` (for effectful setup);
+- a `Layer<Framework>` directly (for packages with no per-fixture options).
+
+```ts
+// @distilled.cloud/waku — src/index.ts
+import type { Options } from "@distilled.cloud/e2e/Options";
+import { Framework } from "@distilled.cloud/framework-core";
+import * as Layer from "effect/Layer";
+
+export default (options: Options): Layer.Layer<Framework> =>
+  Layer.effect(Framework /* ... build/dev/readBuildOutput over waku ... */);
+```
+
+### Options flow
+
+The factory receives the **entire** parsed `Options` object from the fixture's
+`e2e.config.ts`. Conventions:
+
+- `options.vite` (`CloudflareVitePluginOptions`) carries the cloudflare worker
+  configuration — compatibility date/flags, worker name, bindings, assets
+  behavior. Framework packages should read their cloudflare plugin options
+  from this field so fixtures stay uniform.
+- `options.miniflare` is consumed by the harness's preview server only;
+  framework packages should not read it.
+- Anything richer than `options.vite` (framework-specific knobs) should be
+  taken via the Layer/factory forms (3)/(4) above, where the fixture calls
+  your typed API directly.
+
+### Layer environment
+
+The Layer is built inside the harness runtime, which provides
+`@effect/platform-node`'s `NodeServices` (so `FileSystem.FileSystem` and
+`Path.Path` may appear in the Layer's requirements — the
+`Options.FrameworkServices` type) and a dotenv/env `ConfigProvider`. The
+process working directory is the fixture root. Anything else the layer needs,
+it must provide itself.
+
+Load the *project's* framework module (its `vite`, `waku`, `astro`, ...) with
+framework-core's `loadProjectModule(root, specifier)` /
+`resolveProjectPackageDirectory` — never a bare `import` from your own
+dependency tree.
+
+## The `Framework` service contract
+
+Defined in `@distilled.cloud/framework-core` (`Framework.ts`):
+
+```ts
+class Framework extends Context.Service<Framework, {
+  readonly build: (options?: FrameworkBuildOptions) => Effect<BuildOutput, FrameworkError>;
+  readonly dev: (options?: FrameworkDevOptions) =>
+    Effect<FrameworkDevServer, FrameworkError, Scope.Scope>; // { url: string }
+  readonly readBuildOutput: () => Effect<BuildOutput, PlatformError>;
+}>()("@distilled.cloud/framework-core/Framework") {}
+```
+
+Semantics every implementation must honor:
+
+- **`build`** runs the framework's production build and returns the
+  `BuildOutput` contract. It must **also persist the result to
+  `<fixture>/dist/build.json`** via framework-core's `writeBuildOutput` — this
+  is what makes `preview` uniform across frameworks. Errors surface as
+  `FrameworkError` (set the `framework` field to your framework name).
+- **`dev`** starts the framework's dev server and returns `{ url }`. It is
+  scoped: closing the `Scope` must stop the server. Honor
+  `FrameworkDevOptions.port` when given.
+- **`readBuildOutput`** loads the persisted `dist/build.json` (framework-core's
+  `readBuildOutput`) without rebuilding.
+- `FrameworkBuildOptions.root` / `FrameworkDevOptions.root` override the
+  project root (default: the configured root / cwd).
+
+### The `dist/build.json` convention (`BuildOutput`)
+
+`BuildOutput` (framework-core `BuildOutput.ts`) is the cross-framework build
+contract:
+
+- `clientDirectory` — the static-assets directory, captured **as a path** so
+  files written after the bundler finishes (SSG HTML, prerendered pages) ride
+  along. `undefined` if there are no client assets.
+- `serverModules` — the worker modules as `OutputFile`s (`name` relative to
+  `distDirectory`, `content`, sha256 `hash`), **entry module first**
+  (`sortServerModules` enforces this ordering). `undefined` for assets-only
+  builds.
+- `externalWorkspaces` — workspace roots of modules imported from outside the
+  project root (for watch/memoization); collect with
+  `collectExternalWorkspaces`.
+- `distDirectory` — the build's root output directory (e.g. `<root>/dist`).
+
+Persist with `writeBuildOutput(path, output)` and read with
+`readBuildOutput(path)` — they handle the JSON round-trip (Buffer revival for
+binary modules, `externalWorkspaces` Set). Vite-based frameworks can produce
+the whole shape with `makeBuildOutputCollector`; frameworks whose final
+bundles land on disk after the bundler (SvelteKit, Next.js) can use
+`readServerModulesFromDisk`.
+
+## How the harness consumes the contract
+
+- `e2e build` → `Framework.build()`.
+- `e2e dev` (and `Server.dev()` / `Playwright.make("dev")`) →
+  `Framework.dev()`; the harness wraps the returned `url` with fetch helpers.
+- `e2e preview` (and `Server.live()` / `Playwright.make("live")`) →
+  `Framework.readBuildOutput()`, falling back to `Framework.build()` when
+  `dist/build.json` is missing or unreadable; then serves `serverModules` +
+  `clientDirectory` through miniflare (`@distilled.cloud/test-utils/miniflare`)
+  with the fixture's `options.miniflare`. The framework implementation is not
+  involved in serving preview — only in producing a correct `BuildOutput`.

@@ -7,6 +7,7 @@
   },
   "type": "module",
   "exports": {
+    "./Framework": "./src/Framework.ts",
     "./Options": "./src/Options.ts",
     "./Playwright": "./src/Playwright.ts"
   },

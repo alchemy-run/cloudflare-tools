@@ -16,6 +16,7 @@ Code must pass linting, formatting, and typechecking. Use `bun run check` to run
 - `packages/cloudflare-rolldown-plugin`: Rolldown plugin for Cloudflare Workers.
 - `packages/cloudflare-runtime`: Effect-native local runtime for Cloudflare Workers, powered by `workerd`.
 - `packages/cloudflare-vite-plugin`: Vite plugin for Cloudflare Workers; composes `cloudflare-rolldown-plugin` and `cloudflare-runtime`.
+- `packages/framework-core`: Shared framework-integration core: the `BuildOutput` contract, the `alchemy:build-output` Vite collector plugin, the project module loader, and the `Framework` service contract.
 
 ### Internals
 

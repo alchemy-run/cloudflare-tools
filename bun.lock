@@ -271,6 +271,24 @@
         "@effect/platform-node",
       ],
     },
+    "packages/framework-core": {
+      "name": "@distilled.cloud/framework-core",
+      "version": "0.13.7",
+      "devDependencies": {
+        "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
+        "@effect/platform-node": "catalog:effect",
+        "effect": "catalog:effect",
+        "vite": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:effect",
+        "vite": "^7.0.0 || ^8.0.0",
+      },
+      "optionalPeers": [
+        "vite",
+      ],
+    },
     "packages/tools/build": {
       "name": "@distilled.cloud/build-utils",
       "version": "0.0.0",
@@ -287,6 +305,7 @@
         "e2e": "./src/Cli.ts",
       },
       "dependencies": {
+        "@distilled.cloud/framework-core": "workspace:*",
         "@effect/platform-node": "catalog:effect",
         "effect": "catalog:effect",
       },
@@ -613,6 +632,8 @@
     "@distilled.cloud/core": ["@distilled.cloud/core@0.29.0", "", { "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-Nxcxyuw8sEjZs2iduqx4z3ro/khwx7w0MCShsrl/G7dM7AHD/HX7zXTWLfUUSbc2Zu00C1wpK2Fs5ngCamh07A=="],
 
     "@distilled.cloud/e2e": ["@distilled.cloud/e2e@workspace:packages/tools/e2e"],
+
+    "@distilled.cloud/framework-core": ["@distilled.cloud/framework-core@workspace:packages/framework-core"],
 
     "@distilled.cloud/test-utils": ["@distilled.cloud/test-utils@workspace:packages/tools/test"],
 

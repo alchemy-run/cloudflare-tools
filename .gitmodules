@@ -1,3 +1,23 @@
 [submodule "workers-sdk"]
-	path = workers-sdk
+	path = upstream/workers-sdk
 	url = https://github.com/cloudflare/workers-sdk.git
+[submodule "upstream/next.js"]
+	path = upstream/next.js
+	url = https://github.com/vercel/next.js
+	shallow = true
+[submodule "upstream/opennextjs-cloudflare"]
+	path = upstream/opennextjs-cloudflare
+	url = https://github.com/opennextjs/opennextjs-cloudflare
+	shallow = true
+[submodule "upstream/astro"]
+	path = upstream/astro
+	url = https://github.com/withastro/astro
+	shallow = true
+[submodule "upstream/sveltekit"]
+	path = upstream/sveltekit
+	url = https://github.com/sveltejs/kit
+	shallow = true
+[submodule "upstream/waku"]
+	path = upstream/waku
+	url = https://github.com/wakujs/waku
+	shallow = true

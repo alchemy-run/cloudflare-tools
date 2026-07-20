@@ -140,7 +140,7 @@ or Worker types it'll tell you.
 ## Adding a new vendored package
 
 The example below assumes the upstream lives at
-`workers-sdk/packages/<upstream>/`. Adjust paths if the source is elsewhere.
+`upstream/workers-sdk/packages/<upstream>/`. Adjust paths if the source is elsewhere.
 
 1. **Scaffold the package directory.**
 
@@ -275,13 +275,13 @@ range lives in the root `package.json`). Remove the old `zod` entry.
 
 ## Updating a vendored package
 
-1. `git submodule update --remote workers-sdk` (or the relevant submodule).
+1. `git submodule update --remote upstream/workers-sdk` (or the relevant submodule).
 2. **Scope the change.** Diff the upstream package between the SHA recorded in
    the package `README.md` and the new submodule `HEAD` to see exactly what
    moved:
 
    ```bash
-   git -C workers-sdk diff --stat <old-sha>..HEAD -- packages/<upstream>
+   git -C upstream/workers-sdk diff --stat <old-sha>..HEAD -- packages/<upstream>
    ```
 
 3. **Identify which vendored files carry local modifications.** Vendored files
@@ -294,7 +294,7 @@ range lives in the root `package.json`). Remove the old `zod` entry.
    upstream file, then diff against the current vendored copy:
 
    ```bash
-   git -C workers-sdk show <old-sha>:packages/<upstream>/<file> > /tmp/old.ts
+   git -C upstream/workers-sdk show <old-sha>:packages/<upstream>/<file> > /tmp/old.ts
    cp /tmp/old.ts /tmp/old.fmt.ts
    bunx oxfmt format /tmp/old.fmt.ts && bunx oxlint --fix /tmp/old.fmt.ts
    diff /tmp/old.fmt.ts packages/vendor/<upstream>/src/<vendored-path>
@@ -343,5 +343,5 @@ range lives in the root `package.json`). Remove the old `zod` entry.
    because those bindings re-implement the corresponding Miniflare plugin. See
    the [`update-vendored-cloudflare`](../../.cursor/skills/update-vendored-cloudflare/SKILL.md)
    skill for the full flow, including how to derive the required binding
-   changes by diffing `workers-sdk/packages/miniflare/src/plugins/<x>` and
-   `workers-sdk/packages/miniflare/src/workers/<x>`.
+   changes by diffing `upstream/workers-sdk/packages/miniflare/src/plugins/<x>` and
+   `upstream/workers-sdk/packages/miniflare/src/workers/<x>`.

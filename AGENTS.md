@@ -19,7 +19,7 @@ Code must pass linting, formatting, and typechecking. Use `bun run check` to run
 
 ### Internals
 
-- `workers-sdk/*`: Git submodule containing the `cloudflare/workers-sdk` repository.
+- `upstream/workers-sdk/*`: Git submodule containing the `cloudflare/workers-sdk` repository.
 - `fixtures/*`: Test fixtures for various Cloudflare Workers scenarios.
 - `packages/tools/*`: Internal build and test utilities.
 - `packages/vendor/*`: Vendored-in packages from `cloudflare/workers-sdk`. See `packages/vendor/README.md` for more details.
@@ -46,15 +46,15 @@ We use `tsdown` to resolve the `worker:` imports into bundled modules that can b
 
 ### 1. Reference the Miniflare implementation
 
-- In Miniflare, bindings are implemented as plugins located at `workers-sdk/packages/miniflare/src/plugins/*`.
+- In Miniflare, bindings are implemented as plugins located at `upstream/upstream/workers-sdk/packages/miniflare/src/plugins/*`.
 - Each plugin defines a set of callbacks. The most important are:
   - `getBindings`: Returns a list of `Worker_Binding`s that will be added to the user's worker in `workerd`.
   - `getServices`: Returns a list of services - typically internal worker scripts - that are used to implement the binding.
   - `getExtensions`: Some simpler bindings are implemented as extensions, which are internal modules that run within the user worker, as opposed to a separate service.
 - Some bindings offer local and remote implementations, and some are remote-only. Remote implementations are denoted by the `remoteProxyConnectionString` option.
-- The source code for services and extensions is located in `workers-sdk/packages/miniflare/src/workers/*`.
+- The source code for services and extensions is located in `upstream/upstream/workers-sdk/packages/miniflare/src/workers/*`.
   - Some services extend a Cloudflare internal package, such as `@cloudflare/workers-shared`.
-- Look at `workers-sdk/packages/miniflare/test` to see how the binding is tested. The `cloudflare-runtime` implementation must pass all of the same test cases, to the extent possible.
+- Look at `upstream/upstream/workers-sdk/packages/miniflare/test` to see how the binding is tested. The `cloudflare-runtime` implementation must pass all of the same test cases, to the extent possible.
 
 ### 2. Implement the remote binding (if applicable)
 
@@ -108,7 +108,7 @@ export type BindingServices =
 
 ### 4. Adapt the relevant services and extensions
 
-Create `.worker.ts` files in `workers-sdk/packages/miniflare/src/workers/<binding-name>` for the services and extensions that need to be adapted.
+Create `.worker.ts` files in `upstream/upstream/workers-sdk/packages/miniflare/src/workers/<binding-name>` for the services and extensions that need to be adapted.
 
 The upstream worker implementations may be more complex than we need, so you may not want to simply copy and paste. Instead, aim to match the upstream implementation as closely as possible while avoiding unnecessary abstractions and creating as few files as possible.
 

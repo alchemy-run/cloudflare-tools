@@ -89,7 +89,7 @@
       }
     ]
   },
-  "ignorePatterns": ["workers-sdk", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"],
+  "ignorePatterns": ["upstream", "**/dist/**", "**/routeTree.gen.ts", "**/__snapshots__/**"],
   "overrides": [
     {
       "files": [

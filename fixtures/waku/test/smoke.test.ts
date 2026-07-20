@@ -1,0 +1,60 @@
+import * as Playwright from "@distilled.cloud/e2e/Playwright";
+import { expect, test } from "@playwright/test";
+
+for (const mode of Playwright.SERVER_METHODS) {
+  test.describe(mode, () => {
+    const it = Playwright.make(mode);
+
+    it("SSR renders the dynamic page with the Text binding", async ({ page, server }) => {
+      const response = await page.goto(server.url.toString());
+      expect(response?.status()).toBe(200);
+      await expect(page.getByTestId("page-marker")).toHaveText("PAGE_MARKER");
+      await expect(page.getByTestId("layout-marker")).toHaveText("LAYOUT_MARKER");
+      // Read at request time from `cloudflare:workers` env — proves the rsc
+      // environment runs against the worker runtime in both modes.
+      await expect(page.getByTestId("env-message")).toHaveText("MESSAGE=hello-from-binding");
+    });
+
+    it("hydrates the client component", async ({ page, server }) => {
+      await page.goto(server.url.toString());
+      const counter = page.getByTestId("counter");
+      await expect(counter).toHaveText("count: 0");
+      // The first click can land before hydration attaches the listener;
+      // retry until the click observably increments.
+      await expect(async () => {
+        await counter.click();
+        await expect(counter).toHaveText(/count: [1-9]\d*/, { timeout: 500 });
+      }).toPass();
+    });
+
+    it("client-navigates to the static page", async ({ page, server }) => {
+      await page.goto(server.url.toString());
+      await page.click("a[href='/about']");
+      await page.waitForURL("**/about");
+      await expect(page.getByTestId("about-marker")).toHaveText("ABOUT_STATIC_MARKER");
+    });
+
+    it("serves the static asset", async ({ server }) => {
+      const response = await server.fetch("/hello.txt");
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("hello from public/");
+    });
+  });
+}
+
+// SSG output only exists in the production build: `dist/public` contains the
+// prerendered HTML and RSC payload, served by the assets layer in live mode.
+test.describe("live ssg", () => {
+  const it = Playwright.make("live");
+
+  it("serves the SSG page from assets", async ({ server }) => {
+    const response = await server.fetch("/about");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("ABOUT_STATIC_MARKER");
+  });
+
+  it("serves the SSG RSC payload from assets", async ({ server }) => {
+    const response = await server.fetch("/RSC/R/about.txt");
+    expect(response.status).toBe(200);
+  });
+});

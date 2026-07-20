@@ -1,0 +1,80 @@
+{
+  "name": "@distilled.cloud/waku",
+  "version": "0.13.7",
+  "description": "Wrangler-free Waku integration for Cloudflare Workers: programmatic build/dev over @distilled.cloud/cloudflare-vite-plugin implementing the framework-core Framework service.",
+  "keywords": [
+    "cloudflare",
+    "rsc",
+    "vite",
+    "waku",
+    "workers"
+  ],
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/waku#readme",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "John Royal",
+    "email": "john@alchemy.run",
+    "url": "https://distilled.cloud"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
+    "directory": "packages/waku"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./adapter": {
+      "bun": "./src/adapter.ts",
+      "types": "./dist/adapter.d.ts",
+      "import": "./dist/adapter.js",
+      "default": "./dist/adapter.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist .cache",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "dependencies": {
+    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@distilled.cloud/framework-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect",
+    "hono": "^4.12.14",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "waku": "1.0.0-beta.7"
+  },
+  "peerDependencies": {
+    "effect": "catalog:effect",
+    "hono": "^4.12.14",
+    "vite": "^8.0.0",
+    "waku": "1.0.0-beta.7"
+  }
+}

@@ -1,0 +1,5 @@
+.next/
+.open-next/
+dist-worker/
+node_modules/
+next-env.d.ts

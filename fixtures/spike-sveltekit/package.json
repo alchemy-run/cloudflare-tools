@@ -1,0 +1,29 @@
+{
+  "name": "@fixtures/spike-sveltekit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "bundle": "bun scripts/bundle.ts",
+    "boot": "bun scripts/boot.ts"
+  },
+  "dependencies": {
+    "cookie": "^2.0.1",
+    "devalue": "5.8.1",
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@sveltejs/kit": "3.0.0-next.9",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@types/node": "^24.12.0",
+    "effect": "catalog:effect",
+    "rolldown": "catalog:",
+    "svelte": "^5.56.6",
+    "vite": "catalog:"
+  }
+}

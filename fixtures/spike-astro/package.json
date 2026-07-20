@@ -1,0 +1,24 @@
+{
+  "name": "@fixtures/spike-astro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike:dev": "bun scripts/dev-test.ts",
+    "spike:build": "bun scripts/build.ts",
+    "spike:preview": "bun scripts/preview-test.ts"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "14.1.3",
+    "astro": "7.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+    "@distilled.cloud/test-utils": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect",
+    "vite": "catalog:"
+  }
+}

@@ -8,6 +8,7 @@ import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -96,6 +97,15 @@ export const RegistryLive = Layer.effect(
     // immediately (the watcher only reports future changes).
     const ref = yield* SubscriptionRef.make(yield* readAll);
 
+    // Serialize disk snapshots and writes so a poll/watch refresh that started
+    // before `write` cannot overwrite the eager in-memory update with a stale
+    // empty snapshot.
+    const updateLock = yield* Semaphore.make(1);
+    const refresh = readAll.pipe(
+      Effect.flatMap((newValue) => SubscriptionRef.set(ref, newValue)),
+      updateLock.withPermits(1),
+    );
+
     // The `fileSystemSupportsWatcher` flag is set to false on Windows and true everywhere else.
     // The flag can be overridden using a ConfigProvider, e.g. for testing.
     // If the watcher is not supported, we fall back to polling every 100ms.
@@ -108,14 +118,10 @@ export const RegistryLive = Layer.effect(
             // subscription. `mapEffect` runs the reads sequentially, so a
             // watcher-triggered read cannot be overwritten by an older one.
             Stream.merge(Stream.succeed(undefined)),
-            Stream.mapEffect(() => readAll),
+            Stream.mapEffect(() => refresh),
           )
-        : Stream.fromEffect(readAll).pipe(Stream.repeat(Schedule.spaced(100)))
-    ).pipe(
-      Stream.tap((newValue) => SubscriptionRef.set(ref, newValue)),
-      Stream.runDrain,
-      Effect.forkScoped,
-    );
+        : Stream.fromEffect(refresh).pipe(Stream.repeat(Schedule.spaced(100)))
+    ).pipe(Stream.runDrain, Effect.forkScoped);
 
     return Registry.of({
       read: (subscribers) =>
@@ -133,6 +139,7 @@ export const RegistryLive = Layer.effect(
             // Immediately update the in-memory registry so it's available without waiting on IO.
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
+          updateLock.withPermits(1),
           Effect.tap(() => {
             // Remove the entry from the filesystem when the scope closes — but
             // only while the file still holds THIS write's content. A

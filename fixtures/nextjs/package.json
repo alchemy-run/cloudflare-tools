@@ -7,7 +7,8 @@
     "build": "e2e build",
     "preview": "e2e preview",
     "test": "node scripts/e2e.mjs",
-    "pretest": "playwright install chromium"
+    "pretest": "playwright install chromium",
+    "test:e2e": "bun run build && playwright test"
   },
   "dependencies": {
     "next": "16.2.10",

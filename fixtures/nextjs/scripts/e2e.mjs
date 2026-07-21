@@ -14,5 +14,7 @@ if (process.platform === "win32") {
   process.exit(0);
 }
 
-execSync("bun run build", { stdio: "inherit" });
-execSync("bun x playwright test", { stdio: "inherit" });
+// `bun run` puts the fixture's node_modules/.bin on PATH, so playwright
+// resolves from the fixture (a bare `bun x playwright` can load the parent
+// workspace's copy and die with "Requiring @playwright/test second time").
+execSync("bun run test:e2e", { stdio: "inherit" });

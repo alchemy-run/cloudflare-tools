@@ -143,12 +143,22 @@ const makeModuleFallbackService = Effect.gen(function* () {
     }
   });
 
+  // workerd fetches every fallback module over this server. Node's default
+  // 5s `keepAliveTimeout` closes idle sockets between module bursts, forcing
+  // workerd to open a fresh TCP connection per burst — on Windows CI the
+  // resulting TIME_WAIT churn exhausts ephemeral ports (WSAENOBUFS #10055).
+  // Keep idle connections around for a minute so they get reused.
+  server.keepAliveTimeout = 60_000;
+  server.headersTimeout = 65_000;
   yield* Effect.callback<void>((resume) => {
     server.listen(0, "127.0.0.1", () => resume(Effect.void));
   });
   yield* Effect.addFinalizer(() =>
     Effect.callback<void>((resume) => {
       server.close(() => resume(Effect.void));
+      // `close()` waits for in-flight/keep-alive connections; destroy them so
+      // shutdown doesn't hang for up to `keepAliveTimeout`.
+      server.closeAllConnections();
     }),
   );
 

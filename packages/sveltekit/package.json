@@ -36,6 +36,11 @@
       "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./source": {
+      "bun": "./src/source.ts",
+      "types": "./dist/source.d.ts",
+      "import": "./dist/source.js"
     }
   },
   "publishConfig": {
@@ -53,6 +58,7 @@
   "dependencies": {
     "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
     "@distilled.cloud/framework-core": "workspace:*",
+    "fast-glob": "^3.3.2",
     "rolldown": "catalog:"
   },
   "devDependencies": {

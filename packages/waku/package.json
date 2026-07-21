@@ -44,6 +44,12 @@
       "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js",
       "default": "./dist/adapter.js"
+    },
+    "./source": {
+      "bun": "./src/source.ts",
+      "types": "./dist/source.d.ts",
+      "import": "./dist/source.js",
+      "default": "./dist/source.js"
     }
   },
   "publishConfig": {
@@ -59,11 +65,11 @@
     "prepublishOnly": "bun run clean && bun run build"
   },
   "dependencies": {
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
     "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
     "@distilled.cloud/framework-core": "workspace:*"
   },
   "devDependencies": {
-    "@distilled.cloud/cloudflare-runtime": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
     "hono": "^4.12.14",

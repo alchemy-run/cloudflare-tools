@@ -37,6 +37,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./source": {
+      "bun": "./src/source.ts",
+      "types": "./dist/source.d.ts",
+      "import": "./dist/source.js"
+    },
     "./entrypoints/server": {
       "types": "./dist/runtime/entrypoints/server.d.ts",
       "default": "./dist/runtime/entrypoints/server.js"

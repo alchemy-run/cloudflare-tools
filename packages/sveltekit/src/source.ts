@@ -172,9 +172,7 @@ export interface SvelteKitSourceOptions {
    */
   readonly kit?: Record<string, unknown> | undefined;
   /** Options for the wrangler-free Cloudflare adapter. */
-  readonly adapter?:
-    | Omit<CloudflareAdapterOptions, "root" | "platform">
-    | undefined;
+  readonly adapter?: Omit<CloudflareAdapterOptions, "root" | "platform"> | undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -266,14 +264,10 @@ const readGitIgnoreRules = (
   cwd: string,
 ): Effect.Effect<Array<string>, PlatformError> =>
   Effect.gen(function* () {
-    const rules = yield* fs
-      .readFileString(NodePath.join(cwd, ".gitignore"))
-      .pipe(
-        Effect.map((file) => file.split("\n")),
-        Effect.catchTag("PlatformError", () =>
-          Effect.succeed([] as Array<string>),
-        ),
-      );
+    const rules = yield* fs.readFileString(NodePath.join(cwd, ".gitignore")).pipe(
+      Effect.map((file) => file.split("\n")),
+      Effect.catchTag("PlatformError", () => Effect.succeed([] as Array<string>)),
+    );
     const parent = NodePath.dirname(cwd);
     if (parent === cwd || (yield* fs.exists(NodePath.join(cwd, ".git")))) {
       return rules;
@@ -292,15 +286,14 @@ const hashDirectory = Effect.fnUntraced(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const include = memo?.include ?? ["**/*"];
-  const exclude =
-    memo?.exclude ??
-    ["**/.git/**", ...gitignoreRulesToGlobs(yield* readGitIgnoreRules(fs, cwd))];
+  const exclude = memo?.exclude ?? [
+    "**/.git/**",
+    ...gitignoreRulesToGlobs(yield* readGitIgnoreRules(fs, cwd)),
+  ];
   const lockfile = memo?.lockfile ?? !(memo?.include || memo?.exclude);
   const [files, lockfilePath] = yield* Effect.all(
     [
-      Effect.promise(() =>
-        fg.glob(include, { cwd, ignore: exclude, onlyFiles: true, dot: true }),
-      ),
+      Effect.promise(() => fg.glob(include, { cwd, ignore: exclude, onlyFiles: true, dot: true })),
       lockfile
         ? Effect.map(
             findUp(fs, cwd, [
@@ -356,10 +349,7 @@ const hashSvelteKitInput = Effect.fnUntraced(function* (
       Effect.map((hash) => `${NodePath.relative(rootDir, NodePath.resolve(rootDir, cwd))}:${hash}`),
     );
   const [root, ...workspaceHashes] = yield* Effect.all(
-    [
-      hashWorkspace(rootDir, options.memo),
-      ...Array.from(workspaces, (cwd) => hashWorkspace(cwd)),
-    ],
+    [hashWorkspace(rootDir, options.memo), ...Array.from(workspaces, (cwd) => hashWorkspace(cwd))],
     { concurrency: "unbounded" },
   );
   const hash = yield* sha256Stable({
@@ -390,13 +380,13 @@ const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB (Cloudflare limit)
 const MAX_ASSET_COUNT = 20_000;
 
 const maybeReadString = (fs: FileSystem.FileSystem, file: string) =>
-  fs.readFileString(file).pipe(
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "NotFound"
-        ? Effect.succeed(undefined)
-        : Effect.fail(error),
-    ),
-  );
+  fs
+    .readFileString(file)
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+      ),
+    );
 
 const readAssetsDirectory = Effect.fnUntraced(function* (
   directory: string,
@@ -443,16 +433,11 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
         );
       }
       const hash = (yield* sha256Hex(content)).slice(0, 32);
-      return [
-        `/${name.replaceAll("\\", "/")}`,
-        { hash, size: content.byteLength },
-      ] as const;
+      return [`/${name.replaceAll("\\", "/")}`, { hash, size: content.byteLength }] as const;
     }),
     { concurrency: 16 },
   );
-  const manifest = Object.fromEntries(
-    [...entries].sort((a, b) => a[0].localeCompare(b[0])),
-  );
+  const manifest = Object.fromEntries([...entries].sort((a, b) => a[0].localeCompare(b[0])));
   const hash = yield* sha256Stable({ config, manifest, _headers, _redirects });
   return {
     directory,
@@ -468,19 +453,14 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
 // The provider
 // ─────────────────────────────────────────────────────────────────────
 
-const wrapFrameworkError = (error: {
-  readonly message: string;
-  readonly cause?: unknown;
-}) =>
+const wrapFrameworkError = (error: { readonly message: string; readonly cause?: unknown }) =>
   new SourceProviderError({
     provider: PROVIDER,
     message: error.message,
     cause: error.cause ?? error,
   });
 
-const assetsConfig = (
-  assets: SourceContext["assets"],
-): Record<string, unknown> | undefined => {
+const assetsConfig = (assets: SourceContext["assets"]): Record<string, unknown> | undefined => {
   if (assets === undefined || typeof assets === "string") {
     return undefined;
   }
@@ -495,17 +475,12 @@ const assetsConfig = (
  * where real Cloudflare bindings are not yet available (the
  * cloudflare-runtime Node-side bindings proxy is the follow-up seam).
  */
-const resolveStubEnv = (
-  env: Record<string, unknown> | undefined,
-): Record<string, unknown> => {
+const resolveStubEnv = (env: Record<string, unknown> | undefined): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(env ?? {})) {
     if (typeof value === "string") {
       out[key] = value;
-    } else if (
-      Redacted.isRedacted(value) &&
-      typeof Redacted.value(value) === "string"
-    ) {
+    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
       out[key] = Redacted.value(value);
     }
   }
@@ -541,9 +516,7 @@ const withRootCwd = <A, E, R>(
     ),
   );
 
-export const makeSvelteKitSource = (
-  options: SvelteKitSourceOptions,
-): SourceProvider => {
+export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProvider => {
   const rootDir = NodePath.resolve(options.rootDir ?? process.cwd());
   const frameworkOptions = (
     ctx: SourceContext,
@@ -562,9 +535,7 @@ export const makeSvelteKitSource = (
       const framework = yield* makeSvelteKit(frameworkOptions(ctx));
       const output = yield* withRootCwd(
         rootDir,
-        framework
-          .build({ root: rootDir })
-          .pipe(Effect.mapError(wrapFrameworkError)),
+        framework.build({ root: rootDir }).pipe(Effect.mapError(wrapFrameworkError)),
       );
       if (output.serverModules === undefined || output.serverModules.length === 0) {
         return yield* Effect.fail(

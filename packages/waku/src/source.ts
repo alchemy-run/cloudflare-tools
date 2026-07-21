@@ -614,10 +614,7 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
         Effect.gen(function* () {
           const waku = yield* FrameworkCore.Framework;
           return yield* waku.build({ root: rootDir });
-        }).pipe(
-          Effect.provide(framework),
-          Effect.mapError(asProviderError("Waku build failed")),
-        ),
+        }).pipe(Effect.provide(framework), Effect.mapError(asProviderError("Waku build failed"))),
       );
 
       if (output.serverModules === undefined || output.serverModules.length === 0) {

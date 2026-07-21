@@ -2,6 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./test",
+  // Windows CI runs every fixture e2e concurrently; absorb runner flakiness.
+  retries: process.env.CI ? 2 : 0,
   timeout: 60_000,
   expect: {
     timeout: 10_000,

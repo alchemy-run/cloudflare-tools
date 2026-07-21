@@ -4,6 +4,14 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import * as NodePath from "node:path";
+
+/**
+ * Module names in a BuildOutput are always POSIX-separated — they become
+ * workerd module names and worker-upload paths, where `\` is never valid.
+ * Filesystem paths stay platform-native; only names go through this.
+ */
+const toModuleName = (...segments: Array<string>): string =>
+  NodePath.join(...segments).replaceAll("\\", "/");
 import type * as Vite from "vite";
 import {
   sortServerModules,
@@ -161,7 +169,7 @@ export const makeBuildOutputCollector = (
         serverOutputs.set(environment, { root, outDir });
         const prefix = NodePath.relative(distDirectory ?? root, outDir);
         for (const file of Object.values(bundle)) {
-          const name = NodePath.join(prefix, file.fileName);
+          const name = toModuleName(prefix, file.fileName);
           const content = file.type === "chunk" ? file.code : file.source;
           serverModules.set(name, toOutputFile(name, content));
           if (file.type === "chunk") {
@@ -189,7 +197,7 @@ export const makeBuildOutputCollector = (
             for (const id of file.imports) {
               if (!isRscManifestId(id)) continue;
               const fileName = RSC_MANIFEST[id];
-              const manifestName = NodePath.join(prefix, fileName);
+              const manifestName = toModuleName(prefix, fileName);
               if (serverModules.has(manifestName)) continue;
               serverModules.set(
                 manifestName,
@@ -306,7 +314,7 @@ export const readServerModulesFromDisk = (
           const file = NodePath.join(options.directory, entry);
           const info = yield* fs.stat(file).pipe(Effect.mapError(readError));
           if (info.type !== "File") return undefined;
-          const name = NodePath.join(options.prefix ?? "", entry);
+          const name = toModuleName(options.prefix ?? "", entry);
           const content: string | Uint8Array = isTextFile(file)
             ? yield* fs.readFileString(file).pipe(Effect.mapError(readError))
             : yield* fs.readFile(file).pipe(Effect.mapError(readError));

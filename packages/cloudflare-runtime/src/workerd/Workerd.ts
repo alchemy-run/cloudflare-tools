@@ -340,9 +340,7 @@ const makeNode = () =>
 // `serve` waits forever. Bun's `node:child_process` implementation handles
 // stdio[3] correctly on Windows, so route Windows through the Node spawn path.
 export const WorkerdLive = Layer.sync(Workerd, () =>
-  typeof globalThis.Bun !== "undefined" && process.platform !== "win32"
-    ? makeBun()
-    : makeNode(),
+  typeof globalThis.Bun !== "undefined" && process.platform !== "win32" ? makeBun() : makeNode(),
 );
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;

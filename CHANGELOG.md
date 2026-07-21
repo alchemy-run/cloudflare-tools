@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.13.8](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.8) (2026-07-21)
+
+### Bug Fixes
+
+- **rolldown-plugin**: inject esmExternalRequirePlugin at top level - by John Royal in [#77](https://github.com/alchemy-run/cloudflare-tools/pull/77) [(7f77734)](https://github.com/alchemy-run/cloudflare-tools/commit/7f77734ef811f572134c34fecd1edf794602eb07)
+- **runtime**: workerd control-fd hang on Windows under Bun - by Michael K in [#75](https://github.com/alchemy-run/cloudflare-tools/pull/75) [(7e400a6)](https://github.com/alchemy-run/cloudflare-tools/commit/7e400a6766a6c2225eb615469a1e03d0c1cc472a)
+
 ## [v0.13.7](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.7) (2026-07-20)
 
 ### Bug Fixes

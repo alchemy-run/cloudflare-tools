@@ -73,7 +73,7 @@ export interface NextjsFrameworkOptions {
 export const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
 
 /** The server-module name of the worker entry (`serverModules[0]`). */
-export const WORKER_ENTRY_MODULE = NodePath.join("worker", Bundle.WORKER_ENTRY_NAME);
+export const WORKER_ENTRY_MODULE = `worker/${Bundle.WORKER_ENTRY_NAME}`;
 
 /** The OpenNext revalidation-queue Durable Object class. */
 export const DO_QUEUE_CLASS = "DOQueueHandler";

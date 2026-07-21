@@ -67,7 +67,11 @@ describe("bundleWorker", () => {
   beforeAll(async () => {
     const openNextDirectory = makeOpenNextFixture(root);
     await Effect.runPromise(bundleWorker({ openNextDirectory, outDirectory }));
-    files = NodeFs.readdirSync(outDirectory, { recursive: true }).map(String);
+    // Windows readdir yields backslash-separated relative paths; the
+    // assertions below match POSIX module-name shapes.
+    files = NodeFs.readdirSync(outDirectory, { recursive: true }).map((file) =>
+      String(file).replaceAll("\\", "/"),
+    );
   });
 
   afterAll(() => {

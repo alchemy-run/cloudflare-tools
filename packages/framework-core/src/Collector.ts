@@ -154,9 +154,16 @@ export const makeBuildOutputCollector = (
         if (skipEnvironments.has(environment)) {
           return;
         }
-        const root = NodePath.resolve(this.environment.config.root);
+        // Vite module ids are POSIX-separated even on Windows, so normalize
+        // the root the same way before the prefix comparison.
+        const root = NodePath.resolve(this.environment.config.root).replaceAll("\\", "/");
         for (const id of this.getModuleIds()) {
-          if (!NodePath.isAbsolute(id) || id.includes("node_modules") || id.startsWith(root)) {
+          const posixId = id.replaceAll("\\", "/");
+          if (
+            !NodePath.isAbsolute(id) ||
+            posixId.includes("node_modules") ||
+            posixId.startsWith(root)
+          ) {
             continue;
           }
           externalDirectories.add(NodePath.dirname(id));

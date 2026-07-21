@@ -61,7 +61,7 @@ export interface SourceHash {
   readonly bundle: string | undefined;
   readonly assets: string | undefined;
   readonly input: string | undefined;
-  readonly additionalWorkspaces: string[] | undefined;
+  readonly additionalWorkspaces: Array<string> | undefined;
 }
 
 /** Mirror of alchemy's `Bundle.BundleFile`. */
@@ -83,7 +83,7 @@ export interface SourceAssets {
 
 /** Mirror of alchemy's `SourceBuildOutput`. */
 export interface SourceBuildOutput {
-  readonly bundle: { readonly files: SourceBundleFile[]; readonly hash: string } | undefined;
+  readonly bundle: { readonly files: Array<SourceBundleFile>; readonly hash: string } | undefined;
   readonly assets: SourceAssets | undefined;
   readonly hash: SourceHash;
 }
@@ -92,7 +92,7 @@ export interface SourceBuildOutput {
 export interface SourceContext {
   readonly id: string;
   readonly workerName: string;
-  readonly compatibility: { readonly date: string; readonly flags: string[] };
+  readonly compatibility: { readonly date: string; readonly flags: Array<string> };
   readonly assets?: string | Record<string, unknown> | undefined;
 }
 
@@ -146,9 +146,9 @@ export interface SourceProvider {
  */
 export interface NextjsMemoOptions {
   /** Glob patterns of files to hash, relative to the project root. @default all files */
-  readonly include?: string[] | undefined;
+  readonly include?: Array<string> | undefined;
   /** Glob patterns to exclude from hashing. Build outputs (`.next`, `.open-next`, `dist`) and `node_modules` are always excluded. */
-  readonly exclude?: string[] | undefined;
+  readonly exclude?: Array<string> | undefined;
   /**
    * Include the nearest package-manager lockfile in the hash, even when it
    * lives above the project root (e.g. a monorepo root).
@@ -260,7 +260,7 @@ const ALWAYS_IGNORED_FILES = new Set([".DS_Store"]);
 const listProjectFiles = Effect.fn(function* (root: string, prune: ReadonlySet<string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const out: string[] = [];
+  const out: Array<string> = [];
   const walk = (relative: string): Effect.Effect<void, PlatformError, never> =>
     Effect.gen(function* () {
       const absolute = relative === "" ? root : path.join(root, relative);
@@ -281,7 +281,7 @@ const listProjectFiles = Effect.fn(function* (root: string, prune: ReadonlySet<s
   return out.sort();
 });
 
-const findUp = Effect.fn(function* (start: string, filenames: string[]) {
+const findUp = Effect.fn(function* (start: string, filenames: Array<string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let dir = start;

@@ -36,7 +36,7 @@ export interface SourceHash {
   readonly bundle: string | undefined;
   readonly assets: string | undefined;
   readonly input: string | undefined;
-  readonly additionalWorkspaces: string[] | undefined;
+  readonly additionalWorkspaces: Array<string> | undefined;
 }
 
 /** Mirror of alchemy `Bundle/Bundle.BundleFile`. */
@@ -48,7 +48,7 @@ export interface BundleFile {
 
 /** Mirror of alchemy `Bundle/Bundle.BundleOutput`. */
 export interface BundleOutput {
-  readonly files: [BundleFile, ...BundleFile[]];
+  readonly files: [BundleFile, ...Array<BundleFile>];
   readonly hash: string;
 }
 
@@ -73,7 +73,7 @@ export interface SourceBuildOutput {
 export interface SourceContext {
   readonly id: string;
   readonly workerName: string;
-  readonly compatibility: { readonly date: string; readonly flags: string[] };
+  readonly compatibility: { readonly date: string; readonly flags: Array<string> };
   readonly entry:
     | { readonly kind: "external" }
     | { readonly kind: "effect"; readonly exports: Record<string, unknown> };
@@ -88,10 +88,10 @@ export interface SourceContext {
 export interface DevContext extends SourceContext {
   readonly worker: {
     readonly name: string;
-    readonly bindings: BindingHook<BindingServices>[];
-    readonly durableObjectNamespaces: (RuntimeDurableObject & { uniqueKey: string })[];
+    readonly bindings: Array<BindingHook<BindingServices>>;
+    readonly durableObjectNamespaces: Array<RuntimeDurableObject & { uniqueKey: string }>;
     readonly hyperdrives: Record<string, Required<HyperdriveOrigin>>;
-    readonly queueConsumers: Effect.Effect<RuntimeQueueConsumer[]>;
+    readonly queueConsumers: Effect.Effect<Array<RuntimeQueueConsumer>>;
     readonly assets: RuntimeAssets | undefined;
   };
   readonly runtimeContext: Context.Context<RuntimeServices>;
@@ -166,9 +166,9 @@ export interface WakuSourceOptions {
  */
 export interface WakuMemoOptions {
   /** Glob patterns of files to hash, relative to the root. @default all files */
-  readonly include?: string[] | undefined;
+  readonly include?: Array<string> | undefined;
   /** Glob patterns to exclude. @default gitignore rules from the root up to the repo root */
-  readonly exclude?: string[] | undefined;
+  readonly exclude?: Array<string> | undefined;
   /**
    * Whether to include the nearest package-manager lockfile in the hash.
    * @default true when both `include` and `exclude` are unset; false otherwise
@@ -269,10 +269,10 @@ const compileIgnoreRule = (raw: string): RegExp | undefined => {
   return new RegExp(`${prefix}${body}(?:/.*)?$`);
 };
 
-const compileIgnoreRules = (rules: ReadonlyArray<string>): RegExp[] =>
+const compileIgnoreRules = (rules: ReadonlyArray<string>): Array<RegExp> =>
   rules.map(compileIgnoreRule).filter((regex): regex is RegExp => regex !== undefined);
 
-const compileIncludeGlobs = (globs: ReadonlyArray<string>): RegExp[] =>
+const compileIncludeGlobs = (globs: ReadonlyArray<string>): Array<RegExp> =>
   globs.map((glob) => new RegExp(`^${globBodyToRegExpSource(glob)}$`));
 
 const matchesAny = (regexes: ReadonlyArray<RegExp>, path: string): boolean =>
@@ -316,7 +316,7 @@ const findUp = Effect.fn(function* (startDir: string, filenames: ReadonlyArray<s
 const readGitIgnoreRules = Effect.fn(function* (rootDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const chain: string[][] = [];
+  const chain: Array<Array<string>> = [];
   let dir = rootDir;
   for (;;) {
     const gitignore = path.join(dir, ".gitignore");
@@ -337,8 +337,8 @@ const readGitIgnoreRules = Effect.fn(function* (rootDir: string) {
 });
 
 interface ResolvedMemo {
-  readonly include: RegExp[] | undefined;
-  readonly exclude: RegExp[];
+  readonly include: Array<RegExp> | undefined;
+  readonly exclude: Array<RegExp>;
   readonly lockfile: boolean;
 }
 
@@ -370,7 +370,7 @@ const hashDirectory = Effect.fn(function* (rootDir: string, memo: ResolvedMemo) 
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  const files: string[] = [];
+  const files: Array<string> = [];
   const walk: (dir: string, rel: string) => Effect.Effect<void, PlatformError> = Effect.fn(
     function* (dir: string, rel: string) {
       const entries = (yield* fs.readDirectory(dir)).sort();
@@ -623,13 +623,13 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
         );
       }
       const [entry, ...rest] = output.serverModules;
-      const files: [BundleFile, ...BundleFile[]] = [
+      const files: [BundleFile, ...Array<BundleFile>] = [
         ...[entry!, ...rest].map((file) => ({
           path: file.name.replaceAll("\\", "/"),
           content: file.content,
           hash: file.hash,
         })),
-      ] as [BundleFile, ...BundleFile[]];
+      ] as [BundleFile, ...Array<BundleFile>];
       const bundle: BundleOutput = {
         files,
         hash: sha256Object(files.map((file) => [file.path, file.hash])),

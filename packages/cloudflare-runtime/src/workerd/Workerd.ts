@@ -334,8 +334,13 @@ const makeNode = () =>
     ),
   );
 
+// On Windows, `Bun.spawn` cannot surface extra stdio pipes: `child.stdio[3]`
+// is a numeric fd that neither `Bun.file(fd)` (EMFILE dup) nor `node:fs`
+// (EBADF) can read, so the `--control-fd=3` listen events never arrive and
+// `serve` waits forever. Bun's `node:child_process` implementation handles
+// stdio[3] correctly on Windows, so route Windows through the Node spawn path.
 export const WorkerdLive = Layer.sync(Workerd, () =>
-  typeof globalThis.Bun !== "undefined" ? makeBun() : makeNode(),
+  typeof globalThis.Bun !== "undefined" && process.platform !== "win32" ? makeBun() : makeNode(),
 );
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;

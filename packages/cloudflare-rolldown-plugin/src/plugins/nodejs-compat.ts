@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { defineEnv } from "unenv";
 import { createPlugin } from "../factory.js";
+import type { BasePluginOptions } from "../options.js";
 import { hasNodejsAls, hasNodejsCompat, toPosixPath } from "../utils.js";
 
 const ASYNC_HOOKS_REGEXP = /^(node:)?async_hooks$/;
@@ -42,18 +43,21 @@ export interface UnenvApi {
   inject: { [injectedName: string]: string };
 }
 
+export const getUnenv = (options: BasePluginOptions) =>
+  defineEnv({
+    presets: [
+      getCloudflarePreset({
+        compatibilityDate: options.compatibilityDate,
+        compatibilityFlags: options.compatibilityFlags,
+      }),
+    ],
+  }).env;
+
 export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
   "nodejs-unenv",
   (options) => {
     if (!hasNodejsCompat(options.compatibilityFlags)) return;
-    const { alias, inject, external, polyfill } = defineEnv({
-      presets: [
-        getCloudflarePreset({
-          compatibilityDate: options.compatibilityDate,
-          compatibilityFlags: options.compatibilityFlags,
-        }),
-      ],
-    }).env;
+    const { alias, inject, polyfill, external } = getUnenv(options);
     const entries = new Set(Object.values(alias));
     for (const globalInject of Object.values(inject)) {
       if (typeof globalInject === "string") {
@@ -92,17 +96,6 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         },
       },
       rolldown: {
-        async options(options) {
-          const { esmExternalRequirePlugin } = await import("rolldown/plugins");
-          options.plugins = [
-            esmExternalRequirePlugin({
-              external: [...external],
-              skipDuplicateCheck: true,
-            }),
-            options.plugins,
-          ];
-          return options;
-        },
         resolveId: {
           filter: RESOLVE_ID_FILTER,
           handler(source, importer, options) {

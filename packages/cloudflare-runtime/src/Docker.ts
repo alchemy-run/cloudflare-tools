@@ -32,7 +32,7 @@ export class Docker extends Context.Service<
     readonly build: (tag: string, image: ContainerImage.Build) => Effect.Effect<void, SystemError>;
     readonly pull: (tag: string, image: ContainerImage.Pull) => Effect.Effect<void, SystemError>;
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
-    readonly removeStaleImageTags: (tag: string) => Effect.Effect<void, SystemError>;
+    readonly removeImageTag: (tag: string) => Effect.Effect<void>;
     readonly removeContainer: (tag: string) => Effect.Effect<void, SystemError>;
     readonly removeContainerSync: (tag: string) => void;
   }
@@ -347,25 +347,15 @@ export const DockerLive = Layer.effect(
               : Effect.void,
           ),
         ),
-      removeStaleImageTags: (tag) =>
-        inspect(tag, "{{ range .RepoTags }}{{ . }}\n{{ end }}").pipe(
-          Effect.flatMap((output) => {
-            const image = parseImageTag(tag);
-            if (!image.suffix) return Effect.void;
-            const stale = output
-              .split("\n")
-              .map((line) => line.trim())
-              .filter((repoTag) => {
-                const repoImage = parseImageTag(repoTag);
-                return (
-                  repoImage.name === image.name &&
-                  !!repoImage.suffix &&
-                  repoImage.suffix !== image.suffix
-                );
-              });
-            return stale.length > 0 ? Effect.asVoid(run(["rmi", ...stale])) : Effect.void;
-          }),
-          Effect.withLogSpan(`docker: remove stale images for ${tag}`),
+      // Untag ONLY the given tag (used by each runtime start's finalizer for
+      // the tag it created). Deliberately does not guess at sibling
+      // "<name>:<otherSuffix>" tags: concurrent/successive dev sessions of
+      // the same container class each hold their own random-suffix tag on
+      // the same underlying image, and pruning siblings untags an image a
+      // live workerd still needs (its container creates then fail forever).
+      removeImageTag: (tag) =>
+        Effect.asVoid(run(["rmi", tag])).pipe(
+          Effect.withLogSpan(`docker: remove image tag ${tag}`),
           Effect.ignore,
         ),
       removeContainer: (tag) =>
@@ -431,11 +421,6 @@ export const DockerLive = Layer.effect(
 
 const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;
-
-const parseImageTag = (tag: string) => {
-  const index = tag.lastIndexOf(":");
-  return index === -1 ? { name: tag } : { name: tag.slice(0, index), suffix: tag.slice(index + 1) };
-};
 
 const sendProxyRequest = (input: {
   socketPath: string;

@@ -22,6 +22,11 @@
       "outputs": [".cache/**/*.tsbuildinfo"]
     },
     "test": {
+      "dependsOn": ["^build"],
+      "env": ["TEST_MYSQL_URL", "TEST_POSTGRES_URL"],
+      "outputs": []
+    },
+    "@distilled.cloud/cloudflare-runtime#test": {
       "dependsOn": ["build", "^build"],
       "env": ["TEST_MYSQL_URL", "TEST_POSTGRES_URL"],
       "outputs": []

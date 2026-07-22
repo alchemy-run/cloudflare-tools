@@ -14,6 +14,12 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
+  build: {
+    // The hmr spec runs `next dev` inside the playwright worker process;
+    // keep playwright's babel require-hook away from Turbopack's dev chunks
+    // (their sectioned source maps break it with BABEL_GENERATE_ERROR).
+    external: ["**/.next/**"],
+  },
   projects: [
     {
       name: "chromium",

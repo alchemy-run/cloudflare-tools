@@ -23,6 +23,7 @@ export {
   type NextjsWorkerConfig,
 } from "./Nextjs.ts";
 export { RunnerError, runnerPath, runOpenNextBuild, type RunnerConfig } from "./Runner.ts";
+export * as DevServer from "./DevServer.ts";
 
 /**
  * The e2e-harness framework factory contract: default-export a

@@ -177,6 +177,22 @@ export interface NextjsSourceOptions {
   readonly minify?: boolean | undefined;
   /** Enable OpenNext debug logging (and verbose workerd output in dev). */
   readonly debug?: boolean | undefined;
+  /** Dev-server behavior (JSON-stable; does not affect the build). */
+  readonly dev?:
+    | {
+        /**
+         * - `"preview"` (default): build the OpenNext worker and serve it
+         *   under `cloudflare-runtime` (workerd) — production parity, no HMR.
+         * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
+         *   worker's bindings proxied from `cloudflare-runtime` onto
+         *   OpenNext's `getCloudflareContext()` contract. App code runs in
+         *   Node, not workerd — CF-specific runtime behavior and ISR/caching
+         *   semantics still need `"preview"`.
+         * @default "preview"
+         */
+        readonly mode?: "preview" | "hmr" | undefined;
+      }
+    | undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -480,6 +496,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       minify: options.minify,
       debug: options.debug,
     },
+    dev: options.dev,
   });
 
   const resolveRoot = Effect.fn(function* () {
@@ -536,9 +553,14 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       return { input: yield* hashInputTree(root, options) };
     }),
 
-    // v1 preview parity: build (or reuse `dist/build.json`) and serve the
-    // built worker under cloudflare-runtime (workerd) with the alchemy-managed
-    // binding wiring. No HMR; ISR revalidation writes are a no-op.
+    // Default ("preview"): always build on dev start (OpenNext memoizes
+    // where possible) and serve the built worker under cloudflare-runtime
+    // (workerd) with the alchemy-managed binding wiring. No HMR; ISR
+    // revalidation writes are a no-op.
+    // With `options.dev.mode: "hmr"`, the Framework instead runs the real
+    // `next dev` (Turbopack HMR) in Node — the alchemy-managed bindings are
+    // proxied through cloudflare-runtime's platform proxy onto OpenNext's
+    // getCloudflareContext() contract.
     dev: Effect.fn(function* (ctx) {
       const root = yield* resolveRoot();
       const queueConsumers = yield* ctx.worker.queueConsumers;

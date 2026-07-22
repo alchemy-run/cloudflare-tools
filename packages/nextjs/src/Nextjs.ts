@@ -17,6 +17,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 import * as Bundle from "./Bundle.ts";
+import * as DevServer from "./DevServer.ts";
 import * as Runner from "./Runner.ts";
 
 /**
@@ -63,6 +64,23 @@ export interface NextjsFrameworkOptions {
          * (workerd otherwise swallows uncaught worker exceptions).
          */
         readonly debug?: boolean | undefined;
+      }
+    | undefined;
+  /** Dev-server behavior. */
+  readonly dev?:
+    | {
+        /**
+         * - `"preview"` (default): build the OpenNext worker and serve it
+         *   under `cloudflare-runtime` (workerd) — production parity, no HMR.
+         * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node, with
+         *   the worker's bindings proxied from `cloudflare-runtime` and
+         *   planted on OpenNext's `getCloudflareContext()` contract
+         *   ({@link DevServer.start}). App code runs in Node, not workerd —
+         *   CF-specific runtime behavior and ISR/caching semantics still
+         *   need `"preview"`.
+         * @default "preview"
+         */
+        readonly mode?: "preview" | "hmr" | undefined;
       }
     | undefined;
   /** Project root. Defaults to the process working directory. */
@@ -208,11 +226,15 @@ const proxyToPort = (
  *   imported), then performs the final bundle pass wrangler would normally
  *   do at deploy time ({@link Bundle.bundleWorker}), populates the
  *   static-assets incremental cache, and returns the `BuildOutput` in-memory.
- * - `dev` (v1, preview parity) serves the built worker under
+ * - `dev` (default mode `"preview"`) serves the built worker under
  *   `@distilled.cloud/cloudflare-runtime` (workerd) with the OpenNext worker
  *   shape: `ASSETS` + run-worker-first, a `WORKER_SELF_REFERENCE` self
  *   service binding, and the same-script SQLite-backed revalidation-queue
  *   Durable Object. No HMR — file watching/rebuild is a later phase.
+ * - `dev` with `options.dev.mode: "hmr"` runs the real `next dev` (Turbopack
+ *   HMR) in Node with the worker's bindings proxied from
+ *   `cloudflare-runtime` ({@link DevServer.start}) — see the mode's fidelity
+ *   notes on {@link NextjsFrameworkOptions}.
  */
 export const make = (
   options?: NextjsFrameworkOptions,
@@ -291,6 +313,29 @@ export const make = (
 
       const dev = Effect.fn(function* (devOptions?: FrameworkCore.FrameworkDevOptions) {
         const root = yield* resolveRoot(devOptions?.root);
+
+        // Dev v2 ("hmr"): real `next dev` (Turbopack HMR) in Node, bindings
+        // proxied from cloudflare-runtime onto OpenNext's
+        // getCloudflareContext() contract. No OpenNext build involved.
+        if (options?.dev?.mode === "hmr") {
+          const worker = options?.vite?.worker;
+          const scope = yield* Effect.scope;
+          const context = yield* Layer.buildWithScope(makeRuntimeLayer(), scope).pipe(
+            Effect.mapError(fail("Failed to start the cloudflare-runtime services")),
+          );
+          const server = yield* DevServer.start({
+            root,
+            port: devOptions?.port,
+            bindings: worker?.bindings ?? [],
+            compatibilityDate: options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+            compatibilityFlags: [
+              ...new Set(["nodejs_compat", ...(options?.vite?.compatibilityFlags ?? [])]),
+            ],
+            ...(worker?.name !== undefined ? { proxyName: `${worker.name}-dev-proxy` } : {}),
+            logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
+          }).pipe(Effect.provideContext(context));
+          return { url: server.url.href };
+        }
 
         // Preview parity: always build on dev start (OpenNext memoizes where
         // it can). Watch + rebuild is a later phase.

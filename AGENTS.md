@@ -18,6 +18,7 @@ Code must pass linting, formatting, and typechecking. Use `bun run check` to run
 - `packages/cloudflare-runtime`: Effect-native local runtime for Cloudflare Workers, powered by `workerd`.
 - `packages/cloudflare-vite-plugin`: Vite plugin for Cloudflare Workers; composes `cloudflare-rolldown-plugin` and `cloudflare-runtime`.
 - `packages/framework-core`: Shared framework-integration core: the `BuildOutput` contract, the `alchemy:build-output` Vite collector plugin, the project module loader, and the `Framework` service contract.
+- `packages/nextjs`: Wrangler-free Next.js integration built on the `@opennextjs/cloudflare` build pipeline; implements the framework-core `Framework` service (build + final bundle pass + cloudflare-runtime dev).
 - `packages/sveltekit`: Wrangler-free SvelteKit integration implementing the `Framework` service (in-memory kit adapter + rolldown re-bundle for workerd; dev via kit's own Vite server with a stub platform).
 - `packages/waku`: Wrangler-free Waku integration implementing the `Framework` service (programmatic build/dev over `cloudflare-vite-plugin`, plus a fork of waku's cloudflare adapter).
 

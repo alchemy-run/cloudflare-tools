@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.13.9](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.9) (2026-07-22)
+
+### Bug Fixes
+
+- **runtime**: dev container image-tag race — scope cleanup to own tag - by sam in [#79](https://github.com/alchemy-run/cloudflare-tools/pull/79) [(d9df021)](https://github.com/alchemy-run/cloudflare-tools/commit/d9df021f2ce4ca57cdabeafeaa4f6c1f77e6cce9)
+
 ## [v0.13.8](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.8) (2026-07-21)
 
 ### Bug Fixes

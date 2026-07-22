@@ -91,10 +91,9 @@ export const resolveExportTarget = (entry: unknown): string | undefined => {
  *   (`createBuilder().buildApp()`) with the in-memory Cloudflare adapter,
  *   then re-bundles the node-flavored `_worker.js` output for workerd with
  *   rolldown + `@distilled.cloud/cloudflare-rolldown-plugin`, producing the
- *   `BuildOutput` contract (persisted to `dist/build.json`).
+ *   `BuildOutput` contract in-memory.
  * - `dev` runs kit's own Vite dev server (Node SSR, full HMR) with the stub
  *   platform from `options.dev.env`.
- * - `readBuildOutput` reads `dist/build.json` without rebuilding.
  */
 export const make: (
   options?: SvelteKitOptions,
@@ -260,10 +259,6 @@ export const make: (
         serverModules,
         externalWorkspaces,
       };
-      yield* FrameworkCore.writeBuildOutput(path.join(distDirectory, "build.json"), output).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.mapError((error) => fail("Failed to write build.json", error)),
-      );
       return output;
     });
 
@@ -302,13 +297,7 @@ export const make: (
       return { url };
     });
 
-    const readBuildOutput: Framework["Service"]["readBuildOutput"] = Effect.fn(function* () {
-      return yield* FrameworkCore.readBuildOutput(path.resolve(baseRoot, "dist/build.json")).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-      );
-    });
-
-    return Framework.of({ build, dev, readBuildOutput });
+    return Framework.of({ build, dev });
   });
 
 /**

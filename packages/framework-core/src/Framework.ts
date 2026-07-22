@@ -1,7 +1,6 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
-import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import type { BuildOutput } from "./BuildOutput.ts";
 
@@ -40,13 +39,13 @@ export interface FrameworkDevServer {
  * Semantics:
  *
  * - `build` runs the framework's production build and returns the
- *   {@link BuildOutput} contract (`serverModules` entry-first). Implementations
- *   also persist the result as `dist/build.json` (via `writeBuildOutput`) so
- *   preview flows stay uniform across frameworks.
+ *   {@link BuildOutput} contract (`serverModules` entry-first) purely
+ *   in-memory — implementations write nothing beyond the framework's own
+ *   build output. Callers that need persistence (e.g. the e2e harness's
+ *   `dist/build.json`) use the standalone `writeBuildOutput` /
+ *   `readBuildOutput` helpers themselves.
  * - `dev` starts the framework's dev server; it is scoped — closing the Scope
  *   stops the server.
- * - `readBuildOutput` loads the persisted `dist/build.json` from a previous
- *   `build` without rebuilding.
  *
  * A `SourceProvider` adapter maps `build` onto its own output shape
  * (`clientDirectory` → assets read, `serverModules` → bundle files entry-first,
@@ -60,6 +59,5 @@ export class Framework extends Context.Service<
     readonly dev: (
       options?: FrameworkDevOptions,
     ) => Effect.Effect<FrameworkDevServer, FrameworkError, Scope.Scope>;
-    readonly readBuildOutput: () => Effect.Effect<BuildOutput, PlatformError>;
   }
 >()("@distilled.cloud/framework-core/Framework") {}

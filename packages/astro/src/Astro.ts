@@ -104,10 +104,10 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
  * - `build` runs astro's programmatic `build(AstroInlineConfig)` with the
  *   forked adapter and the shared build-output collector on the `ssr`
  *   environment (skipping astro's node-side `astro`/`prerender`
- *   environments), then persists `dist/build.json`. `serverModules[0]` is the
- *   ssr entry chunk (`server/entry.mjs`); `clientDirectory` is `dist/client`,
- *   captured as a path so prerendered HTML written after the Vite build rides
- *   along.
+ *   environments), returning the `BuildOutput` in-memory. `serverModules[0]`
+ *   is the ssr entry chunk (`server/entry.mjs`); `clientDirectory` is
+ *   `dist/client`, captured as a path so prerendered HTML written after the
+ *   Vite build rides along.
  * - `dev` runs astro's `dev()`; the `ssr` environment executes inside workerd
  *   via the cloudflare-vite-plugin module runner, with in-memory bindings —
  *   no wrangler config anywhere. Closing the Scope stops the server.
@@ -129,12 +129,8 @@ export const make = (
         process.env.ASTRO_TELEMETRY_DISABLED ??= "1";
       });
 
-      const distDir = options?.astro?.outDir ?? "dist";
-
       const resolveRoot = (override: string | undefined) =>
         Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
-
-      const buildJsonPath = (root: string) => path.resolve(root, distDir, "build.json");
 
       const loadAstro = (root: string): Effect.Effect<AstroModule, FrameworkCore.FrameworkError> =>
         FrameworkCore.loadProjectModule<AstroModule>(root, "astro").pipe(
@@ -170,14 +166,9 @@ export const make = (
           // entry chunk on disk *after* the bundler finishes (the in-memory
           // capture still contains the `@@ASTRO_MANIFEST_REPLACE@@`
           // placeholder), and prunes the prerender-only chunks.
-          const output = yield* collector
+          return yield* collector
             .collect({ fromDisk: true })
             .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
-          yield* FrameworkCore.writeBuildOutput(buildJsonPath(root), output).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.mapError(fail("Failed to write build.json")),
-          );
-          return output;
         }),
         dev: Effect.fn(function* (devOptions) {
           const root = yield* resolveRoot(devOptions?.root);
@@ -201,12 +192,6 @@ export const make = (
             );
           }
           return { url };
-        }),
-        readBuildOutput: Effect.fn(function* () {
-          const root = yield* resolveRoot(undefined);
-          return yield* FrameworkCore.readBuildOutput(buildJsonPath(root)).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-          );
         }),
       });
     }),

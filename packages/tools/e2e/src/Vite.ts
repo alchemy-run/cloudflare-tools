@@ -7,8 +7,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import type * as ViteModule from "vite";
 import { Cwd } from "./Cwd.ts";
@@ -31,7 +29,6 @@ export class Vite extends Context.Service<
       pluginOptions?: CloudflareVitePluginOptions,
       config?: ViteModule.InlineConfig,
     ) => Effect.Effect<{ url: string; server: ViteModule.ViteDevServer }, ViteError, Scope.Scope>;
-    readonly readBuildOutput: () => Effect.Effect<BuildOutput, PlatformError>;
   }
 >()("@alchemy/Vite") {}
 
@@ -39,7 +36,6 @@ export const ViteLive = Layer.effect(
   Vite,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const cwd = yield* Cwd;
 
     const load = (root: string = cwd): Effect.Effect<typeof ViteModule, ViteError> =>
@@ -72,20 +68,13 @@ export const ViteLive = Layer.effect(
           },
           catch: (error) => new ViteError({ message: "Failed to build", cause: error }),
         });
-        const result = yield* collector
+        return yield* collector
           .collect()
           .pipe(
             Effect.mapError(
               (error) => new ViteError({ message: error.message, cause: error.cause }),
             ),
           );
-        yield* FrameworkCore.writeBuildOutput(path.resolve(cwd, "dist/build.json"), result).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.mapError(
-            (error) => new ViteError({ message: "Failed to write build.json", cause: error }),
-          ),
-        );
-        return result;
       }),
       dev: Effect.fn(function* (pluginOptions, config) {
         const vite = yield* load(config?.root);
@@ -111,11 +100,6 @@ export const ViteLive = Layer.effect(
           url,
           server,
         };
-      }),
-      readBuildOutput: Effect.fn(function* () {
-        return yield* FrameworkCore.readBuildOutput(path.resolve(cwd, "dist/build.json")).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
       }),
     });
   }),

@@ -16,7 +16,7 @@ A fixture's `package.json` scripts call the `e2e` bin:
 {
   "scripts": {
     "dev": "e2e dev", // Framework.dev — the framework's dev server
-    "build": "e2e build", // Framework.build — persists dist/build.json
+    "build": "e2e build", // Framework.build; the harness persists dist/build.json
     "preview": "e2e preview", // miniflare over dist/build.json
     "test": "playwright test",
   },
@@ -85,7 +85,7 @@ import { Framework } from "@distilled.cloud/framework-core";
 import * as Layer from "effect/Layer";
 
 export default (options: Options): Layer.Layer<Framework> =>
-  Layer.effect(Framework /* ... build/dev/readBuildOutput over waku ... */);
+  Layer.effect(Framework /* ... build/dev over waku ... */);
 ```
 
 ### Options flow
@@ -129,7 +129,6 @@ class Framework extends Context.Service<
     readonly dev: (
       options?: FrameworkDevOptions,
     ) => Effect<FrameworkDevServer, FrameworkError, Scope.Scope>; // { url: string }
-    readonly readBuildOutput: () => Effect<BuildOutput, PlatformError>;
   }
 >()("@distilled.cloud/framework-core/Framework") {}
 ```
@@ -137,19 +136,23 @@ class Framework extends Context.Service<
 Semantics every implementation must honor:
 
 - **`build`** runs the framework's production build and returns the
-  `BuildOutput` contract. It must **also persist the result to
-  `<fixture>/dist/build.json`** via framework-core's `writeBuildOutput` — this
-  is what makes `preview` uniform across frameworks. Errors surface as
-  `FrameworkError` (set the `framework` field to your framework name).
+  `BuildOutput` contract **purely in-memory** — implementations write nothing
+  beyond the framework's own build output (no `dist/build.json`; persistence
+  is the harness's job, see below). Errors surface as `FrameworkError` (set
+  the `framework` field to your framework name).
 - **`dev`** starts the framework's dev server and returns `{ url }`. It is
   scoped: closing the `Scope` must stop the server. Honor
   `FrameworkDevOptions.port` when given.
-- **`readBuildOutput`** loads the persisted `dist/build.json` (framework-core's
-  `readBuildOutput`) without rebuilding.
 - `FrameworkBuildOptions.root` / `FrameworkDevOptions.root` override the
   project root (default: the configured root / cwd).
 
 ### The `dist/build.json` convention (`BuildOutput`)
+
+`dist/build.json` is the **harness's** E2E persistence mechanism, not part of
+the `Framework` contract: `e2e build` persists the returned `BuildOutput`
+there itself (framework-core's `writeBuildOutput`), and `e2e preview` reads
+it back (framework-core's `readBuildOutput`), so preview stays uniform across
+frameworks without any framework writing files into user projects.
 
 `BuildOutput` (framework-core `BuildOutput.ts`) is the cross-framework build
 contract:
@@ -166,7 +169,7 @@ contract:
   `collectExternalWorkspaces`.
 - `distDirectory` — the build's root output directory (e.g. `<root>/dist`).
 
-Persist with `writeBuildOutput(path, output)` and read with
+The harness persists with `writeBuildOutput(path, output)` and reads with
 `readBuildOutput(path)` — they handle the JSON round-trip (Buffer revival for
 binary modules, `externalWorkspaces` Set). Vite-based frameworks can produce
 the whole shape with `makeBuildOutputCollector`; frameworks whose final
@@ -175,12 +178,14 @@ bundles land on disk after the bundler (SvelteKit, Next.js) can use
 
 ## How the harness consumes the contract
 
-- `e2e build` → `Framework.build()`.
+- `e2e build` → `Framework.build()`, then the harness persists the returned
+  `BuildOutput` to `<fixture>/dist/build.json` (`Server.buildAndPersist`).
 - `e2e dev` (and `Server.dev()` / `Playwright.make("dev")`) →
   `Framework.dev()`; the harness wraps the returned `url` with fetch helpers.
-- `e2e preview` (and `Server.live()` / `Playwright.make("live")`) →
-  `Framework.readBuildOutput()`, falling back to `Framework.build()` when
-  `dist/build.json` is missing or unreadable; then serves `serverModules` +
-  `clientDirectory` through miniflare (`@distilled.cloud/test-utils/miniflare`)
-  with the fixture's `options.miniflare`. The framework implementation is not
-  involved in serving preview — only in producing a correct `BuildOutput`.
+- `e2e preview` (and `Server.live()` / `Playwright.make("live")`) → reads
+  `dist/build.json` (framework-core's `readBuildOutput`), falling back to
+  `Framework.build()` + persist when it is missing or unreadable; then serves
+  `serverModules` + `clientDirectory` through miniflare
+  (`@distilled.cloud/test-utils/miniflare`) with the fixture's
+  `options.miniflare`. The framework implementation is not involved in
+  serving preview — only in producing a correct `BuildOutput`.

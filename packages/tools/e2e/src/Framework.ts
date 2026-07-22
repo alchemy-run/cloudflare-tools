@@ -37,7 +37,6 @@ export const makeViteFramework = (options: Options.Options): Options.Options.Fra
               Effect.map(({ url }) => ({ url })),
               Effect.mapError(wrapError),
             ),
-        readBuildOutput: () => vite.readBuildOutput(),
       });
     }),
   ).pipe(Layer.provide(Vite.ViteLive));

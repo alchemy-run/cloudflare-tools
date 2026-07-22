@@ -207,7 +207,7 @@ const proxyToPort = (
  *   vendors the two thin config wrappers so no wrangler code is ever
  *   imported), then performs the final bundle pass wrangler would normally
  *   do at deploy time ({@link Bundle.bundleWorker}), populates the
- *   static-assets incremental cache, and persists `dist/build.json`.
+ *   static-assets incremental cache, and returns the `BuildOutput` in-memory.
  * - `dev` (v1, preview parity) serves the built worker under
  *   `@distilled.cloud/cloudflare-runtime` (workerd) with the OpenNext worker
  *   shape: `ASSETS` + run-worker-first, a `WORKER_SELF_REFERENCE` self
@@ -241,7 +241,6 @@ export const make = (
         cacheDirectory: path.resolve(root, ".open-next", "cache"),
         distDirectory: path.resolve(root, "dist"),
         workerDirectory: path.resolve(root, "dist", "worker"),
-        buildJson: path.resolve(root, "dist", "build.json"),
       });
 
       const build = Effect.fn(function* (buildOptions?: FrameworkCore.FrameworkBuildOptions) {
@@ -287,26 +286,15 @@ export const make = (
           serverModules: FrameworkCore.sortServerModules(files, WORKER_ENTRY_MODULE),
           externalWorkspaces: new Set(),
         };
-        yield* FrameworkCore.writeBuildOutput(p.buildJson, output).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.mapError(fail("Failed to write build.json")),
-        );
         return output;
-      });
-
-      const readBuildOutput = Effect.fn(function* () {
-        const root = yield* resolveRoot(undefined);
-        return yield* FrameworkCore.readBuildOutput(paths(root).buildJson).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
       });
 
       const dev = Effect.fn(function* (devOptions?: FrameworkCore.FrameworkDevOptions) {
         const root = yield* resolveRoot(devOptions?.root);
 
-        // Preview parity: reuse the persisted build when present, build
-        // otherwise. (Watch + rebuild is a later phase.)
-        const output = yield* readBuildOutput().pipe(Effect.catch(() => build({ root })));
+        // Preview parity: always build on dev start (OpenNext memoizes where
+        // it can). Watch + rebuild is a later phase.
+        const output = yield* build({ root });
         if (output.serverModules === undefined || output.serverModules.length === 0) {
           return yield* Effect.fail(fail("The build produced no server modules")(undefined));
         }
@@ -375,7 +363,6 @@ export const make = (
       return FrameworkCore.Framework.of({
         build: (buildOptions) => build(buildOptions),
         dev: (devOptions) => dev(devOptions),
-        readBuildOutput: () => readBuildOutput(),
       });
     }),
   );

@@ -11,8 +11,9 @@ const build = Command.make(
   "build",
   {},
   Effect.fn(function* () {
-    const framework = yield* Framework;
-    yield* framework.build();
+    // Build, then persist the BuildOutput to dist/build.json (the harness's
+    // E2E persistence mechanism — `e2e preview` serves from it).
+    yield* Server.buildAndPersist;
   }),
 );
 

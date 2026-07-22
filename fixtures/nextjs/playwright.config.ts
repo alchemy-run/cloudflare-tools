@@ -4,9 +4,13 @@ export default defineConfig({
   testDir: "./test",
   // Windows CI runs every fixture e2e concurrently; absorb runner flakiness.
   retries: process.env.CI ? 2 : 0,
-  // The dev worker fixture may fall back to a full OpenNext build when
-  // dist/build.json is missing, so keep generous timeouts.
+  // The dev worker fixture runs a full OpenNext build on start (preview
+  // parity — no build.json reuse), so keep generous timeouts.
   timeout: 120_000,
+  // Serialize workers: the dev fixture's OpenNext build rewrites
+  // `.open-next/assets` on disk, which a concurrently-running live
+  // (miniflare) worker serves from — parallel workers race on it.
+  workers: 1,
   expect: {
     timeout: 10_000,
   },

@@ -2,7 +2,7 @@
 
 Wrangler-free [Waku](https://waku.gg) integration for Cloudflare Workers.
 Implements `@distilled.cloud/framework-core`'s `Framework` service —
-programmatic `build` / `dev` / `readBuildOutput` over
+programmatic `build` / `dev` over
 `@distilled.cloud/cloudflare-vite-plugin` — with **no wrangler dependency and
 no wrangler.json/toml read or written**.
 
@@ -20,8 +20,8 @@ no wrangler.json/toml read or written**.
   `unstable_combinedPlugins`, with `globalThis.__WAKU_START_PREVIEW_SERVER__`
   set so the SSG step works. The `BuildOutput` is collected with a
   post-`buildApp` disk re-read (waku writes `__waku_build_metadata.js` and
-  prunes static-only chunks after the bundler finishes) and persisted to
-  `dist/build.json`.
+  prunes static-only chunks after the bundler finishes) and returned
+  in-memory (the e2e harness persists it to `dist/build.json` itself).
 - **`dev`** replicates waku's `runDev` with the cloudflare plugin injected, so
   the rsc environment runs in workerd with in-memory bindings and HMR.
 - **`./adapter`** is a ~200-line fork of `waku/adapters/cloudflare` (built

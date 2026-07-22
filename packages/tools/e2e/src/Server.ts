@@ -1,4 +1,10 @@
-import { Framework, type FrameworkError } from "@distilled.cloud/framework-core";
+import {
+  Framework,
+  FrameworkError,
+  readBuildOutput,
+  writeBuildOutput,
+  type BuildOutput,
+} from "@distilled.cloud/framework-core";
 import * as Miniflare from "@distilled.cloud/test-utils/miniflare";
 import {
   moduleTypeFromExtension,
@@ -6,10 +12,12 @@ import {
 } from "@distilled.cloud/test-utils/miniflare-module";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import { cast } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
+import { Cwd } from "./Cwd.ts";
 import * as Options from "./Options.ts";
 
 export interface Instance {
@@ -32,16 +40,56 @@ export class Server extends Context.Service<
   }
 >()("@distilled.cloud/e2e/Server") {}
 
+/**
+ * Where the harness persists a fixture's `BuildOutput`, relative to the
+ * fixture root. Persistence is the harness's E2E mechanism (preview serves
+ * from it) — it is NOT part of the `Framework` contract; `Framework.build`
+ * returns the `BuildOutput` purely in-memory.
+ */
+export const BUILD_OUTPUT_FILE = "dist/build.json";
+
+/**
+ * Run `Framework.build` and persist the returned `BuildOutput` to
+ * {@link BUILD_OUTPUT_FILE} (framework-core's `writeBuildOutput`), so
+ * `preview` can serve it without rebuilding.
+ */
+export const buildAndPersist: Effect.Effect<
+  BuildOutput,
+  FrameworkError,
+  Framework | FileSystem.FileSystem | Path.Path
+> = Effect.gen(function* () {
+  const framework = yield* Framework;
+  const path = yield* Path.Path;
+  const cwd = yield* Cwd;
+  const output = yield* framework.build();
+  yield* writeBuildOutput(path.resolve(cwd, BUILD_OUTPUT_FILE), output).pipe(
+    Effect.mapError(
+      (cause) => new FrameworkError({ message: "Failed to write build.json", cause }),
+    ),
+  );
+  return output;
+});
+
 export const layer = Layer.effect(
   Server,
   Effect.gen(function* () {
     const framework = yield* Framework;
+    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const cwd = yield* Cwd;
     const options = yield* Options.load();
 
+    const buildJsonPath = path.resolve(cwd, BUILD_OUTPUT_FILE);
+    const persistedBuild = buildAndPersist.pipe(
+      Effect.provideService(Framework, framework),
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
+
     const live = () =>
-      framework.readBuildOutput().pipe(
-        Effect.catch(() => framework.build()),
+      readBuildOutput(buildJsonPath).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.catch(() => persistedBuild),
         Effect.flatMap((build) => {
           const modules = build.serverModules?.flatMap(
             (module): MiniflareModule | Array<MiniflareModule> => {

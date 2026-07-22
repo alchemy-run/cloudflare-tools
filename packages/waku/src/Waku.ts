@@ -5,7 +5,7 @@ import * as FrameworkCore from "@distilled.cloud/framework-core";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
+import type * as Path from "effect/Path";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import type * as ViteModule from "vite";
@@ -238,10 +238,10 @@ interface ProjectModules {
  * The Waku implementation of framework-core's `Framework` service.
  *
  * - `build` replicates waku's `runBuild` (`vite.createBuilder` +
- *   `combinedPlugins` + the SSG preview-server global), collects the
+ *   `combinedPlugins` + the SSG preview-server global) and collects the
  *   `BuildOutput` with a post-`buildApp` disk re-read (waku writes
  *   `__waku_build_metadata.js` and prunes static-only chunks after the
- *   bundler finishes), and persists `dist/build.json`.
+ *   bundler finishes). The result is returned in-memory only.
  * - `dev` replicates waku's `runDev` with the cloudflare vite plugin injected
  *   inside waku's `config.vite.plugins`, so the rsc environment runs in
  *   workerd with in-memory bindings (no wrangler config anywhere).
@@ -253,17 +253,12 @@ export const make = (
     FrameworkCore.Framework,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
 
       const fail = (message: string) => (cause: unknown) =>
         new FrameworkCore.FrameworkError({ framework: "waku", message, cause });
 
-      const distDir = options?.waku?.distDir ?? "dist";
-
       const resolveRoot = (override: string | undefined) =>
         Effect.sync(() => override ?? options?.root ?? process.cwd());
-
-      const buildJsonPath = (root: string) => path.resolve(root, distDir, "build.json");
 
       const loadProject: (
         root: string,
@@ -345,14 +340,9 @@ export const make = (
           // Disk re-read: waku writes `__waku_build_metadata.js` and prunes
           // static-only server chunks during `buildApp` hooks, after the
           // in-memory `writeBundle` capture.
-          const output = yield* collector
+          return yield* collector
             .collect({ fromDisk: true })
             .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
-          yield* FrameworkCore.writeBuildOutput(buildJsonPath(root), output).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.mapError(fail("Failed to write build.json")),
-          );
-          return output;
         }),
         dev: Effect.fn(function* (devOptions) {
           const root = yield* resolveRoot(devOptions?.root);
@@ -386,12 +376,6 @@ export const make = (
             );
           }
           return { url };
-        }),
-        readBuildOutput: Effect.fn(function* () {
-          const root = yield* resolveRoot(undefined);
-          return yield* FrameworkCore.readBuildOutput(buildJsonPath(root)).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-          );
         }),
       });
     }),

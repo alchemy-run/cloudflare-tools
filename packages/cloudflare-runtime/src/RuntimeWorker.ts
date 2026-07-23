@@ -14,6 +14,12 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
   /**
+   * Workflows whose `WorkflowEntrypoint` class is exported by this worker.
+   * Each entry hosts a local engine service (`workflows:<name>`) in this
+   * process and is published to the dev registry for cross-instance bindings.
+   */
+  readonly workflows?: ReadonlyArray<Workflow>;
+  /**
    * Queues this worker consumes via its `queue()` handler. Each consumed
    * queue gets an in-memory broker hosted in this worker's process; producers
    * (local or in other dev instances) deliver to it.
@@ -60,4 +66,20 @@ export interface DurableObjectNamespace {
    * it as `ctx.container`.
    */
   container?: ContainerImage;
+}
+
+export interface Workflow {
+  /**
+   * Logical name of the workflow. Used as the engine identity
+   * (`workflows:<workflowName>`) and published to the dev registry.
+   */
+  workflowName: string;
+  /**
+   * Class name of the `WorkflowEntrypoint` exported by this worker.
+   */
+  className: string;
+  /**
+   * Optional step limit enforced by the local workflow engine.
+   */
+  stepLimit?: number;
 }

@@ -32,6 +32,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as vite from "vite";
+import { resolveConfig } from "vocs/config";
 import { vocs } from "vocs/vite";
 
 /** Fixture-side extras that don't fit the shared harness options. */
@@ -83,6 +84,104 @@ const sharedViteConfig = {
   },
 } satisfies vite.InlineConfig;
 
+const VIRTUAL_USER_CONFIG = "virtual:fixtures-vocs/user-config";
+const RESOLVED_VIRTUAL_USER_CONFIG = `\0${VIRTUAL_USER_CONFIG}`;
+
+/**
+ * Bridges vocs's runtime config resolution onto workerd.
+ *
+ * Vocs's server code calls `Config.resolve({ server: true })` at request time
+ * (middleware, api routes, the ssr entry). In production that branch assumes
+ * the Node server layout — `import.meta.dirname` + an on-disk
+ * `dist/server/vocs.config.js` — neither of which exists inside workerd
+ * (upstream vocs has node/vercel/netlify adapters only; there is no workers
+ * deploy path to mirror). This plugin:
+ *
+ * 1. transforms vocs's `internal/config.js` in the bundled server
+ *    environments so every `server: true` resolution (dev and prod) returns
+ *    the build-time-resolved config from a virtual module, and guards the
+ *    `process.cwd()` fallback for non-Node runtimes;
+ * 2. serves that virtual module with the config resolved once in Node via
+ *    vocs's own `resolveConfig` (functions are dropped from the JSON —
+ *    `define` recomputes those defaults at runtime; the fixture's config is
+ *    plain data).
+ */
+const workerdConfigBridge = (root: string): vite.Plugin => {
+  let serialized: string | undefined;
+  const serializeUserConfig = async (): Promise<string> => {
+    serialized ??= JSON.stringify(await resolveConfig({ rootDir: root }), (_, value) =>
+      typeof value === "function" ? undefined : value,
+    );
+    return serialized;
+  };
+  return {
+    name: "fixtures-vocs:workerd-config-bridge",
+    resolveId(id) {
+      if (id === VIRTUAL_USER_CONFIG) return RESOLVED_VIRTUAL_USER_CONFIG;
+      return;
+    },
+    async load(id) {
+      if (id === RESOLVED_VIRTUAL_USER_CONFIG) {
+        return `export default ${await serializeUserConfig()};`;
+      }
+      return;
+    },
+    transform(code, id) {
+      // In the production build the modules are vocs's shipped
+      // `dist/internal/*.js`; in dev, vite serves vocs's TS sources
+      // (`src/internal/*.ts`) through the module runner, so both shapes (and
+      // the raw-TS formatting, which user plugins see before vite's esbuild
+      // transform) must match.
+      // Strip the query (dev serves ids like `.../config.js?v=<hash>`).
+      const normalized = (id.split("?")[0] ?? id).replaceAll("\\", "/");
+      const isVocsInternal = (name: string) =>
+        normalized.endsWith(`/vocs/dist/internal/${name}.js`) ||
+        normalized.endsWith(`/vocs/src/internal/${name}.ts`);
+      const mustReplace = (source: string, pattern: RegExp, replacement: string): string => {
+        if (!pattern.test(source)) {
+          throw new Error(
+            `fixtures-vocs: ${normalized} no longer matches the workerd config bridge ` +
+              `pattern ${pattern} — update the transform in fixtures/vocs/framework.ts ` +
+              "for the installed vocs version",
+          );
+        }
+        return source.replace(pattern, replacement);
+      };
+      // `deserializeFunctions` revives `_vocs-fn_`-serialized config functions
+      // with `new Function`, which workerd forbids (no dynamic code
+      // generation). Fall back to dropping the function — the only serialized
+      // functions in this fixture's config are vocs's default search
+      // `boostDocument` implementations, which the browser (not workerd)
+      // executes. Node paths (SSG, dev tooling) still revive normally.
+      if (isVocsInternal("config-serializer")) {
+        return mustReplace(
+          code,
+          // Not the escaped copy inside `deserializeFunctionsStringified` —
+          // that template's backticks/dollars are backslash-escaped.
+          /return new Function\(`return \$\{value\.slice\(9\)\}`\)\(\);?/,
+          "try { return new Function(`return ${value.slice(9)}`)(); } catch { return undefined; }",
+        );
+      }
+      if (!isVocsInternal("config")) return;
+      let result = mustReplace(
+        code,
+        /const \{ server, rootDir = process\.cwd\(\) \} = options;?/,
+        "const { server } = options;\n" +
+          "  const rootDir = options.rootDir ?? (() => { try { return process.cwd(); } catch { return '/'; } })();",
+      );
+      result = mustReplace(
+        result,
+        /if \(server && process\.env\['NODE_ENV'\] === 'production'\) \{\s*const configPath = path\.resolve\(import\.meta\.dirname, '\.\.\/vocs\.config\.js'\);?\s*const resolved = \(await import\(\/\* @vite-ignore \*\/ configPath\)\)\.default( as define\.Options)?;?\s*return define\(\{ \.\.\.resolved, rootDir \}\);?\s*\}/,
+        "if (server) {\n" +
+          `    const resolved = (await import(${JSON.stringify(VIRTUAL_USER_CONFIG)})).default;\n` +
+          "    return define(resolved);\n" +
+          "  }",
+      );
+      return result;
+    },
+  };
+};
+
 /**
  * Replicates waku's `cmd-build.ts` `startPreviewServerImpl`: the SSG step of
  * `builder.buildApp()` (the adapter's `build`) calls
@@ -98,7 +197,7 @@ const setPreviewServerGlobal = (root: string, adapterPath: string): void => {
         configFile: false,
         root,
         ...sharedViteConfig,
-        plugins: [react(), vocs({ unstable_adapter: adapterPath })],
+        plugins: [react(), workerdConfigBridge(root), vocs({ unstable_adapter: adapterPath })],
       });
       const baseUrl = server.resolvedUrls?.local[0];
       if (!baseUrl) {
@@ -185,6 +284,7 @@ export const make = (
                   plugins: [
                     react(),
                     ...plugins,
+                    workerdConfigBridge(root),
                     vocs({ unstable_adapter: adapterPath }),
                     collector.plugin,
                   ],
@@ -229,7 +329,12 @@ export const make = (
                   configFile: false,
                   root,
                   ...sharedViteConfig,
-                  plugins: [react(), ...plugins, vocs({ unstable_adapter: adapterPath })],
+                  plugins: [
+                    react(),
+                    ...plugins,
+                    workerdConfigBridge(root),
+                    vocs({ unstable_adapter: adapterPath }),
+                  ],
                   ...(port !== undefined
                     ? { server: { port, strictPort: devOptions?.port !== undefined } }
                     : undefined),

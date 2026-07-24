@@ -1,5 +1,12 @@
 {
-  "include": ["src", "test", "e2e.config.ts", "framework.ts", "playwright.config.ts", "vocs.config.ts"],
+  "include": [
+    "src",
+    "test",
+    "e2e.config.ts",
+    "framework.ts",
+    "playwright.config.ts",
+    "vocs.config.ts"
+  ],
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,

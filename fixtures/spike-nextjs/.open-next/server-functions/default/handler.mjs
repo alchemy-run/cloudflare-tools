@@ -1,1 +1,0 @@
-export { handler } from "./fixtures/spike-nextjs/handler.mjs";

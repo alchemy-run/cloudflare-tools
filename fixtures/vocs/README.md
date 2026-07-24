@@ -6,7 +6,7 @@ framework) on Cloudflare Workers.
 Vocs 2.x is built on **waku**: its `vocs()` vite plugin (public export
 `vocs/vite`) composes waku's own `waku/vite-plugins` (environments,
 adapter-alias, static-build, ...) with vocs's mdx/config/patch plugins, and it
-peer-depends on `waku ^1.0.0-beta.6`. It is *not* a fully static site: page
+peer-depends on `waku ^1.0.0-beta.6`. It is _not_ a fully static site: page
 bodies are prerendered RSC elements, but the document shell is SSR'd per
 request and there are dynamic API routes (`/api/search`, `/api/og`,
 `/api/mcp`, `/api/feedback`) — so it runs as a worker.
@@ -32,6 +32,31 @@ the entire worker configuration in memory; `vocs.config.ts` is vocs's own
   `"use client"` component embedded in MDX, hydrated in the browser.
 - **Static assets** — `public/hello.txt` rides along in `dist/public`, next to
   vocs's build-time artifacts (`llms.txt`, `llms-full.txt`).
+
+## Workerd bridges (and why vocs is pinned exactly)
+
+Upstream vocs only ships node/vercel/netlify adapters — nothing targets a
+no-eval, no-fs runtime. Two seams needed fixture-side bridging, implemented as
+the `workerdConfigBridge` vite plugin in `framework.ts`:
+
+1. **Runtime config resolution** — vocs's server code calls
+   `Config.resolve({ server: true })` per request; in production that branch
+   dynamically imports an on-disk `dist/server/vocs.config.js` via
+   `import.meta.dirname` (Node server layout), which crashes in workerd. The
+   bridge rewrites that branch to import a virtual module carrying the
+   config resolved once at build time in Node.
+2. **`new Function` in the config deserializer** — vocs serializes
+   config functions (`_vocs-fn_` markers; in this fixture only the default
+   search `boostDocument`s) and revives them with `new Function`, which
+   workerd forbids. The bridge makes revival fall back to `undefined` when
+   code generation is disallowed; browser/Node paths still revive normally.
+
+Both transforms hard-fail with a descriptive error if the installed vocs no
+longer matches the expected internals — which is why `vocs` is pinned to an
+exact version. On a bump, re-check the patterns in `framework.ts`.
+
+`nodejs_compat` (not just `nodejs_als`) is required: vocs's server bundle
+imports `node:fs` and friends (guarded with try/catch at runtime).
 
 ## Commands
 

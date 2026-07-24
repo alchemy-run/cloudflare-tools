@@ -35,17 +35,20 @@
     ".": {
       "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./cloudflare": {
       "bun": "./src/cloudflare.ts",
       "types": "./dist/cloudflare.d.ts",
-      "import": "./dist/cloudflare.js"
+      "import": "./dist/cloudflare.js",
+      "default": "./dist/cloudflare.js"
     },
     "./source": {
       "bun": "./src/source.ts",
       "types": "./dist/source.d.ts",
-      "import": "./dist/source.js"
+      "import": "./dist/source.js",
+      "default": "./dist/source.js"
     },
     "./entrypoints/server": {
       "types": "./dist/runtime/entrypoints/server.d.ts",

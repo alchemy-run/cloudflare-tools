@@ -1,0 +1,13 @@
+var R=require("../chunks/ssr/[turbopack]_runtime.js")("server/app/page.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0f5-gat._.js")
+R.c("server/chunks/ssr/1pge_next_dist_esm_build_templates_app-page_118b82b.js")
+R.c("server/chunks/ssr/[root-of-the-server]__1rwox8g._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0zr3bdp._.js")
+R.c("server/chunks/ssr/fixtures_spike-nextjs_app_layout_jsx_034gghl._.js")
+R.c("server/chunks/ssr/1pge_next_dist_client_components_08m_f2a._.js")
+R.c("server/chunks/ssr/1pge_next_dist_client_components_builtin_forbidden_10m53kv.js")
+R.c("server/chunks/ssr/1pge_next_dist_client_components_builtin_unauthorized_0i07a2o.js")
+R.c("server/chunks/ssr/1pge_next_dist_client_components_builtin_global-error_13x90oo.js")
+R.c("server/chunks/ssr/fixtures_spike-nextjs__next-internal_server_app_page_actions_13gy2ov.js")
+R.m(94606)
+module.exports=R.m(94606).exports

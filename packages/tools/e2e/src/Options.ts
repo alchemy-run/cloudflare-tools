@@ -10,16 +10,59 @@ import { Cwd } from "./Cwd.ts";
 
 const kOptions = Symbol("@distilled.cloud/e2e/Options");
 
-export interface Options {
+/**
+ * Cloudflare-target configuration — everything the cloudflare deploy target
+ * needs to build, dev-serve, and preview a fixture.
+ */
+export interface CloudflareTargetOptions {
   /**
    * Cloudflare worker configuration (compatibility date/flags, worker name,
    * bindings, assets) consumed by the built-in Vite implementation of the
    * `Framework` service — and, by convention, by framework packages named via
    * {@link Options.framework} (they read the same shape for their cloudflare
-   * plugin options). Optional so assets-only or non-Vite fixtures can omit it.
+   * plugin options). Optional so assets-only fixtures can omit it.
+   */
+  readonly worker?: CloudflareVitePluginOptions;
+  /**
+   * Miniflare options for the preview server (`e2e preview` / the Playwright
+   * `live` mode) — the cloudflare target's serving story for built output.
+   */
+  readonly preview?: Options.MiniflareOptions;
+}
+
+/**
+ * Target selection + target-scoped config carriage: one optional key per
+ * platform, opaque to everything except that platform's target. Cloudflare is
+ * the only implemented target today; a future AWS target adds its own key
+ * (e.g. `aws?: AwsTargetOptions`) without touching the framework plumbing.
+ */
+export interface TargetOptions {
+  /**
+   * Which platform target drives this fixture.
+   * @default "cloudflare"
+   */
+  readonly name?: "cloudflare";
+  readonly cloudflare?: CloudflareTargetOptions;
+}
+
+export interface Options {
+  /**
+   * Deploy-target selection and target-scoped configuration. Defaults to the
+   * cloudflare target. Frameworks and the harness read the resolved shape via
+   * {@link resolveCloudflareOptions}, which also honors the deprecated
+   * top-level `vite`/`miniflare` aliases.
+   */
+  readonly target?: TargetOptions;
+  /**
+   * @deprecated Alias for `target.cloudflare.worker` — kept so existing
+   * `e2e.config.ts` files work unchanged. Prefer the target-scoped form.
    */
   readonly vite?: CloudflareVitePluginOptions;
-  readonly miniflare: Options.MiniflareOptions;
+  /**
+   * @deprecated Alias for `target.cloudflare.preview` — kept so existing
+   * `e2e.config.ts` files work unchanged. Prefer the target-scoped form.
+   */
+  readonly miniflare?: Options.MiniflareOptions;
   /**
    * The framework integration implementing `dev`/`build` for this fixture.
    *
@@ -36,6 +79,20 @@ export interface Options {
    */
   readonly framework?: Options.FrameworkInput;
 }
+
+/**
+ * The resolved cloudflare-target configuration: the target-scoped form merged
+ * with the deprecated top-level aliases (target-scoped wins). This is the
+ * single accessor the harness — and, by convention, framework packages that
+ * read the harness options structurally — use to obtain cloudflare config;
+ * nothing else should touch `options.vite` / `options.miniflare` directly.
+ */
+export const resolveCloudflareOptions = (
+  options: Options,
+): { worker: CloudflareVitePluginOptions | undefined; preview: Options.MiniflareOptions } => ({
+  worker: options.target?.cloudflare?.worker ?? options.vite,
+  preview: options.target?.cloudflare?.preview ?? options.miniflare ?? {},
+});
 
 export declare namespace Options {
   type Input = Options | Effect.Effect<Options>;

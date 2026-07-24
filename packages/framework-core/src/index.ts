@@ -22,6 +22,22 @@ export {
   type ServerEntryChunk,
 } from "./Collector.ts";
 export {
+  applyDeployTargetFinish,
+  DeployTargetError,
+  isDeployTarget,
+  makeDeployTarget,
+  resolveDeployTarget,
+  type DeployTarget,
+  type DeployTargetBuildContext,
+  type DeployTargetBundleOptions,
+  type DeployTargetContext,
+  type DeployTargetFinishContext,
+  type DeployTargetInput,
+  type DeployTargetServeContext,
+  type DeployTargetServer,
+  type DeployTargetServices,
+} from "./DeployTarget.ts";
+export {
   Framework,
   FrameworkError,
   type FrameworkBuildOptions,

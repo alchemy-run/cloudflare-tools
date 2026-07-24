@@ -13,20 +13,35 @@ Code must pass linting, formatting, and typechecking. Use `bun run check` to run
 
 ### Published Packages
 
-- `packages/astro`: Wrangler-free Astro integration for Cloudflare Workers (a fork of `@astrojs/cloudflare` over `cloudflare-vite-plugin`, plus the framework-core `Framework` service).
+- `packages/astro`: Wrangler-free Astro integration (a fork of `@astrojs/cloudflare` over `cloudflare-vite-plugin`, plus the framework-core `Framework` service).
 - `packages/cloudflare-rolldown-plugin`: Rolldown plugin for Cloudflare Workers.
 - `packages/cloudflare-runtime`: Effect-native local runtime for Cloudflare Workers, powered by `workerd`.
 - `packages/cloudflare-vite-plugin`: Vite plugin for Cloudflare Workers; composes `cloudflare-rolldown-plugin` and `cloudflare-runtime`.
-- `packages/framework-core`: Shared framework-integration core: the `BuildOutput` contract, the `alchemy:build-output` Vite collector plugin, the project module loader, and the `Framework` service contract.
+- `packages/framework-core`: Platform-neutral framework-integration core: the `BuildOutput` contract, the `alchemy:build-output` Vite collector plugin, the project module loader, the `Framework` service contract, and the `DeployTarget` contract (the deploy target as a value passed to framework integrations).
 - `packages/sveltekit`: Wrangler-free SvelteKit integration implementing the `Framework` service (in-memory kit adapter + rolldown re-bundle for workerd; dev via kit's own Vite server with a stub platform).
 - `packages/waku`: Wrangler-free Waku integration implementing the `Framework` service (programmatic build/dev over `cloudflare-vite-plugin`, plus a fork of waku's cloudflare adapter).
 
 ### Internals
 
 - `upstream/workers-sdk/*`: Git submodule containing the `cloudflare/workers-sdk` repository.
-- `fixtures/*`: Test fixtures for various Cloudflare Workers scenarios.
-- `packages/tools/*`: Internal build and test utilities.
+- `fixtures/*`: Framework fixtures driven by the e2e harness (`e2e dev/build/preview` + Playwright smoke tests in both `live` and `dev` modes).
+- `packages/tools/*`: Internal build and test utilities, including `packages/tools/e2e` (the fixture harness; target-scoped config carriage in `e2e.config.ts`).
 - `packages/vendor/*`: Vendored-in packages from `cloudflare/workers-sdk`. See `packages/vendor/README.md` for more details.
+
+## Framework Integrations
+
+Framework packages (waku/astro/sveltekit, later nextjs) separate two concerns:
+
+- The **framework half** — programmatic build/dev orchestration implementing framework-core's `Framework` service (`{ build, dev }` returning the `BuildOutput` contract).
+- The **deploy-target half** — everything platform-specific (adapter/integration forks, bundler plugin injection, finishing passes, preview serving), passed to the framework as a `DeployTarget` value (a prop). Cloudflare is the first target; each framework ships its implementation as a subpath module (e.g. `@distilled.cloud/waku/cloudflare`). Future platforms (AWS) implement the same seams without touching framework packages or framework-core.
+
+The precise `DeployTarget` contract, the harness config carriage, and the per-framework migration recipes live in `packages/framework-core/README.md` — read that before touching any framework package.
+
+Doctrine for all framework/target work:
+
+- **Wrangler-free, programmatic-only.** No `wrangler.json` is read or written anywhere; all worker configuration is in-memory options (plugin/adapter options here; Worker props on the alchemy side). We never spawn a framework's CLI binary (upstream pipelines may internally — that is upstream orchestration, not ours).
+- **Platform-proxy policy.** Wherever an upstream integration uses wrangler's `getPlatformProxy` (SvelteKit `adapter-cloudflare`, OpenNext `initOpenNextCloudflareForDev`, Astro `platformProxy`), reimplement the feature in `@distilled.cloud/cloudflare-runtime` (workerd-backed Node-side proxies for `env`/`cf`/`ctx`/`caches`, configured in-memory) — never take a wrangler dependency.
+- **Version pinning.** The upstream surfaces these integrations touch are `@experimental`/`unstable_`/unexported: pin exact framework versions, e2e-test against real apps in CI, and treat version bumps as deliberate migrations, not routine updates.
 
 ## File Conventions
 

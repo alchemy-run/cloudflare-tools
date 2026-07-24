@@ -31,20 +31,33 @@ import * as Options from "@distilled.cloud/e2e/Options";
 
 export default Options.make({
   framework: "@distilled.cloud/waku", // ← optional; omit for the Vite default
-  vite: {
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: ["nodejs_compat"],
-    worker: { name: "fixtures-waku", bindings: [], assets: {} },
-  },
-  miniflare: {
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: ["nodejs_compat"],
-    assets: {
-      /* router/asset config */
+  target: {
+    // name: "cloudflare" is the default (the only implemented target today)
+    cloudflare: {
+      worker: {
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: ["nodejs_compat"],
+        worker: { name: "fixtures-waku", bindings: [], assets: {} },
+      },
+      preview: {
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: ["nodejs_compat"],
+        assets: {
+          /* router/asset config */
+        },
+      },
     },
   },
 });
 ```
+
+Config is **target-scoped**: `target.<platform>` carries everything that
+platform's deploy target needs, opaque to the rest of the harness (a future
+AWS target adds `target.aws` without touching the plumbing). The pre-target
+top-level fields remain as deprecated aliases — `vite` ≙
+`target.cloudflare.worker`, `miniflare` ≙ `target.cloudflare.preview` — and
+`Options.resolveCloudflareOptions(options)` is the single accessor that
+merges them (target-scoped wins). Existing fixture configs work unchanged.
 
 Playwright fixtures come from `@distilled.cloud/e2e/Playwright`:
 `Playwright.make("live")` boots the miniflare preview (building first if
@@ -93,15 +106,17 @@ export default (options: Options): Layer.Layer<Framework> =>
 The factory receives the **entire** parsed `Options` object from the fixture's
 `e2e.config.ts`. Conventions:
 
-- `options.vite` (`CloudflareVitePluginOptions`) carries the cloudflare worker
-  configuration — compatibility date/flags, worker name, bindings, assets
-  behavior. Framework packages should read their cloudflare plugin options
-  from this field so fixtures stay uniform.
-- `options.miniflare` is consumed by the harness's preview server only;
-  framework packages should not read it.
-- Anything richer than `options.vite` (framework-specific knobs) should be
-  taken via the Layer/factory forms (3)/(4) above, where the fixture calls
-  your typed API directly.
+- `options.target.cloudflare.worker` (`CloudflareVitePluginOptions`) carries
+  the cloudflare worker configuration — compatibility date/flags, worker
+  name, bindings, assets behavior. Framework packages should read
+  `options.target?.cloudflare?.worker ?? options.vite` (the deprecated
+  top-level alias) so fixtures stay uniform.
+- `options.target.cloudflare.preview` (alias: `options.miniflare`) is
+  consumed by the harness's preview server only; framework packages should
+  not read it.
+- Anything richer than the shared worker config (framework-specific knobs)
+  should be taken via the Layer/factory forms (3)/(4) above, where the
+  fixture calls your typed API directly.
 
 ### Layer environment
 
@@ -184,8 +199,10 @@ bundles land on disk after the bundler (SvelteKit, Next.js) can use
   `Framework.dev()`; the harness wraps the returned `url` with fetch helpers.
 - `e2e preview` (and `Server.live()` / `Playwright.make("live")`) → reads
   `dist/build.json` (framework-core's `readBuildOutput`), falling back to
-  `Framework.build()` + persist when it is missing or unreadable; then serves
-  `serverModules` + `clientDirectory` through miniflare
-  (`@distilled.cloud/test-utils/miniflare`) with the fixture's
-  `options.miniflare`. The framework implementation is not involved in
-  serving preview — only in producing a correct `BuildOutput`.
+  `Framework.build()` + persist when it is missing or unreadable; then hands
+  the `BuildOutput` to the cloudflare deploy target's `serve`
+  (`src/CloudflareTarget.ts`, a framework-core `DeployTarget` value), which
+  boots miniflare (`@distilled.cloud/test-utils/miniflare`) with the
+  fixture's `target.cloudflare.preview` options. Serving built output is the
+  target's concern; the framework implementation is only involved in
+  producing a correct `BuildOutput`.

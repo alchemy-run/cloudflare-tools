@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.13.10](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.10) (2026-07-24)
+
+### Features
+
+- **cloudflare-runtime**: local send_email stub that logs under alchemy dev - by Zé Yuri in [#76](https://github.com/alchemy-run/cloudflare-tools/pull/76) [(99f9952)](https://github.com/alchemy-run/cloudflare-tools/commit/99f99526fef5f5154cc0b4fe6aa2cb73cc2c0cee)
+
+### Bug Fixes
+
+- **runtime,vite-plugin**: declare owned workflows on RuntimeWorker like DOs - by John Royal in [#83](https://github.com/alchemy-run/cloudflare-tools/pull/83) [(64d6bc7)](https://github.com/alchemy-run/cloudflare-tools/commit/64d6bc75f0e0f7a122c89ce765861a7b9f56cf97)
+- **ci**: stop test tasks racing their own package build (Windows Queue.test flake) - by sam in [#80](https://github.com/alchemy-run/cloudflare-tools/pull/80) [(321d76a)](https://github.com/alchemy-run/cloudflare-tools/commit/321d76aebb0b3410b967d9d25b31e63d7ebed7e6)
+
 ## [v0.13.9](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.9) (2026-07-22)
 
 ### Bug Fixes

@@ -68,17 +68,23 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(marker).toBe(true);
     });
 
-    it("runs the form action without JavaScript (plain POST re-render)", async ({ server }) => {
-      const response = await server.fetch("/form?/greet", {
-        method: "POST",
+    it("runs the form action without JavaScript (plain POST re-render)", async ({
+      request,
+      server,
+    }) => {
+      // a real HTTP POST (no client-side kit runtime involved), as a
+      // JavaScript-less browser would submit it
+      const response = await request.post(new URL("/form?/greet", server.url).toString(), {
+        form: { name: "curl" },
         headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          // kit's CSRF check requires a same-origin `origin` header on form posts
+          // kit's CSRF check requires a same-origin `origin` header on form
+          // posts; `accept: text/html` selects the no-JS HTML re-render (kit
+          // answers JSON for enhanced submissions)
           origin: server.url.origin,
+          accept: "text/html",
         },
-        body: new URLSearchParams({ name: "curl" }).toString(),
       });
-      expect(response.status).toBe(200);
+      expect(response.status()).toBe(200);
       expect(await response.text()).toContain("hello curl");
     });
 

@@ -72,7 +72,12 @@ for (const mode of Playwright.SERVER_METHODS) {
     });
 
     it("round-trips a POST through the API route", async ({ server }) => {
-      const response = await server.fetch("/echo", {
+      // Plain HTTP (not `server.fetch`): the live-mode dispatchFetch wrapper
+      // in the harness currently drops the RequestInit, losing POST bodies
+      // (packages/tools/test/src/miniflare.ts `fetch(path)` has no init
+      // parameter). Both modes listen on a real socket, so this exercises
+      // the same worker path.
+      const response = await fetch(new URL("/echo", server.url), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ping: "pong" }),

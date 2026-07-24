@@ -6,7 +6,7 @@ import {
   generateRedirects,
   generateWorkerShim,
   makeStubEmulator,
-} from "../src/index.ts";
+} from "../src/cloudflare.ts";
 
 describe("generateWorkerShim", () => {
   const shim = generateWorkerShim({

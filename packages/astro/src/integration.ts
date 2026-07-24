@@ -18,6 +18,7 @@ import type { AstroIntegration } from "astro";
 import { passthroughImageService } from "astro/config";
 import type * as vite from "vite";
 import { createConfigPlugin } from "./config-plugin.ts";
+import { NODE_ENVIRONMENTS } from "./environments.ts";
 import { createNodePrerenderPlugin } from "./prerender-middleware.ts";
 
 /** The Worker entry module (the vendored `@astrojs/cloudflare` server entrypoint). */
@@ -25,16 +26,6 @@ export const SERVER_ENTRYPOINT = "@distilled.cloud/astro/entrypoints/server";
 
 /** The production endpoint of the passthrough image service. */
 export const IMAGE_PASSTHROUGH_ENDPOINT = "@distilled.cloud/astro/image-passthrough-endpoint";
-
-/**
- * Astro's node-side server environments. They must be kept away from the
- * Worker treatment (unenv polyfills, workerd resolve conditions, dependency
- * pre-bundling) — the cloudflare plugins' `skipEnvironments` option handles
- * this — and they never contribute worker modules to the build output:
- * `astro` is a dev-only tooling helper; `prerender` builds to
- * `dist/server/.prerender/` and is deleted after prerendering completes.
- */
-export const NODE_ENVIRONMENTS = ["astro", "prerender"] as const;
 
 export interface DistilledCloudflareOptions {
   /**

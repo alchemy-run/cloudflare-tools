@@ -39,6 +39,67 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(response.status).toBe(200);
       expect(await response.text()).toContain("hello from public/");
     });
+
+    it("round-trips a server action (form mutation) through the worker", async ({
+      page,
+      server,
+    }) => {
+      await page.goto(server.url.toString());
+      await page.fill("[data-testid=greet-name]", "Waku");
+      // The submit can land before hydration attaches the action; retry
+      // until the round-trip observably completes. The MESSAGE suffix proves
+      // the action executed inside the worker runtime with bindings.
+      await expect(async () => {
+        await page.click("[data-testid=greet-submit]");
+        await expect(page.getByTestId("greet-output")).toHaveText(
+          "Hello, Waku! MESSAGE=hello-from-binding",
+          { timeout: 1_000 },
+        );
+      }).toPass();
+    });
+
+    it("SSRs the dynamic route with a path param", async ({ page, server }) => {
+      const response = await page.goto(new URL("/items/42", server.url).toString());
+      expect(response?.status()).toBe(200);
+      await expect(page.getByTestId("item-marker")).toHaveText("ITEM_MARKER id=42");
+      await expect(page.getByTestId("item-env")).toHaveText("MESSAGE=hello-from-binding");
+    });
+
+    it("serves the API route (GET) from the worker", async ({ server }) => {
+      const response = await server.fetch("/echo");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ message: "hello-from-binding" });
+    });
+
+    it("round-trips a POST through the API route", async ({ server }) => {
+      const response = await server.fetch("/echo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ping: "pong" }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        echoed: { ping: "pong" },
+        message: "hello-from-binding",
+      });
+    });
+
+    it("keeps layout client state across client navigation", async ({ page, server }) => {
+      await page.goto(server.url.toString());
+      const counter = page.getByTestId("nav-counter");
+      await expect(counter).toHaveText("nav-count: 0");
+      await expect(async () => {
+        await counter.click();
+        await expect(counter).toHaveText(/nav-count: [1-9]\d*/, { timeout: 500 });
+      }).toPass();
+      const count = await counter.textContent();
+      await page.click("a[href='/about']");
+      await page.waitForURL("**/about");
+      await expect(page.getByTestId("about-marker")).toHaveText("ABOUT_STATIC_MARKER");
+      // The layout stays mounted through waku's client navigation, so the
+      // client component's state survives the page swap.
+      await expect(counter).toHaveText(count!);
+    });
   });
 }
 

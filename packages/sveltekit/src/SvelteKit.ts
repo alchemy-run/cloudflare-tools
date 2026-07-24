@@ -1,21 +1,125 @@
-import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as FrameworkCore from "@distilled.cloud/framework-core";
-import { Framework, FrameworkError } from "@distilled.cloud/framework-core";
+import {
+  Framework,
+  FrameworkError,
+  type DeployTarget,
+  type DeployTargetInput,
+} from "@distilled.cloud/framework-core";
 import type { Adapter } from "@sveltejs/kit";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { rolldown } from "rolldown";
 import type * as ViteModule from "vite";
-import { makeCloudflareAdapter, type CloudflareAdapterOptions } from "./Adapter.ts";
 
 /** The shape of the project's `@sveltejs/kit/vite` module. */
 interface KitViteModule {
   readonly sveltekit: (config?: Record<string, unknown>) => Promise<ViteModule.PluginOption>;
 }
+
+/**
+ * Adapter behavior a deploy target can configure without being consulted on
+ * every write the adapter performs. The names mirror the knobs a static-asset
+ * host exposes (fallback-page generation, the name of the binding the worker
+ * shim serves assets through).
+ */
+export interface SvelteKitAdapterOptions {
+  /**
+   * Name of the static-assets binding the generated worker entry serves
+   * files through.
+   * @default "ASSETS"
+   */
+  readonly assetsBinding?: string | undefined;
+  /**
+   * Fallback-page behavior for requests that match no asset or route:
+   * `"404-page"` writes `404.html`, `"single-page-application"` writes
+   * `index.html`.
+   * @default "none"
+   */
+  readonly notFoundHandling?: "none" | "404-page" | "single-page-application" | undefined;
+  /**
+   * With `notFoundHandling: "404-page"`: `"spa"` renders the app shell as the
+   * fallback, `"plaintext"` writes a plain `Not Found` page.
+   * @default "plaintext"
+   */
+  readonly fallback?: "spa" | "plaintext" | undefined;
+}
+
+/**
+ * The configuration this package assembles from {@link SvelteKitOptions} and
+ * hands to a deploy-target factory (see {@link SvelteKitTargetInput}). The
+ * target treats it as its `DeployTarget.config`; the framework half never
+ * inspects a resolved target's config.
+ */
+export interface SvelteKitTargetConfig {
+  /** Compatibility date for the target's finishing pass. */
+  readonly compatibilityDate?: string | undefined;
+  /** Compatibility flags for the target's finishing pass. */
+  readonly compatibilityFlags?: Array<string> | undefined;
+  /** Adapter behavior (assets binding name, fallback generation). */
+  readonly adapter?: SvelteKitAdapterOptions | undefined;
+}
+
+/** Inputs the framework passes when asking the target for a kit `Adapter`. */
+export interface SvelteKitAdapterContext {
+  /** Absolute project root. */
+  readonly root: string;
+  /**
+   * Present when the adapter is constructed for the dev server: the values
+   * its `emulate()` platform should expose as `platform.env`. Absent for
+   * production builds.
+   */
+  readonly dev?: { readonly env?: Record<string, unknown> | undefined } | undefined;
+}
+
+/** What a target's `adapt()` must record for the framework to continue. */
+export interface SvelteKitAdapterResult {
+  /**
+   * The static-assets directory the adapter wrote (client build +
+   * prerendered pages) — becomes `BuildOutput.clientDirectory`.
+   */
+  readonly dest: string;
+  /**
+   * Absolute path of the on-disk (unbundled) server entry the adapter
+   * generated — passed to the target's `finish` pass as `context.entry`.
+   */
+  readonly workerEntry: string;
+}
+
+/**
+ * A kit `Adapter` that records where it wrote its output. Every SvelteKit
+ * deploy target's adapter must populate `result.current` from `adapt()`.
+ */
+export interface SvelteKitAdapter extends Adapter {
+  readonly result: { current?: SvelteKitAdapterResult | undefined };
+}
+
+/**
+ * A deploy target for SvelteKit: the generic `DeployTarget` seams plus the
+ * one framework-specific hook kit needs — the `Adapter` instance to hand to
+ * `sveltekit(config)`. The target's `finish` pass receives the adapter's
+ * on-disk `workerEntry` (via `context.entry`) and is responsible for turning
+ * it into `BuildOutput.serverModules` for the target runtime.
+ */
+export interface SvelteKitTarget extends DeployTarget<SvelteKitTargetConfig> {
+  /** Produce the kit `Adapter` for one build/dev invocation. */
+  readonly adapter: (context: SvelteKitAdapterContext) => SvelteKitAdapter;
+}
+
+/**
+ * How a deploy target is passed to this package: a `SvelteKitTarget` value, a
+ * factory `(config) => SvelteKitTarget`, or a module specifier resolved from
+ * the *project's* `node_modules` (default-export — or named export `target` —
+ * a value or factory).
+ */
+export type SvelteKitTargetInput = DeployTargetInput<SvelteKitTarget, SvelteKitTargetConfig>;
+
+/**
+ * The default deploy target: this package's own Cloudflare Workers target
+ * module (`src/cloudflare.ts`), loaded from the project's dependency tree.
+ */
+export const DEFAULT_TARGET_SPECIFIER = "@distilled.cloud/sveltekit/cloudflare";
 
 export interface SvelteKitOptions {
   /**
@@ -25,12 +129,19 @@ export interface SvelteKitOptions {
    * @default process.cwd()
    */
   readonly root?: string | undefined;
-  /** Compatibility date for the workerd re-bundle pass. */
+  /**
+   * The deploy target the build is produced for. Accepts a target value, a
+   * `(config) => target` factory, or a module specifier string.
+   * @default "@distilled.cloud/sveltekit/cloudflare"
+   */
+  readonly target?: SvelteKitTargetInput | undefined;
+  /** Compatibility date forwarded to the target via its config. */
   readonly compatibilityDate?: string | undefined;
   /**
-   * Compatibility flags for the workerd re-bundle pass. SvelteKit's server
-   * graph is built for Node, so `nodejs_compat` is effectively required.
-   * @default ["nodejs_compat"]
+   * Compatibility flags forwarded to the target via its config. SvelteKit's
+   * server graph is built for Node, so on workerd-style targets
+   * `nodejs_compat` is effectively required.
+   * @default ["nodejs_compat"] (applied by the Cloudflare target)
    */
   readonly compatibilityFlags?: Array<string> | undefined;
   /**
@@ -41,15 +152,15 @@ export interface SvelteKitOptions {
   readonly kit?: Record<string, unknown> | undefined;
   /** Extra Vite inline config merged into the build/dev config. */
   readonly vite?: ViteModule.InlineConfig | undefined;
-  /** Options for the wrangler-free Cloudflare adapter. */
-  readonly adapter?: Omit<CloudflareAdapterOptions, "root" | "platform"> | undefined;
+  /** Adapter behavior forwarded to the target via its config. */
+  readonly adapter?: SvelteKitAdapterOptions | undefined;
   readonly dev?:
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
         readonly port?: number | undefined;
         /**
          * Values exposed as `platform.env` by the dev-server stub platform.
-         * Dev runs SvelteKit's own Node SSR: real Cloudflare bindings are not
+         * Dev runs SvelteKit's own Node SSR: real platform bindings are not
          * available until the cloudflare-runtime Node-side bindings proxy
          * lands, so only in-memory values (secrets, config strings) can be
          * emulated here.
@@ -87,13 +198,16 @@ export const resolveExportTarget = (entry: unknown): string | undefined => {
 /**
  * Build the `Framework` service implementation for a SvelteKit project.
  *
- * - `build` runs kit's production build via programmatic Vite
- *   (`createBuilder().buildApp()`) with the in-memory Cloudflare adapter,
- *   then re-bundles the node-flavored `_worker.js` output for workerd with
- *   rolldown + `@distilled.cloud/cloudflare-rolldown-plugin`, producing the
- *   `BuildOutput` contract in-memory.
- * - `dev` runs kit's own Vite dev server (Node SSR, full HMR) with the stub
- *   platform from `options.dev.env`.
+ * - `build` resolves the deploy target, then either delegates wholesale
+ *   (`target.build`) or runs kit's production build via programmatic Vite
+ *   (`createBuilder().buildApp()`) with the target-provided adapter and hands
+ *   the adapter's on-disk worker entry to the target's `finish` pass, which
+ *   produces the final `BuildOutput.serverModules`.
+ * - `dev` runs kit's own Vite dev server (Node SSR, full HMR) with the
+ *   target-provided adapter supplying the `platform` emulation.
+ *
+ * This module is target-agnostic: everything Cloudflare-specific lives in
+ * `@distilled.cloud/sveltekit/cloudflare`.
  */
 export const make: (
   options?: SvelteKitOptions,
@@ -102,6 +216,29 @@ export const make: (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const baseRoot = options?.root ?? (yield* Effect.sync(() => process.cwd()));
+
+    const targetConfig: SvelteKitTargetConfig = {
+      compatibilityDate: options?.compatibilityDate,
+      compatibilityFlags: options?.compatibilityFlags,
+      adapter: options?.adapter,
+    };
+
+    const resolveTarget = (root: string) =>
+      FrameworkCore.resolveDeployTarget<SvelteKitTarget, SvelteKitTargetConfig>(
+        root,
+        options?.target ?? DEFAULT_TARGET_SPECIFIER,
+        targetConfig,
+      ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
+
+    const requireAdapterHook = (target: SvelteKitTarget) =>
+      typeof target.adapter === "function"
+        ? Effect.succeed(target)
+        : Effect.fail(
+            fail(
+              `The resolved "${target.platform}" deploy target does not implement the SvelteKit ` +
+                "adapter hook (`adapter(context)`) and has no wholesale `build`",
+            ),
+          );
 
     const loadVite = (root: string) =>
       FrameworkCore.loadProjectModule<typeof ViteModule>(root, "vite").pipe(
@@ -165,8 +302,21 @@ export const make: (
 
     const build: Framework["Service"]["build"] = Effect.fn(function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
+      const target = yield* resolveTarget(root);
+      const targetContext = { root, framework: "sveltekit" };
+
+      // Wholesale build takeover (targets that own the entire pipeline).
+      if (target.build !== undefined) {
+        return yield* target.build(targetContext).pipe(
+          Effect.mapError((error) => fail(error.message, error.cause)),
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
+        );
+      }
+
+      yield* requireAdapterHook(target);
+      const adapter = target.adapter({ root });
       const vite = yield* loadVite(root);
-      const adapter = makeCloudflareAdapter({ ...options?.adapter, root });
       const plugins = yield* loadKitPlugins(root, adapter);
 
       yield* Effect.tryPromise({
@@ -184,92 +334,32 @@ export const make: (
         );
       }
 
-      // Re-bundle the node-flavored worker shim (and the whole
-      // `.svelte-kit/output/server` graph it imports) for workerd. This
-      // replaces the bundling `wrangler deploy` performs for the upstream
-      // adapter.
-      const distDirectory = path.resolve(root, "dist");
-      const serverOutDir = path.join(distDirectory, "server");
-      yield* fs
-        .remove(serverOutDir, { recursive: true, force: true })
-        .pipe(Effect.mapError((error) => fail("Failed to clean dist/server", error)));
-      const externalDirectories = yield* Effect.tryPromise({
-        try: async () => {
-          const bundle = await rolldown({
-            cwd: root,
-            input: result.workerEntry,
-            plugins: cloudflare({
-              ...(options?.compatibilityDate !== undefined
-                ? { compatibilityDate: options.compatibilityDate }
-                : undefined),
-              compatibilityFlags: options?.compatibilityFlags ?? ["nodejs_compat"],
-              exports: ["default"],
-            }),
-          });
-          try {
-            const { output } = await bundle.write({
-              dir: serverOutDir,
-              format: "esm",
-              entryFileNames: "index.js",
-              chunkFileNames: "chunks/[name].js",
-              sourcemap: false,
-            });
-            const directories = new Set<string>();
-            for (const chunk of output) {
-              if (chunk.type !== "chunk") continue;
-              for (const id of Object.keys(chunk.modules)) {
-                if (
-                  !NodePath.isAbsolute(id) ||
-                  id.includes("node_modules") ||
-                  id.startsWith(root)
-                ) {
-                  continue;
-                }
-                directories.add(NodePath.dirname(id));
-              }
-            }
-            return directories;
-          } finally {
-            await bundle.close();
-          }
-        },
-        catch: (error) => fail("Failed to bundle the worker for workerd", error),
-      });
-
-      const wrapCollectorError = (error: FrameworkCore.CollectorError) =>
-        fail(error.message, error.cause);
-      const modules = yield* FrameworkCore.readServerModulesFromDisk({
-        directory: serverOutDir,
-        prefix: "server",
-      }).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.mapError(wrapCollectorError),
-      );
-      const serverModules = FrameworkCore.sortServerModules(
-        modules,
-        NodePath.join("server", "index.js"),
-      );
-      const externalWorkspaces = yield* FrameworkCore.collectExternalWorkspaces(
-        externalDirectories,
-      ).pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.mapError(wrapCollectorError));
-
       const output: FrameworkCore.BuildOutput = {
-        distDirectory,
+        distDirectory: path.resolve(root, "dist"),
         clientDirectory: result.dest,
-        serverModules,
-        externalWorkspaces,
+        serverModules: undefined,
+        externalWorkspaces: new Set<string>(),
       };
-      return output;
+
+      // The target's finishing pass turns the adapter's on-disk worker entry
+      // into runtime-ready server modules (e.g. the Cloudflare target's
+      // rolldown re-bundle for workerd).
+      return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
+        ...targetContext,
+        entry: result.workerEntry,
+      }).pipe(
+        Effect.mapError((error) => fail(error.message, error.cause)),
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+      );
     });
 
     const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
       const root = devOptions?.root ?? baseRoot;
+      const target = yield* resolveTarget(root);
+      yield* requireAdapterHook(target);
+      const adapter = target.adapter({ root, dev: { env: options?.dev?.env } });
       const vite = yield* loadVite(root);
-      const adapter = makeCloudflareAdapter({
-        ...options?.adapter,
-        root,
-        platform: { env: options?.dev?.env },
-      });
       const plugins = yield* loadKitPlugins(root, adapter);
       const port = devOptions?.port ?? options?.dev?.port;
 

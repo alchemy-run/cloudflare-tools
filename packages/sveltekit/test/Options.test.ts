@@ -59,6 +59,36 @@ describe("fromHarnessOptions", () => {
     expect(options.dev?.env).toEqual({ SECRET: "value" });
   });
 
+  it("prefers the target-scoped carriage over the deprecated vite alias", () => {
+    const options = fromHarnessOptions({
+      target: {
+        cloudflare: {
+          worker: {
+            compatibilityDate: "2026-03-10",
+            worker: {
+              bindings: [Effect.succeed({ name: "SCOPED", text: "yes" })],
+              assets: { notFoundHandling: "single-page-application" },
+            },
+          },
+        },
+      },
+      vite: {
+        compatibilityDate: "1999-01-01",
+        worker: { assets: { notFoundHandling: "none" } },
+      },
+    });
+    expect(options.compatibilityDate).toBe("2026-03-10");
+    expect(options.adapter?.notFoundHandling).toBe("single-page-application");
+    expect(options.dev?.env).toEqual({ SCOPED: "yes" });
+  });
+
+  it("falls back to the deprecated vite alias when no target is scoped", () => {
+    const options = fromHarnessOptions({
+      vite: { compatibilityDate: "2026-03-10" },
+    });
+    expect(options.compatibilityDate).toBe("2026-03-10");
+  });
+
   it("tolerates fully-empty options", () => {
     const options = fromHarnessOptions({});
     expect(options.compatibilityDate).toBeUndefined();

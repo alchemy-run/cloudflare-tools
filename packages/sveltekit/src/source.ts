@@ -39,8 +39,12 @@ import fg from "fast-glob";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CloudflareAdapterOptions } from "./Adapter.ts";
-import { make as makeSvelteKit, type SvelteKitOptions } from "./SvelteKit.ts";
+import { makeCloudflareTarget } from "./cloudflare.ts";
+import {
+  make as makeSvelteKit,
+  type SvelteKitAdapterOptions,
+  type SvelteKitOptions,
+} from "./SvelteKit.ts";
 
 const PROVIDER = "@distilled.cloud/sveltekit/source";
 
@@ -172,7 +176,7 @@ export interface SvelteKitSourceOptions {
    */
   readonly kit?: Record<string, unknown> | undefined;
   /** Options for the wrangler-free Cloudflare adapter. */
-  readonly adapter?: Omit<CloudflareAdapterOptions, "root" | "platform"> | undefined;
+  readonly adapter?: SvelteKitAdapterOptions | undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -523,6 +527,11 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
     dev?: SvelteKitOptions["dev"],
   ): SvelteKitOptions => ({
     root: rootDir,
+    // This module is Cloudflare-specific by contract (it implements alchemy's
+    // Cloudflare Worker source), so it passes the target factory directly
+    // instead of relying on specifier resolution from the project's
+    // node_modules.
+    target: makeCloudflareTarget,
     compatibilityDate: ctx.compatibility.date,
     compatibilityFlags: ctx.compatibility.flags,
     kit: options.kit,

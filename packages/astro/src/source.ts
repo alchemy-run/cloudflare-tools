@@ -38,6 +38,7 @@ import type * as Scope from "effect/Scope";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
 import * as Astro from "./Astro.ts";
+import cloudflareTarget from "./cloudflare.ts";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirrors of alchemy's source-provider contract
@@ -704,8 +705,13 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
       Effect.provide(
         Astro.make({
           root: rootDir,
-          vite,
-          sessionKVBindingName: options.sessionKVBindingName,
+          // This module IS the alchemy Cloudflare Worker source provider, so
+          // it constructs the Cloudflare deploy target directly (as a value)
+          // rather than resolving the default specifier.
+          target: cloudflareTarget({
+            worker: vite,
+            sessionKVBindingName: options.sessionKVBindingName,
+          }),
           astro: options.astro,
         }),
       ),

@@ -1,30 +1,44 @@
-import type { CloudflareVitePluginOptions } from "@distilled.cloud/cloudflare-vite-plugin";
 import * as FrameworkCore from "@distilled.cloud/framework-core";
-import type { AstroInlineConfig } from "astro";
+import type { AstroInlineConfig, AstroIntegration } from "astro";
 import type * as AstroNamespace from "astro";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as ViteModule from "vite";
-import { distilledCloudflare, NODE_ENVIRONMENTS } from "./integration.ts";
+import { NODE_ENVIRONMENTS } from "./environments.ts";
+import {
+  DEFAULT_TARGET_SPECIFIER,
+  isAstroTarget,
+  type AstroTarget,
+  type AstroTargetInput,
+} from "./Target.ts";
 
 type AstroModule = typeof AstroNamespace;
 
 /**
- * Options for the Astro `Framework` integration. Follows the e2e harness
- * convention: `vite` carries the cloudflare worker configuration
- * (compatibility date/flags, worker name/bindings/assets).
+ * Options for the Astro `Framework` integration. The deploy target is passed
+ * as a value (`target`), keeping this module platform-neutral: all
+ * platform-specific behavior (adapter/integration selection, bundler plugin
+ * injection, dev SSR execution) lives in the target module.
  */
-export interface AstroFrameworkOptions {
+export interface AstroFrameworkOptions<TargetConfig = unknown> {
   /**
-   * Cloudflare plugin options (worker name, bindings, assets behavior,
-   * compatibility date/flags) forwarded to the adapter's
-   * `@distilled.cloud/cloudflare-vite-plugin` instance. `main`,
-   * `viteEnvironments`, and the Astro node environments in
-   * `skipEnvironments` are managed by the integration.
+   * The deploy target: an `AstroTarget` value, a `(config) => AstroTarget`
+   * factory, or a module specifier resolved from the project's own
+   * `node_modules`. Defaults to this package's Cloudflare target module
+   * (`"@distilled.cloud/astro/cloudflare"`). Factories and specifiers are
+   * applied to {@link targetConfig}.
    */
-  readonly vite?: CloudflareVitePluginOptions | undefined;
+  readonly target?: AstroTargetInput<TargetConfig> | undefined;
+  /**
+   * Target configuration passed to a target factory or specifier-loaded
+   * target module. Opaque to this module — its shape belongs to the target
+   * (Cloudflare: `{ worker?: CloudflareVitePluginOptions,
+   * sessionKVBindingName?: string }`). Unused when {@link target} is already
+   * a target *value*.
+   */
+  readonly targetConfig?: TargetConfig | undefined;
   /**
    * Extra Astro config merged into the in-memory `AstroInlineConfig`
    * (`site`, `base`, `integrations`, `devToolbar`, `vite`, ...). `root`,
@@ -32,12 +46,6 @@ export interface AstroFrameworkOptions {
    * cannot be overridden; `output` defaults to `"server"`.
    */
   readonly astro?: AstroInlineConfig | undefined;
-  /**
-   * The name of the KV binding injected into Astro's session config when
-   * present on the Worker env.
-   * @default "SESSION"
-   */
-  readonly sessionKVBindingName?: string | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
 }
@@ -46,12 +54,10 @@ export interface AstroFrameworkOptions {
 export interface AstroConfigInputs {
   /** Absolute project root. */
   readonly root: string;
-  /** Cloudflare plugin options (harness convention: `options.vite`). */
-  readonly pluginOptions?: CloudflareVitePluginOptions | undefined;
+  /** The adapter integration supplied by the deploy target. */
+  readonly adapter: AstroIntegration;
   /** User Astro config merged in (its `vite.plugins` are preserved). */
   readonly userConfig?: AstroInlineConfig | undefined;
-  /** Session KV binding name forwarded to the adapter. */
-  readonly sessionKVBindingName?: string | undefined;
   /** Dev-server port (merged into `server.port`). */
   readonly port?: number | undefined;
   /**
@@ -63,11 +69,10 @@ export interface AstroConfigInputs {
 
 /**
  * Build the in-memory `AstroInlineConfig` — the whole replacement for
- * `astro.config.*` and `wrangler.json`:
+ * `astro.config.*` (and, with the Cloudflare target, `wrangler.json`):
  *
  * - `configFile: false` so the config is fully programmatic.
- * - `adapter` is pinned to this package's wrangler-free fork of
- *   `@astrojs/cloudflare` (over `@distilled.cloud/cloudflare-vite-plugin`).
+ * - `adapter` is pinned to the deploy target's integration.
  * - `output` defaults to `"server"` (overridable via the user config).
  * - User `vite.plugins` are preserved ahead of the collector.
  */
@@ -86,10 +91,7 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
     ...user,
     root: inputs.root,
     configFile: false,
-    adapter: distilledCloudflare({
-      vite: inputs.pluginOptions,
-      sessionKVBindingName: inputs.sessionKVBindingName,
-    }),
+    adapter: inputs.adapter,
     server,
     vite: {
       ...user?.vite,
@@ -101,19 +103,21 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
 /**
  * The Astro implementation of framework-core's `Framework` service.
  *
- * - `build` runs astro's programmatic `build(AstroInlineConfig)` with the
- *   forked adapter and the shared build-output collector on the `ssr`
- *   environment (skipping astro's node-side `astro`/`prerender`
- *   environments), returning the `BuildOutput` in-memory. `serverModules[0]`
- *   is the ssr entry chunk (`server/entry.mjs`); `clientDirectory` is
- *   `dist/client`, captured as a path so prerendered HTML written after the
- *   Vite build rides along.
- * - `dev` runs astro's `dev()`; the `ssr` environment executes inside workerd
- *   via the cloudflare-vite-plugin module runner, with in-memory bindings —
- *   no wrangler config anywhere. Closing the Scope stops the server.
+ * - `build` resolves the deploy target, then either delegates wholesale to
+ *   `target.build` (when the target defines one) or runs astro's programmatic
+ *   `build(AstroInlineConfig)` with the target's adapter integration and the
+ *   shared build-output collector on the `ssr` environment (skipping astro's
+ *   node-side `astro`/`prerender` environments), finishing with
+ *   `applyDeployTargetFinish`. `serverModules[0]` is the ssr entry chunk
+ *   (`server/entry.mjs`); `clientDirectory` is `dist/client`, captured as a
+ *   path so prerendered HTML written after the Vite build rides along.
+ * - `dev` runs astro's `dev()` with the target's adapter integration; with
+ *   the Cloudflare target the `ssr` environment executes inside workerd via
+ *   the cloudflare-vite-plugin module runner, with in-memory bindings — no
+ *   wrangler config anywhere. Closing the Scope stops the server.
  */
-export const make = (
-  options?: AstroFrameworkOptions,
+export const make = <TargetConfig = unknown>(
+  options?: AstroFrameworkOptions<TargetConfig>,
 ): Layer.Layer<FrameworkCore.Framework, never, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     FrameworkCore.Framework,
@@ -124,6 +128,13 @@ export const make = (
       const fail = (message: string) => (cause: unknown) =>
         new FrameworkCore.FrameworkError({ framework: "astro", message, cause });
 
+      const failTarget = (error: FrameworkCore.DeployTargetError) =>
+        new FrameworkCore.FrameworkError({
+          framework: "astro",
+          message: error.message,
+          cause: error.cause ?? error,
+        });
+
       // Astro's dev()/build() record telemetry events by default.
       yield* Effect.sync(() => {
         process.env.ASTRO_TELEMETRY_DISABLED ??= "1";
@@ -132,6 +143,30 @@ export const make = (
       const resolveRoot = (override: string | undefined) =>
         Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
 
+      const resolveTarget = (
+        root: string,
+      ): Effect.Effect<AstroTarget, FrameworkCore.FrameworkError> =>
+        FrameworkCore.resolveDeployTarget<AstroTarget, TargetConfig | undefined>(
+          root,
+          (options?.target ?? DEFAULT_TARGET_SPECIFIER) as FrameworkCore.DeployTargetInput<
+            AstroTarget,
+            TargetConfig | undefined
+          >,
+          options?.targetConfig,
+        ).pipe(
+          Effect.mapError(failTarget),
+          Effect.flatMap((target) =>
+            isAstroTarget(target)
+              ? Effect.succeed(target)
+              : Effect.fail(
+                  fail(
+                    "The resolved deploy target is not an AstroTarget: it must provide an " +
+                      "`integration: () => AstroIntegration` hook",
+                  )(undefined),
+                ),
+          ),
+        );
+
       const loadAstro = (root: string): Effect.Effect<AstroModule, FrameworkCore.FrameworkError> =>
         FrameworkCore.loadProjectModule<AstroModule>(root, "astro").pipe(
           Effect.mapError(fail("Failed to load the project's astro")),
@@ -139,25 +174,37 @@ export const make = (
 
       const makeConfig = (
         root: string,
+        target: AstroTarget,
         overrides?: Pick<AstroConfigInputs, "port" | "extraVitePlugins">,
       ): AstroInlineConfig =>
         makeAstroInlineConfig({
           root,
-          pluginOptions: options?.vite,
+          adapter: target.integration(),
           userConfig: options?.astro,
-          sessionKVBindingName: options?.sessionKVBindingName,
           ...overrides,
         });
 
       return FrameworkCore.Framework.of({
         build: Effect.fn(function* (buildOptions) {
           const root = yield* resolveRoot(buildOptions?.root);
+          const target = yield* resolveTarget(root);
+          if (target.build !== undefined) {
+            // Wholesale build takeover: the target owns the entire
+            // production build (the OpenNext-style case).
+            return yield* target
+              .build({ root, framework: "astro" })
+              .pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Path.Path, path),
+                Effect.mapError(failTarget),
+              );
+          }
           const astro = yield* loadAstro(root);
           const collector = yield* FrameworkCore.makeBuildOutputCollector({
             entryEnvironment: "ssr",
             skipEnvironments: NODE_ENVIRONMENTS,
           }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-          const config = makeConfig(root, { extraVitePlugins: [collector.plugin] });
+          const config = makeConfig(root, target, { extraVitePlugins: [collector.plugin] });
           yield* Effect.tryPromise({
             try: async () => await astro.build(config),
             catch: fail("Failed to build"),
@@ -166,14 +213,25 @@ export const make = (
           // entry chunk on disk *after* the bundler finishes (the in-memory
           // capture still contains the `@@ASTRO_MANIFEST_REPLACE@@`
           // placeholder), and prunes the prerender-only chunks.
-          return yield* collector
+          const output = yield* collector
             .collect({ fromDisk: true })
             .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
+          // The astro build is delivered in-memory (no on-disk entry handed
+          // over), so the finish context carries no `entry`.
+          return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
+            root,
+            framework: "astro",
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
+            Effect.mapError(failTarget),
+          );
         }),
         dev: Effect.fn(function* (devOptions) {
           const root = yield* resolveRoot(devOptions?.root);
+          const target = yield* resolveTarget(root);
           const astro = yield* loadAstro(root);
-          const config = makeConfig(root, { port: devOptions?.port });
+          const config = makeConfig(root, target, { port: devOptions?.port });
           const server = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: async () => await astro.dev(config),

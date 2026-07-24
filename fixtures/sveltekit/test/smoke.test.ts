@@ -51,5 +51,85 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(body.uuid).toMatch(UUID_REGEX);
       expect(body.nodeUuid).toMatch(UUID_REGEX);
     });
+
+    it("runs a form action via progressive enhancement (no reload)", async ({ page, server }) => {
+      await page.goto(new URL("/form", server.url).toString());
+      await expect(page.locator("#form-result")).toHaveText("result:none");
+      // wait for hydration, then plant a marker a full-page navigation would lose
+      await expect(page.locator("#submit")).toHaveAttribute("data-hydrated", "true");
+      await page.evaluate(() => {
+        (window as { __enhanced?: boolean }).__enhanced = true;
+      });
+      await page.fill("#name", "playwright");
+      await page.click("#submit");
+      await expect(page.locator("#form-result")).toHaveText("result:hello playwright");
+      await expect(page.locator("#form-secret")).toHaveText(`secret:${SECRET}`);
+      const marker = await page.evaluate(() => (window as { __enhanced?: boolean }).__enhanced);
+      expect(marker).toBe(true);
+    });
+
+    it("runs the form action without JavaScript (plain POST re-render)", async ({ server }) => {
+      const response = await server.fetch("/form?/greet", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          // kit's CSRF check requires a same-origin `origin` header on form posts
+          origin: server.url.origin,
+        },
+        body: new URLSearchParams({ name: "curl" }).toString(),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("hello curl");
+    });
+
+    it("round-trips cookies through the +page.server load", async ({ page, server }) => {
+      await page.goto(new URL("/cookies", server.url).toString());
+      await expect(page.locator("#visits")).toHaveText("visits:1");
+      await page.reload();
+      await expect(page.locator("#visits")).toHaveText("visits:2");
+      await page.reload();
+      await expect(page.locator("#visits")).toHaveText("visits:3");
+    });
+
+    it("serves a binary endpoint response intact", async ({ server }) => {
+      const response = await server.fetch("/api/binary");
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("application/octet-stream");
+      expect(response.headers.get("x-binary-length")).toBe("256");
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      expect(bytes.byteLength).toBe(256);
+      expect(bytes[0]).toBe(0);
+      expect(bytes[128]).toBe(128);
+      expect(bytes[255]).toBe(255);
+    });
+
+    it("serves a route-group page with layout data (group not in URL)", async ({
+      page,
+      server,
+    }) => {
+      const response = await page.goto(new URL("/about", server.url).toString());
+      expect(response?.status()).toBe(200);
+      await expect(page.locator("#layout-section")).toHaveText("section:marketing");
+      await expect(page.locator("#layout-secret")).toHaveText(`layout-secret:${SECRET}`);
+      await expect(page.locator("#about-marker")).toHaveText("about-inside-group");
+      // the group directory name itself is not routable
+      const literal = await server.fetch("/(marketing)/about");
+      expect(literal.status).toBe(404);
+    });
+
+    it("exercises the platform.caches access path", async ({ server }) => {
+      // a fresh key per invocation so retries never see a warm cache
+      const key = crypto.randomUUID();
+      type CacheProbe = { supported: boolean; cached: boolean; key: string };
+      const first = await server.fetchJson<CacheProbe>(`/api/cache?key=${key}`);
+      expect(first.supported).toBe(true);
+      expect(first.cached).toBe(false);
+      expect(first.key).toBe(key);
+      const second = await server.fetchJson<CacheProbe>(`/api/cache?key=${key}`);
+      expect(second.supported).toBe(true);
+      // live runs on workerd with the real Cache API; dev runs kit's Node SSR
+      // with the documented no-op stub cache (match never hits).
+      expect(second.cached).toBe(mode === "live");
+    });
   });
 }

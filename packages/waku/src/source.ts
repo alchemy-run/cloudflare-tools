@@ -18,6 +18,7 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
+import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { make as makeWakuFramework } from "./Waku.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -604,10 +605,13 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
       const framework = makeWakuFramework({
         root: rootDir,
         waku: wakuConfig,
-        vite: {
+        // The target is passed as a value (not the module-specifier default):
+        // the provider runs inside alchemy's process, where resolving the
+        // subpath from the project's node_modules is unnecessary indirection.
+        target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
-        },
+        }),
       });
       const output = yield* withRootCwd(
         rootDir,
@@ -691,7 +695,7 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
       const framework = makeWakuFramework({
         root: rootDir,
         waku: wakuConfig,
-        vite: {
+        target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
@@ -703,7 +707,7 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
             assets: ctx.worker.assets,
           },
           context: ctx.runtimeContext,
-        },
+        }),
       });
       // The dev server *starts* under the project cwd (waku resolves its
       // html shell and relative inputs from the cwd at startup); the cwd is

@@ -1,12 +1,19 @@
 /**
- * `@distilled.cloud/sveltekit` — SvelteKit integration for Cloudflare
- * Workers, wrangler-free.
+ * `@distilled.cloud/sveltekit` — SvelteKit integration implementing
+ * framework-core's `Framework` service, with the deploy target passed as a
+ * value (Cloudflare Workers by default, via the
+ * `@distilled.cloud/sveltekit/cloudflare` subpath module).
  *
  * The default export is the e2e-harness factory contract: a
- * `(options) => Layer<Framework>` function that reads the shared
- * `options.vite` cloudflare configuration (compatibility date/flags, worker
- * bindings, assets behavior). Use {@link layer} directly for the fully-typed
- * path with SvelteKit-specific options.
+ * `(options) => Layer<Framework>` function that reads the harness's
+ * cloudflare-target configuration (compatibility date/flags, worker bindings,
+ * assets behavior). Use {@link layer} directly for the fully-typed path with
+ * SvelteKit-specific options.
+ *
+ * This module (and `SvelteKit.ts`) is target-agnostic by contract: it must
+ * not import anything Cloudflare-specific. The Cloudflare half — the
+ * in-memory kit adapter fork, the workerd rolldown finishing pass, the dev
+ * stub platform — lives behind `@distilled.cloud/sveltekit/cloudflare`.
  */
 import type { Framework } from "@distilled.cloud/framework-core";
 import * as Effect from "effect/Effect";
@@ -18,46 +25,62 @@ import * as Predicate from "effect/Predicate";
 import { layer, type SvelteKitOptions } from "./SvelteKit.ts";
 
 export {
-  appendHeaders,
-  generateAssetsIgnore,
-  generateHeaders,
-  generateRedirects,
-  makeCloudflareAdapter,
-  makeStubEmulator,
-  type CloudflareAdapter,
-  type CloudflareAdapterOptions,
-  type CloudflareAdapterResult,
-} from "./Adapter.ts";
-export { layer, make, resolveExportTarget, type SvelteKitOptions } from "./SvelteKit.ts";
-export { generateWorkerShim, type WorkerShimOptions } from "./WorkerShim.ts";
+  DEFAULT_TARGET_SPECIFIER,
+  layer,
+  make,
+  resolveExportTarget,
+  type SvelteKitAdapter,
+  type SvelteKitAdapterContext,
+  type SvelteKitAdapterOptions,
+  type SvelteKitAdapterResult,
+  type SvelteKitOptions,
+  type SvelteKitTarget,
+  type SvelteKitTargetConfig,
+  type SvelteKitTargetInput,
+} from "./SvelteKit.ts";
 
 /**
- * The structural subset of the e2e harness's `Options` this package reads —
- * by convention, `options.vite` carries the cloudflare worker configuration
- * (`CloudflareVitePluginOptions`). Typed structurally so the package does not
- * depend on the harness.
+ * The structural subset of the e2e harness's cloudflare worker options this
+ * package reads (`CloudflareVitePluginOptions`). Typed structurally so the
+ * package does not depend on the harness.
  */
-export interface HarnessOptions {
-  readonly vite?:
+export interface HarnessWorkerOptions {
+  readonly compatibilityDate?: string | undefined;
+  readonly compatibilityFlags?: Array<string> | undefined;
+  readonly worker?:
     | {
-        readonly compatibilityDate?: string | undefined;
-        readonly compatibilityFlags?: Array<string> | undefined;
-        readonly worker?:
+        readonly bindings?: ReadonlyArray<unknown> | undefined;
+        readonly assets?:
           | {
-              readonly bindings?: ReadonlyArray<unknown> | undefined;
-              readonly assets?:
-                | {
-                    readonly notFoundHandling?:
-                      | "none"
-                      | "404-page"
-                      | "single-page-application"
-                      | undefined;
-                  }
+              readonly notFoundHandling?:
+                | "none"
+                | "404-page"
+                | "single-page-application"
                 | undefined;
             }
           | undefined;
       }
     | undefined;
+}
+
+/**
+ * The structural subset of the e2e harness's `Options` this package reads.
+ * The harness carries cloudflare configuration target-scoped
+ * (`target.cloudflare.worker`); the top-level `vite` field is the harness's
+ * deprecated alias for the same shape (target-scoped wins).
+ */
+export interface HarnessOptions {
+  readonly target?:
+    | {
+        readonly cloudflare?:
+          | {
+              readonly worker?: HarnessWorkerOptions | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  /** @deprecated Harness alias for `target.cloudflare.worker`. */
+  readonly vite?: HarnessWorkerOptions | undefined;
 }
 
 /**
@@ -92,17 +115,24 @@ export const resolveDevEnvironment = (
   return env;
 };
 
-/** Map the harness's shared options onto {@link SvelteKitOptions}. */
-export const fromHarnessOptions = (options: HarnessOptions): SvelteKitOptions => ({
-  compatibilityDate: options.vite?.compatibilityDate,
-  compatibilityFlags: options.vite?.compatibilityFlags,
-  adapter: {
-    notFoundHandling: options.vite?.worker?.assets?.notFoundHandling,
-  },
-  dev: {
-    env: resolveDevEnvironment(options.vite?.worker?.bindings),
-  },
-});
+/**
+ * Map the harness's options onto {@link SvelteKitOptions}, preferring the
+ * target-scoped carriage (`target.cloudflare.worker`) over the deprecated
+ * top-level `vite` alias.
+ */
+export const fromHarnessOptions = (options: HarnessOptions): SvelteKitOptions => {
+  const worker = options.target?.cloudflare?.worker ?? options.vite;
+  return {
+    compatibilityDate: worker?.compatibilityDate,
+    compatibilityFlags: worker?.compatibilityFlags,
+    adapter: {
+      notFoundHandling: worker?.worker?.assets?.notFoundHandling,
+    },
+    dev: {
+      env: resolveDevEnvironment(worker?.worker?.bindings),
+    },
+  };
+};
 
 /**
  * The e2e-harness factory contract (`framework: "@distilled.cloud/sveltekit"`

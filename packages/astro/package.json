@@ -1,7 +1,7 @@
 {
   "name": "@distilled.cloud/astro",
   "version": "0.13.7",
-  "description": "Wrangler-free Astro integration for Cloudflare Workers: a fork of @astrojs/cloudflare over @distilled.cloud/cloudflare-vite-plugin, plus the framework-core Framework service (programmatic build/dev).",
+  "description": "Programmatic Astro integration implementing the framework-core Framework service (build/dev), with the deploy target passed as a value; ships the wrangler-free Cloudflare Workers target (a fork of @astrojs/cloudflare over @distilled.cloud/cloudflare-vite-plugin) at the ./cloudflare subpath.",
   "keywords": [
     "astro",
     "cloudflare",
@@ -36,6 +36,11 @@
       "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./cloudflare": {
+      "bun": "./src/cloudflare.ts",
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js"
     },
     "./source": {
       "bun": "./src/source.ts",

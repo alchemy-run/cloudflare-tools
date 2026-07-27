@@ -17,8 +17,12 @@ without wrangler:
   data rendered by the group layout, with the group segment absent from the
   URL (and the literal `/(marketing)/...` path a 404).
 - **`platform.caches`** (`/api/cache`): a cache-aside endpoint over
-  `caches.default` — a real cache hit in live mode, the documented no-op stub
-  in dev (see below).
+  `caches.default` — a real cache hit on the second request in both modes
+  (live: workerd's Cache API; dev: the platform proxy's in-memory store).
+- **Platform bindings** (`/platform`): a `+page.server.ts` load exercising a
+  real `KvNamespace` binding (`put`/`get` round-trip through the dev
+  platform proxy), the dev `env` literal-override precedence
+  (`FIXTURE_OVERRIDE`), and `platform.cf`.
 - **Server endpoint** `/api/hello` exercising `cookie` (v2), `uuid`
   (browser/node conditional exports), and `node:crypto` under `nodejs_compat`.
 - **Prerendered** page (`/prerendered`) served from static assets, alongside
@@ -39,7 +43,7 @@ for the miniflare preview); the deploy target itself defaults to
 ```sh
 bun run build    # e2e build — kit build + in-memory adapt() + rolldown re-bundle -> dist/build.json
 bun run preview  # e2e preview — miniflare over dist/build.json + .svelte-kit/cloudflare assets
-bun run dev      # e2e dev --port 3103 — kit's own Vite dev server (Node SSR, stub platform)
+bun run dev      # e2e dev --port 3103 — kit's own Vite dev server (Node SSR, proxy-backed platform)
 bun run test     # playwright: the same suite against both `live` (miniflare) and `dev`
 ```
 
@@ -55,33 +59,39 @@ comment in that file).
   them with miniflare (assets binding `ASSETS`, worker invoked behind the
   assets router).
 - **dev** — SvelteKit's own Vite dev server (Node SSR, full HMR). `platform`
-  comes from the deploy target's stub emulator (see below).
+  comes from the deploy target's proxy-backed emulator (see below).
 
 Both modes run the same Playwright suite in `test/smoke.test.ts`, which shares
 one worker-scoped server per mode (a single dev server / miniflare instance
 for the whole file — do not add per-test servers).
 
-## The dev stub-platform seam
+## The dev platform seam
 
-Dev runs kit's Node SSR, so real Cloudflare bindings are not available. The
-Cloudflare target's adapter `emulate()` returns a **stub platform**:
+Dev runs kit's Node SSR; the Cloudflare target's adapter `emulate()` serves
+`platform` through **cloudflare-runtime's platform proxy** (our wrangler-free
+`getPlatformProxy`): a workerd instance hosts the fixture's declared worker
+bindings and opens lazily on the first SSR request.
 
-- `platform.env` — derived from the fixture's declared worker bindings: `Text`
-  and `Json` bindings become plain values (`resolveDevEnvironment` in
-  `@distilled.cloud/sveltekit`); resource bindings (KV, R2, D1, ...) are
-  skipped.
-- `platform.ctx` — no-op `waitUntil` / `passThroughOnException`.
-- `platform.caches` — a **no-op cache wrapper**: `match` always misses, `put`
-  and `delete` do nothing. Code written cache-aside (like `/api/cache`) works
-  unchanged in dev, it just never hits. The suite asserts this asymmetry
-  explicitly (`cached: true` on the second live request, `cached: false` in
-  dev).
-- `platform.cf` — `{}`.
+- `platform.env` — every declared binding, callable from Node. `Text`/`Json`
+  values are materialised; resource bindings (KV, D1, DO, ...) are lazy
+  stubs that round-trip real calls to workerd (`FIXTURE_KV.put/get` in
+  `/platform` exercises this). Framework-level `dev.env` literals override
+  same-named proxied values (`FIXTURE_OVERRIDE` asserts this).
+- `platform.ctx` — wrangler-parity no-op `waitUntil` /
+  `passThroughOnException` mock.
+- `platform.caches` — **actually round-trips** (in-memory store in the proxy
+  worker; wrangler's dev `caches` is a no-op). The suite asserts
+  `cached: true` on the second request in _both_ modes.
+- `platform.cf` — the same mock object miniflare falls back to (`colo`,
+  `country`, ...).
 - During prerendering, `platform.env` access **throws** (mirroring upstream):
   prerenderable routes must not depend on request-time bindings.
 
-Real dev bindings arrive with the cloudflare-runtime Node-side bindings proxy
-(the `getPlatformProxy` replacement); this stub is the documented interim.
+Inherited proxy limitations (documented in
+`cloudflare-runtime/platform-proxy`): binding methods returning rich class
+instances (e.g. `R2Object`) are unsupported, intermediate values like
+`DurableObjectId` need an explicit `await` before synchronous use, and
+`connect()` is unsupported.
 
 ## The caches wrapper (live)
 

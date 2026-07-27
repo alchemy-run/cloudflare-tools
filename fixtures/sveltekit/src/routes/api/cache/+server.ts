@@ -6,9 +6,10 @@ import type { RequestHandler } from "./$types";
  *
  * - **live** (workerd): `platform.caches.default` is the real Cache API — the
  *   first request for a key computes and `put`s, the second is a cache hit.
- * - **dev** (Node SSR): the stub platform's no-op cache — `match` never hits,
- *   so every request reports `cached: false`. This is the documented phase-1
- *   dev seam until the cloudflare-runtime Node-side bindings proxy lands.
+ * - **dev** (Node SSR): cloudflare-runtime's platform proxy backs `caches`
+ *   with an in-memory store in the proxy worker, so `put`/`match` round-trip
+ *   the same way (unlike wrangler's `getPlatformProxy`, whose dev cache is a
+ *   no-op).
  */
 export const GET: RequestHandler = async ({ platform, url }) => {
   const key = url.searchParams.get("key") ?? "default";

@@ -1,8 +1,14 @@
-import { Text } from "@distilled.cloud/cloudflare-runtime/bindings";
+import { KvNamespace, Text } from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as Options from "@distilled.cloud/e2e/Options";
 import * as SvelteKit from "@distilled.cloud/sveltekit";
 
 const SECRET = "s3cret-from-binding";
+// FIXTURE_OVERRIDE exists as a real Text binding ("proxied-value") AND as a
+// framework-level `dev.env` literal ("literal-override"): in dev the literal
+// must win over the value served through the platform proxy (back-compat with
+// the phase-1 stub platform); live serves the binding value.
+const OVERRIDE_BINDING_VALUE = "proxied-value";
+const OVERRIDE_LITERAL_VALUE = "literal-override";
 
 export default Options.make({
   // The typed factory form (harness contract form 3): map the harness
@@ -12,7 +18,10 @@ export default Options.make({
   // The deploy target defaults to `@distilled.cloud/sveltekit/cloudflare`.
   framework: (options) => {
     const base = SvelteKit.fromHarnessOptions(options as SvelteKit.HarnessOptions);
-    return SvelteKit.layer({ ...base, dev: { ...base.dev, port: 3103 } });
+    return SvelteKit.layer({
+      ...base,
+      dev: { ...base.dev, port: 3103, env: { FIXTURE_OVERRIDE: OVERRIDE_LITERAL_VALUE } },
+    });
   },
   // Target-scoped config carriage: `target.cloudflare.worker` is what the
   // framework package reads (compat date/flags, bindings, assets behavior);
@@ -25,7 +34,13 @@ export default Options.make({
         compatibilityFlags: ["nodejs_compat"],
         worker: {
           name: "fixtures-sveltekit",
-          bindings: [Text.local("FIXTURE_SECRET", SECRET)],
+          bindings: [
+            Text.local("FIXTURE_SECRET", SECRET),
+            Text.local("FIXTURE_OVERRIDE", OVERRIDE_BINDING_VALUE),
+            // a real (non-literal) resource binding: served in dev through
+            // cloudflare-runtime's platform proxy
+            KvNamespace.local("FIXTURE_KV"),
+          ],
           assets: {
             htmlHandling: "auto-trailing-slash",
             notFoundHandling: "none",
@@ -36,7 +51,8 @@ export default Options.make({
       preview: {
         compatibilityDate: "2026-03-10",
         compatibilityFlags: ["nodejs_compat"],
-        bindings: { FIXTURE_SECRET: SECRET },
+        bindings: { FIXTURE_SECRET: SECRET, FIXTURE_OVERRIDE: OVERRIDE_BINDING_VALUE },
+        kvNamespaces: ["FIXTURE_KV"],
         assets: {
           binding: "ASSETS",
           routerConfig: {

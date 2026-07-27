@@ -12,16 +12,14 @@
  *
  * This module (and `SvelteKit.ts`) is target-agnostic by contract: it must
  * not import anything Cloudflare-specific. The Cloudflare half — the
- * in-memory kit adapter fork, the workerd rolldown finishing pass, the dev
- * stub platform — lives behind `@distilled.cloud/sveltekit/cloudflare`.
+ * in-memory kit adapter fork, the workerd rolldown finishing pass, the
+ * proxy-backed dev platform — lives behind
+ * `@distilled.cloud/sveltekit/cloudflare`.
  */
 import type { Framework } from "@distilled.cloud/framework-core";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
 import { layer, type SvelteKitOptions } from "./SvelteKit.ts";
 
 export {
@@ -84,41 +82,12 @@ export interface HarnessOptions {
 }
 
 /**
- * Derive the dev-server stub `platform.env` from the worker's declared
- * binding hooks. Binding hooks are Effects producing workerd `Worker_Binding`
- * configs; the ones that resolve synchronously without runtime services (Text
- * and Json bindings) become plain env values. Everything else (KV, R2, D1,
- * ...) is skipped — dev runs SvelteKit's Node SSR, where real Cloudflare
- * bindings are unavailable until the cloudflare-runtime Node-side bindings
- * proxy lands.
- */
-export const resolveDevEnvironment = (
-  bindings: ReadonlyArray<unknown> | undefined,
-): Record<string, unknown> => {
-  const env: Record<string, unknown> = {};
-  for (const hook of bindings ?? []) {
-    if (!Effect.isEffect(hook)) continue;
-    const exit = Effect.runSyncExit(hook as Effect.Effect<unknown, unknown, never>);
-    if (!Exit.isSuccess(exit)) continue;
-    const binding = exit.value;
-    if (!Predicate.hasProperty(binding, "name") || typeof binding.name !== "string") continue;
-    if (Predicate.hasProperty(binding, "text") && typeof binding.text === "string") {
-      env[binding.name] = binding.text;
-    } else if (Predicate.hasProperty(binding, "json") && typeof binding.json === "string") {
-      try {
-        env[binding.name] = JSON.parse(binding.json);
-      } catch {
-        // not valid JSON — skip
-      }
-    }
-  }
-  return env;
-};
-
-/**
  * Map the harness's options onto {@link SvelteKitOptions}, preferring the
  * target-scoped carriage (`target.cloudflare.worker`) over the deprecated
- * top-level `vite` alias.
+ * top-level `vite` alias. The worker's declared binding hooks are passed
+ * through to the deploy target's dev platform wholesale (the Cloudflare
+ * target serves them on `platform.env` via cloudflare-runtime's platform
+ * proxy — resource bindings included, not just literal values).
  */
 export const fromHarnessOptions = (options: HarnessOptions): SvelteKitOptions => {
   const worker = options.target?.cloudflare?.worker ?? options.vite;
@@ -129,7 +98,7 @@ export const fromHarnessOptions = (options: HarnessOptions): SvelteKitOptions =>
       notFoundHandling: worker?.worker?.assets?.notFoundHandling,
     },
     dev: {
-      env: resolveDevEnvironment(worker?.worker?.bindings),
+      bindings: worker?.worker?.bindings,
     },
   };
 };

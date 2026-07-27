@@ -4,9 +4,9 @@
  *
  * Everything Cloudflare-specific lives here (and in the modules this file
  * imports): the wrangler-free in-memory kit adapter (worker shim, `_headers`
- * / `_redirects` / `.assetsignore` generation, the dev-server stub platform)
- * and the finishing pass that re-bundles kit's node-flavored `_worker.js`
- * output for workerd with rolldown +
+ * / `_redirects` / `.assetsignore` generation, the proxy-backed dev
+ * platform) and the finishing pass that re-bundles kit's node-flavored
+ * `_worker.js` output for workerd with rolldown +
  * `@distilled.cloud/cloudflare-rolldown-plugin`.
  *
  * The default export is the target factory the framework package applies to
@@ -31,10 +31,15 @@ export {
   generateHeaders,
   generateRedirects,
   makeCloudflareAdapter,
-  makeStubEmulator,
+  makeDevPlatformEmulator,
   type CloudflareAdapter,
   type CloudflareAdapterOptions,
   type CloudflareAdapterResult,
+  type CloudflareDevPlatformOptions,
+  type CloudflareEmulator,
+  type DevPlatformProxy,
+  type OpenDevPlatformProxy,
+  type OpenDevPlatformProxyOptions,
 } from "./Adapter.ts";
 export { generateWorkerShim, type WorkerShimOptions } from "./WorkerShim.ts";
 
@@ -46,9 +51,11 @@ const fail = (message: string, cause?: unknown) =>
  *
  * - `adapter(context)` — the in-memory, wrangler-free fork of
  *   `@sveltejs/adapter-cloudflare` (always Workers mode; generates the worker
- *   shim with real relative imports). In dev it supplies the stub `platform`
- *   (`env` from `context.dev.env`, no-op `ctx.waitUntil`/`caches`, empty
- *   `cf`).
+ *   shim with real relative imports). In dev it supplies the proxy-backed
+ *   `platform`: `context.dev.bindings` (cloudflare-runtime binding hooks)
+ *   served through `getPlatformProxy`'s workerd instance, `context.dev.env`
+ *   literals overriding same-named proxied values, a `caches` that actually
+ *   round-trips, and wrangler-parity `cf`/`ctx` mocks.
  * - `finish(output, context)` — re-bundles the adapter's unbundled
  *   `_worker.js` (and the whole `.svelte-kit/output/server` graph it imports)
  *   for workerd, replacing the bundling `wrangler deploy` performs for the
@@ -68,7 +75,16 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
       makeCloudflareAdapter({
         ...config.adapter,
         root: context.root,
-        ...(context.dev !== undefined ? { platform: { env: context.dev.env } } : undefined),
+        ...(context.dev !== undefined
+          ? {
+              platform: {
+                env: context.dev.env,
+                bindings: context.dev.bindings,
+                compatibilityDate: config.compatibilityDate,
+                compatibilityFlags: config.compatibilityFlags,
+              },
+            }
+          : undefined),
       }),
     finish: (output, context) =>
       Effect.gen(function* () {

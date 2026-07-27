@@ -194,10 +194,10 @@ read harness options via the target-scoped carriage above.
 - **Platform-proxy policy.** Wherever an upstream integration reaches for
   wrangler's `getPlatformProxy` (SvelteKit `adapter-cloudflare`, OpenNext
   `initOpenNextCloudflareForDev`, Astro `platformProxy`), the replacement is
-  implemented in `@distilled.cloud/cloudflare-runtime` (workerd-backed
+  `@distilled.cloud/cloudflare-runtime/platform-proxy` (workerd-backed
   Node-side proxies for `env`/`cf`/`ctx`/`caches`, configured in-memory) —
-  never a wrangler dependency. Until that lands, dev-mode platform emulation
-  uses typed stubs (see SvelteKit's `makeStubEmulator`).
+  never a wrangler dependency. SvelteKit's `makeDevPlatformEmulator` is the
+  first consumer.
 - **Version pinning.** Upstream surfaces the integrations touch are
   `@experimental`/`unstable_`/unexported: pin exact framework versions,
   e2e-test against real apps in CI, and treat version bumps as deliberate

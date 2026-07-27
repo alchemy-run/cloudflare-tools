@@ -66,11 +66,26 @@ export interface SvelteKitAdapterContext {
   /** Absolute project root. */
   readonly root: string;
   /**
-   * Present when the adapter is constructed for the dev server: the values
-   * its `emulate()` platform should expose as `platform.env`. Absent for
-   * production builds.
+   * Present when the adapter is constructed for the dev server: inputs for
+   * the `platform` its `emulate()` must supply. Absent for production
+   * builds.
    */
-  readonly dev?: { readonly env?: Record<string, unknown> | undefined } | undefined;
+  readonly dev?:
+    | {
+        /**
+         * Literal `platform.env` overrides — a same-named literal wins over
+         * any target-provided platform value.
+         */
+        readonly env?: Record<string, unknown> | undefined;
+        /**
+         * Target-specific binding specs the dev platform should serve
+         * (opaque to the framework half — e.g. the Cloudflare target takes
+         * `cloudflare-runtime` binding hooks and proxies them onto
+         * `platform.env`).
+         */
+        readonly bindings?: ReadonlyArray<unknown> | undefined;
+      }
+    | undefined;
 }
 
 /** What a target's `adapt()` must record for the framework to continue. */
@@ -93,6 +108,12 @@ export interface SvelteKitAdapterResult {
  */
 export interface SvelteKitAdapter extends Adapter {
   readonly result: { current?: SvelteKitAdapterResult | undefined };
+  /**
+   * Release resources the adapter holds for the dev server (e.g. the
+   * Cloudflare target's platform-proxy workerd instance). Called by the
+   * framework after the dev server closes.
+   */
+  readonly dispose?: (() => Promise<void>) | undefined;
 }
 
 /**
@@ -159,13 +180,20 @@ export interface SvelteKitOptions {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
         readonly port?: number | undefined;
         /**
-         * Values exposed as `platform.env` by the dev-server stub platform.
-         * Dev runs SvelteKit's own Node SSR: real platform bindings are not
-         * available until the cloudflare-runtime Node-side bindings proxy
-         * lands, so only in-memory values (secrets, config strings) can be
-         * emulated here.
+         * Literal values exposed on the dev `platform.env`. Applied on top
+         * of the values the target's dev platform serves for
+         * {@link SvelteKitOptions.dev.bindings} — a same-named literal
+         * always wins.
          */
         readonly env?: Record<string, unknown> | undefined;
+        /**
+         * Target-specific binding specs the dev platform should serve on
+         * `platform.env`. Opaque to the framework half; the Cloudflare
+         * target accepts `cloudflare-runtime` binding hooks (`Text.local`,
+         * `KvNamespace.local`, …) and proxies them into kit's Node SSR via
+         * a workerd-backed platform proxy.
+         */
+        readonly bindings?: ReadonlyArray<unknown> | undefined;
       }
     | undefined;
 }
@@ -358,7 +386,22 @@ export const make: (
       const root = devOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
       yield* requireAdapterHook(target);
-      const adapter = target.adapter({ root, dev: { env: options?.dev?.env } });
+      const adapter = target.adapter({
+        root,
+        dev: { env: options?.dev?.env, bindings: options?.dev?.bindings },
+      });
+      // Registered before the server is acquired so it runs after the server
+      // closes (finalizers are LIFO): the dev platform (e.g. the Cloudflare
+      // target's platform proxy) outlives the last in-flight request.
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          try {
+            await adapter.dispose?.();
+          } catch {
+            // dev-platform teardown is best-effort
+          }
+        }),
+      );
       const vite = yield* loadVite(root);
       const plugins = yield* loadKitPlugins(root, adapter);
       const port = devOptions?.port ?? options?.dev?.port;

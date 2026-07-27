@@ -5,7 +5,11 @@ import {
   generateHeaders,
   generateRedirects,
   generateWorkerShim,
-  makeStubEmulator,
+  makeCloudflareAdapter,
+  makeDevPlatformEmulator,
+  type DevPlatformProxy,
+  type OpenDevPlatformProxy,
+  type OpenDevPlatformProxyOptions,
 } from "../src/cloudflare.ts";
 
 describe("generateWorkerShim", () => {
@@ -116,28 +120,166 @@ describe("generateAssetsIgnore", () => {
   });
 });
 
-describe("makeStubEmulator", () => {
-  it("exposes env values and a no-op ctx outside prerendering", async () => {
-    const emulator = makeStubEmulator({ SECRET: "value" });
-    const platform = (await emulator.platform?.({ config: {}, prerender: false })) as {
-      env: Record<string, unknown>;
-      ctx: { waitUntil: (promise: Promise<unknown>) => void };
-      caches: { default: { match: () => Promise<undefined> } };
-      cf: Record<string, unknown>;
-    };
-    expect(platform.env["SECRET"]).toBe("value");
+interface FakeProxyHarness {
+  readonly openProxy: OpenDevPlatformProxy;
+  readonly opens: Array<OpenDevPlatformProxyOptions>;
+  readonly disposals: () => number;
+}
+
+const makeFakeProxy = (env: Record<string, unknown>): FakeProxyHarness => {
+  const opens: Array<OpenDevPlatformProxyOptions> = [];
+  let disposed = 0;
+  const proxy: DevPlatformProxy = {
+    env,
+    cf: { colo: "TST", country: "US" },
+    ctx: { waitUntil: (_promise: Promise<unknown>) => {} },
+    caches: { default: "fake-cache" },
+    dispose: async () => {
+      disposed += 1;
+    },
+  };
+  return {
+    openProxy: async (options) => {
+      opens.push(options);
+      return proxy;
+    },
+    opens,
+    disposals: () => disposed,
+  };
+};
+
+type PlatformShape = {
+  env: Record<string, unknown>;
+  ctx: { waitUntil: (promise: Promise<unknown>) => void };
+  caches: unknown;
+  cf: Record<string, unknown>;
+};
+
+describe("makeDevPlatformEmulator", () => {
+  it("opens the proxy lazily and serves env, ctx, caches, and cf from it", async () => {
+    const fake = makeFakeProxy({ FROM_PROXY: "proxied" });
+    const emulator = makeDevPlatformEmulator({
+      bindings: ["binding-hook"],
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: ["nodejs_compat"],
+      openProxy: fake.openProxy,
+    });
+    // nothing opened until the first platform() call
+    expect(fake.opens).toHaveLength(0);
+    const platform = (await emulator.platform?.({
+      config: {},
+      prerender: false,
+    })) as PlatformShape;
+    expect(fake.opens).toHaveLength(1);
+    expect(fake.opens[0]).toMatchObject({
+      name: "sveltekit-dev-platform-proxy",
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: ["nodejs_compat"],
+      bindings: ["binding-hook"],
+    });
+    expect(platform.env["FROM_PROXY"]).toBe("proxied");
+    expect(platform.cf["colo"]).toBe("TST");
+    expect(platform.caches).toEqual({ default: "fake-cache" });
     expect(() => platform.ctx.waitUntil(Promise.resolve())).not.toThrow();
-    await expect(platform.caches.default.match()).resolves.toBeUndefined();
-    expect(platform.cf).toEqual({});
+  });
+
+  it("opens a single proxy across platform() calls", async () => {
+    const fake = makeFakeProxy({});
+    const emulator = makeDevPlatformEmulator({ openProxy: fake.openProxy });
+    await emulator.platform?.({ config: {}, prerender: false });
+    await emulator.platform?.({ config: {}, prerender: true });
+    await emulator.platform?.({ config: {}, prerender: false });
+    expect(fake.opens).toHaveLength(1);
+  });
+
+  it("applies literal env overrides on top of proxied values", async () => {
+    const fake = makeFakeProxy({ SHARED: "proxied", FROM_PROXY: "proxied" });
+    const emulator = makeDevPlatformEmulator({
+      env: { SHARED: "literal-wins", LITERAL_ONLY: "literal" },
+      openProxy: fake.openProxy,
+    });
+    const platform = (await emulator.platform?.({
+      config: {},
+      prerender: false,
+    })) as PlatformShape;
+    expect(platform.env).toEqual({
+      FROM_PROXY: "proxied",
+      SHARED: "literal-wins",
+      LITERAL_ONLY: "literal",
+    });
   });
 
   it("throws on env access in prerenderable routes", async () => {
-    const emulator = makeStubEmulator({ SECRET: "value" });
-    const platform = (await emulator.platform?.({ config: {}, prerender: true })) as {
-      env: Record<string, unknown>;
-    };
-    expect(() => platform.env["SECRET"]).toThrow(
-      "Cannot access platform.env.SECRET in a prerenderable route",
+    const fake = makeFakeProxy({ FROM_PROXY: "proxied" });
+    const emulator = makeDevPlatformEmulator({
+      env: { LITERAL: "value" },
+      openProxy: fake.openProxy,
+    });
+    const platform = (await emulator.platform?.({
+      config: {},
+      prerender: true,
+    })) as PlatformShape;
+    expect(() => platform.env["FROM_PROXY"]).toThrow(
+      "Cannot access platform.env.FROM_PROXY in a prerenderable route",
     );
+    expect(() => platform.env["LITERAL"]).toThrow(
+      "Cannot access platform.env.LITERAL in a prerenderable route",
+    );
+  });
+
+  it("dispose tears down an opened proxy and is a no-op before open", async () => {
+    const untouched = makeFakeProxy({});
+    const idle = makeDevPlatformEmulator({ openProxy: untouched.openProxy });
+    await idle.dispose();
+    expect(untouched.opens).toHaveLength(0);
+    expect(untouched.disposals()).toBe(0);
+
+    const fake = makeFakeProxy({});
+    const emulator = makeDevPlatformEmulator({ openProxy: fake.openProxy });
+    await emulator.platform?.({ config: {}, prerender: false });
+    await emulator.dispose();
+    expect(fake.disposals()).toBe(1);
+  });
+});
+
+describe("makeCloudflareAdapter emulation", () => {
+  it("serves the proxy-backed platform when dev platform options are present", async () => {
+    const fake = makeFakeProxy({ FROM_PROXY: "proxied" });
+    const adapter = makeCloudflareAdapter({
+      platform: { bindings: ["hook"], openProxy: fake.openProxy },
+    });
+    const emulator = await adapter.emulate?.();
+    const platform = (await emulator?.platform?.({
+      config: {},
+      prerender: false,
+    })) as PlatformShape;
+    expect(platform.env["FROM_PROXY"]).toBe("proxied");
+    await adapter.dispose();
+    expect(fake.disposals()).toBe(1);
+  });
+
+  it("memoizes the emulator across emulate() calls", async () => {
+    const fake = makeFakeProxy({});
+    const adapter = makeCloudflareAdapter({ platform: { openProxy: fake.openProxy } });
+    const first = await adapter.emulate?.();
+    const second = await adapter.emulate?.();
+    expect(first).toBe(second);
+    await first?.platform?.({ config: {}, prerender: false });
+    await second?.platform?.({ config: {}, prerender: false });
+    expect(fake.opens).toHaveLength(1);
+  });
+
+  it("serves an inert empty platform for production builds (no proxy)", async () => {
+    const adapter = makeCloudflareAdapter({});
+    const emulator = await adapter.emulate?.();
+    const platform = (await emulator?.platform?.({
+      config: {},
+      prerender: false,
+    })) as PlatformShape & { caches: { default: { match: () => Promise<undefined> } } };
+    expect(platform.env).toEqual({});
+    expect(platform.cf).toEqual({});
+    await expect(platform.caches.default.match()).resolves.toBeUndefined();
+    // disposing without a proxy is a no-op
+    await adapter.dispose();
   });
 });

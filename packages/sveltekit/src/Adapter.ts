@@ -11,10 +11,10 @@
  * - The worker shim is generated directly with real relative import paths
  *   (see `WorkerShim.ts`); upstream ships a prebuilt `files/worker.js` and
  *   string-replaces `SERVER`/`MANIFEST` placeholders.
- * - `emulate()` returns a stub platform (env from in-memory options,
- *   `ctx.waitUntil` no-op, no-op `caches`, empty `cf`) instead of wrangler's
- *   `getPlatformProxy`. Real dev bindings arrive with the
- *   `cloudflare-runtime` Node-side bindings proxy.
+ * - `emulate()` supplies the dev `platform` from `cloudflare-runtime`'s
+ *   platform proxy (`getPlatformProxy`) instead of wrangler's: real bindings
+ *   round-trip through a workerd instance, `caches` actually stores/matches
+ *   (wrangler's is a no-op), `cf`/`ctx` mocks match wrangler's.
  *
  * The adapter does **not** bundle the app: `adapt()` records the assets
  * directory and the unbundled worker entry on `result`, and the `SvelteKit`
@@ -26,6 +26,7 @@
  * `node:fs` directly like upstream — it is framework-callback code, not an
  * Effect service.
  */
+import type { BindingHooks } from "@distilled.cloud/cloudflare-runtime";
 import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
@@ -68,21 +69,31 @@ export interface CloudflareAdapterOptions {
    */
   readonly root?: string | undefined;
   /**
-   * Values for the dev-server stub platform returned from `emulate()`:
-   * `platform.env` entries visible to `load` functions and endpoints in dev.
+   * Inputs for the dev platform returned from `emulate()` (see
+   * {@link CloudflareDevPlatformOptions}). When present, `emulate()` serves
+   * `platform = { env, ctx, caches, cf }` through `cloudflare-runtime`'s
+   * platform proxy; when absent (production builds), `emulate()` returns an
+   * inert empty platform.
    */
-  readonly platform?: { readonly env?: Record<string, unknown> | undefined } | undefined;
+  readonly platform?: CloudflareDevPlatformOptions | undefined;
 }
 
 export interface CloudflareAdapter extends Adapter {
   /** Populated by `adapt()`; consumed by the SvelteKit Framework service. */
   readonly result: { current?: CloudflareAdapterResult };
+  /**
+   * Tear down dev resources held by the adapter (the platform-proxy workerd
+   * instance, when one was opened). Safe to call multiple times; a no-op
+   * when the proxy was never opened.
+   */
+  readonly dispose: () => Promise<void>;
 }
 
 export const makeCloudflareAdapter = (
   options: CloudflareAdapterOptions = {},
 ): CloudflareAdapter => {
   const result: { current?: CloudflareAdapterResult } = {};
+  let emulator: CloudflareEmulator | undefined;
   return {
     name: "@distilled.cloud/sveltekit",
     result,
@@ -165,7 +176,14 @@ export const makeCloudflareAdapter = (
 
       result.current = { dest, workerEntry };
     },
-    emulate: () => makeStubEmulator(options.platform?.env),
+    emulate: () =>
+      (emulator ??=
+        options.platform !== undefined
+          ? makeDevPlatformEmulator(options.platform)
+          : makeBuildEmulator()),
+    dispose: async () => {
+      await emulator?.dispose();
+    },
     supports: {
       read: () => true,
       instrumentation: () => true,
@@ -259,25 +277,166 @@ _headers
 _redirects
 `.trimStart();
 
+// ---------------------------------------------------------------------------
+// Dev platform emulation (cloudflare-runtime platform proxy)
+// ---------------------------------------------------------------------------
+
+/** Inputs for the proxy-backed dev platform served from `emulate()`. */
+export interface CloudflareDevPlatformOptions {
+  /**
+   * Literal `platform.env` overrides. Applied on top of the proxied binding
+   * values — a same-named literal always wins (back-compat with the phase-1
+   * stub platform, whose env was literals only).
+   */
+  readonly env?: Record<string, unknown> | undefined;
+  /**
+   * Bindings to expose on `platform.env` — the same hook shapes
+   * `cloudflare-runtime`'s `Runtime.start` accepts (`Text.local`,
+   * `KvNamespace.local`, `D1.local`, remote bindings, …). Typed opaquely
+   * because the specs travel through the target-agnostic framework half;
+   * the values must be `cloudflare-runtime` `BindingHooks`.
+   */
+  readonly bindings?: ReadonlyArray<unknown> | undefined;
+  /** Compatibility date for the binding-proxy workerd instance. */
+  readonly compatibilityDate?: string | undefined;
+  /** Compatibility flags for the binding-proxy workerd instance. */
+  readonly compatibilityFlags?: ReadonlyArray<string> | undefined;
+  /** Name of the proxy workerd service. @default "sveltekit-dev-platform-proxy" */
+  readonly name?: string | undefined;
+  /**
+   * Override how the platform proxy is opened. A test seam — the default
+   * dynamically imports `cloudflare-runtime`'s `getPlatformProxy`.
+   */
+  readonly openProxy?: OpenDevPlatformProxy | undefined;
+}
+
+/** The subset of `cloudflare-runtime`'s `PlatformProxy` the emulator serves. */
+export interface DevPlatformProxy {
+  readonly env: Record<string, unknown>;
+  readonly cf: Record<string, unknown>;
+  readonly ctx: unknown;
+  readonly caches: unknown;
+  readonly dispose: () => Promise<void>;
+}
+
+export interface OpenDevPlatformProxyOptions {
+  readonly name: string;
+  readonly compatibilityDate?: string | undefined;
+  readonly compatibilityFlags?: ReadonlyArray<string> | undefined;
+  readonly bindings: ReadonlyArray<unknown>;
+}
+
+export type OpenDevPlatformProxy = (
+  options: OpenDevPlatformProxyOptions,
+) => Promise<DevPlatformProxy>;
+
+/** A kit `Emulator` that owns a disposable platform proxy. */
+export interface CloudflareEmulator extends Emulator {
+  /** Tear down the proxy. No-op when it was never opened. */
+  readonly dispose: () => Promise<void>;
+}
+
 /**
- * The phase-1 dev-platform stub: `platform.env` from in-memory options,
- * `ctx.waitUntil`/`passThroughOnException` no-ops, a no-op `caches`, and an
- * empty `cf`. During prerendering, `platform.env` access throws (mirroring
+ * The default proxy opener: `cloudflare-runtime`'s `getPlatformProxy`
+ * (workerd hosting the bindings behind the internal proxy worker, local-only
+ * layer, state in a temp directory). Imported lazily so production builds
+ * never load the runtime machinery.
+ */
+const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
+  const { getPlatformProxy } = await import("@distilled.cloud/cloudflare-runtime/platform-proxy");
+  return await getPlatformProxy({
+    name: options.name,
+    ...(options.compatibilityDate !== undefined
+      ? { compatibilityDate: options.compatibilityDate }
+      : undefined),
+    ...(options.compatibilityFlags !== undefined
+      ? { compatibilityFlags: [...options.compatibilityFlags] }
+      : undefined),
+    bindings: options.bindings as BindingHooks,
+  });
+};
+
+/**
+ * `platform.env` for prerenderable routes: any key access throws (mirroring
  * upstream), because prerendered pages must not depend on request-time
  * bindings.
- *
- * Real bindings (KV/R2/D1/DO/`caches`/`cf`) arrive with the
- * `cloudflare-runtime` Node-side bindings proxy; this stub is the documented
- * interim.
  */
-export const makeStubEmulator = (env: Record<string, unknown> = {}): Emulator => {
+const guardPrerenderEnv = (env: Record<string, unknown>): Record<string, unknown> => {
+  const guarded: Record<string, unknown> = {};
+  for (const key of Object.keys(env)) {
+    Object.defineProperty(guarded, key, {
+      get: () => {
+        throw new Error(`Cannot access platform.env.${key} in a prerenderable route`);
+      },
+    });
+  }
+  return guarded;
+};
+
+/**
+ * The dev-platform emulator: serves `platform = { env, ctx, caches, cf }`
+ * from `cloudflare-runtime`'s platform proxy — our wrangler-free equivalent
+ * of upstream `adapter-cloudflare`'s `getPlatformProxy`-based `emulate()`.
+ *
+ * - The proxy (a workerd instance hosting the bindings) is opened lazily on
+ *   the first `platform()` call and shared across requests; dispose it with
+ *   the dev server via {@link CloudflareEmulator.dispose}.
+ * - `env` carries every configured binding, callable from Node
+ *   (`env.KV.get("key")`, `env.DB.prepare("...").all()`); literal
+ *   `options.env` values override same-named proxied values.
+ * - `caches` actually round-trips (`put`/`match`/`delete` hit an in-memory
+ *   store in the proxy worker — unlike wrangler, whose dev `caches` is a
+ *   no-op); `cf` is the same mock object miniflare falls back to; `ctx` is
+ *   wrangler's no-op `ExecutionContext` mock.
+ * - Inherited proxy limitations: binding methods returning rich class
+ *   instances (e.g. `R2Object`) are unsupported, and intermediate values
+ *   (e.g. `DurableObjectId`) need an explicit `await` before synchronous use
+ *   — see `cloudflare-runtime/platform-proxy`.
+ */
+export const makeDevPlatformEmulator = (
+  options: CloudflareDevPlatformOptions = {},
+): CloudflareEmulator => {
+  const openProxy = options.openProxy ?? openPlatformProxy;
+  let opened: Promise<DevPlatformProxy> | undefined;
+  const open = () =>
+    (opened ??= openProxy({
+      name: options.name ?? "sveltekit-dev-platform-proxy",
+      compatibilityDate: options.compatibilityDate,
+      compatibilityFlags: options.compatibilityFlags,
+      bindings: options.bindings ?? [],
+    }));
+  return {
+    platform: async ({ prerender }) => {
+      const proxy = await open();
+      const env = { ...proxy.env, ...options.env };
+      return {
+        env: prerender ? guardPrerenderEnv(env) : env,
+        ctx: proxy.ctx,
+        caches: proxy.caches,
+        cf: proxy.cf,
+      } as unknown as App.Platform;
+    },
+    dispose: async () => {
+      if (opened === undefined) return;
+      const proxy = await opened.catch(() => undefined);
+      await proxy?.dispose();
+    },
+  };
+};
+
+/**
+ * The inert platform used when the adapter is constructed without dev
+ * platform options (production builds): empty env, no-op `ctx`/`caches`,
+ * empty `cf`. Never opens a proxy.
+ */
+const makeBuildEmulator = (): CloudflareEmulator => {
   const noopCache = {
     match: async () => undefined,
     put: async () => {},
     delete: async () => false,
   };
   const platform = {
-    env: { ...env },
+    env: {},
     ctx: {
       waitUntil: (_promise: Promise<unknown>) => {},
       passThroughOnException: () => {},
@@ -288,17 +447,8 @@ export const makeStubEmulator = (env: Record<string, unknown> = {}): Emulator =>
     },
     cf: {},
   };
-  const prerenderEnv: Record<string, unknown> = {};
-  for (const key of Object.keys(env)) {
-    Object.defineProperty(prerenderEnv, key, {
-      get: () => {
-        throw new Error(`Cannot access platform.env.${key} in a prerenderable route`);
-      },
-    });
-  }
-  const prerenderPlatform = { env: prerenderEnv };
   return {
-    platform: ({ prerender }) =>
-      (prerender ? prerenderPlatform : platform) as unknown as App.Platform,
+    platform: () => platform as unknown as App.Platform,
+    dispose: async () => {},
   };
 };

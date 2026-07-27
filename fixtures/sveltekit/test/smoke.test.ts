@@ -123,7 +123,9 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(literal.status).toBe(404);
     });
 
-    it("exercises the platform.caches access path", async ({ server }) => {
+    it("round-trips platform.caches (put on miss, hit on the second request)", async ({
+      server,
+    }) => {
       // a fresh key per invocation so retries never see a warm cache
       const key = crypto.randomUUID();
       type CacheProbe = { supported: boolean; cached: boolean; key: string };
@@ -133,9 +135,25 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(first.key).toBe(key);
       const second = await server.fetchJson<CacheProbe>(`/api/cache?key=${key}`);
       expect(second.supported).toBe(true);
-      // live runs on workerd with the real Cache API; dev runs kit's Node SSR
-      // with the documented no-op stub cache (match never hits).
-      expect(second.cached).toBe(mode === "live");
+      // live runs on workerd with the real Cache API; dev serves `caches`
+      // through cloudflare-runtime's platform proxy, which round-trips too
+      // (unlike wrangler's no-op dev cache).
+      expect(second.cached).toBe(true);
+    });
+
+    it("serves real bindings, env overrides, and cf through platform", async ({ page, server }) => {
+      const response = await page.goto(new URL("/platform", server.url).toString());
+      expect(response?.status()).toBe(200);
+      // FIXTURE_KV is a real KV namespace binding — in dev the put/get pair
+      // round-trips through the platform proxy's workerd instance
+      await expect(page.locator("#kv")).toHaveText("kv:kv-round-trip");
+      // FIXTURE_OVERRIDE: the dev `env` literal wins over the proxied Text
+      // binding; live serves the binding value
+      await expect(page.locator("#override")).toHaveText(
+        mode === "dev" ? "override:literal-override" : "override:proxied-value",
+      );
+      // `cf` is populated in both modes (wrangler-parity mock in dev)
+      await expect(page.locator("#cf")).toHaveText("cf-colo:present");
     });
   });
 }

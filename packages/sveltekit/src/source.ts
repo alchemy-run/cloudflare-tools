@@ -23,9 +23,12 @@
  *   `memo.include`/`memo.exclude`), the discovered external workspaces, the
  *   lockfile, this package's version, and the build-affecting options.
  * - `dev()` starts SvelteKit's own Vite dev server (Node SSR, full HMR)
- *   with the stub `platform` (env from the Worker's literal env values).
- *   Real Cloudflare bindings in dev arrive with the cloudflare-runtime
- *   Node-side bindings proxy — that integration is a documented follow-up.
+ *   with the proxy-backed `platform`: the Worker's binding hooks
+ *   (`ctx.worker.bindings`) are served on `platform.env` through
+ *   cloudflare-runtime's platform proxy (workerd hosting the real local
+ *   bindings), `caches` round-trips, and `cf`/`ctx` match wrangler's
+ *   `getPlatformProxy` mocks. Literal `props.env` values are additionally
+ *   applied as `platform.env` overrides.
  */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -105,7 +108,18 @@ export interface SourceContext {
 }
 
 /** Mirror of alchemy's `DevContext` (the subset this source reads). */
-export interface SourceDevContext extends SourceContext {}
+export interface SourceDevContext extends SourceContext {
+  /**
+   * Runtime wiring derived by alchemy's LocalWorkerProvider. `bindings` are
+   * cloudflare-runtime `BindingHook`s — typed opaquely here to keep this
+   * module free of an alchemy/cloudflare-runtime type dependency; they are
+   * fed to the dev platform proxy as-is.
+   */
+  readonly worker: {
+    readonly name: string;
+    readonly bindings: ReadonlyArray<unknown>;
+  };
+}
 
 /** Mirror of alchemy's server-mode `SourceDevHandle`. */
 export interface SourceDevHandle {
@@ -473,13 +487,15 @@ const assetsConfig = (assets: SourceContext["assets"]): Record<string, unknown> 
 };
 
 /**
- * Resolve the Worker's literal env values for the dev-server stub platform:
+ * Resolve the Worker's literal env values as dev `platform.env` overrides:
  * strings pass through, `Redacted<string>`s are unwrapped, everything else
- * (Effects, resource bindings) is skipped — dev runs SvelteKit's Node SSR
- * where real Cloudflare bindings are not yet available (the
- * cloudflare-runtime Node-side bindings proxy is the follow-up seam).
+ * (Effects, resource bindings) is skipped — those are delivered as real
+ * bindings through the platform proxy via `ctx.worker.bindings`. A
+ * same-named literal wins over the proxied value.
  */
-const resolveStubEnv = (env: Record<string, unknown> | undefined): Record<string, unknown> => {
+const resolveDevEnvOverrides = (
+  env: Record<string, unknown> | undefined,
+): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(env ?? {})) {
     if (typeof value === "string") {
@@ -599,9 +615,12 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
       );
       return { input: hash, additionalWorkspaces: workspaces };
     }),
-    dev: Effect.fnUntraced(function* (ctx) {
+    dev: Effect.fnUntraced(function* (ctx: SourceDevContext) {
       const framework = yield* makeSvelteKit(
-        frameworkOptions(ctx, { env: resolveStubEnv(ctx.env) }),
+        frameworkOptions(ctx, {
+          env: resolveDevEnvOverrides(ctx.env),
+          bindings: ctx.worker.bindings,
+        }),
       );
       const server = yield* framework
         .dev({ root: rootDir, port: 0 })

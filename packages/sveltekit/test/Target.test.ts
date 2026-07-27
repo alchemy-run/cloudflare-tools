@@ -39,18 +39,19 @@ describe("makeCloudflareTarget", () => {
     expect(typeof adapter.adapt).toBe("function");
   });
 
-  it("wires dev env values into the adapter's stub platform emulator", async () => {
-    const cloudflare = makeCloudflareTarget();
+  it("constructs a dev adapter with a proxy emulator and a dispose hook", async () => {
+    const cloudflare = makeCloudflareTarget({ compatibilityDate: "2026-03-10" });
     const adapter = cloudflare.adapter({
       root: "/tmp/project",
-      dev: { env: { SECRET: "value" } },
+      dev: { env: { SECRET: "value" }, bindings: ["binding-hook"] },
     });
-    const emulator = await adapter.emulate?.();
-    const platform = (await emulator?.platform?.({
-      config: {},
-      prerender: false,
-    })) as { env: Record<string, unknown> };
-    expect(platform.env["SECRET"]).toBe("value");
+    // The emulator is proxy-backed (behavior covered in Adapter.test.ts with
+    // an injected opener); here we only assert the wiring exists without
+    // opening a real workerd instance.
+    expect(typeof adapter.emulate).toBe("function");
+    expect(typeof adapter.dispose).toBe("function");
+    // dispose before any platform() call must not open (or await) a proxy
+    await adapter.dispose?.();
   });
 
   it("omits the dev platform for production builds", async () => {

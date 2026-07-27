@@ -63,7 +63,7 @@ node and workers types, so no `Fetcher`/`node:*` references.
 
 ## Step 3 — Port the worker
 
-**Topology (differs from Miniflare):** one service hosts *every* instance of
+**Topology (differs from Miniflare):** one service hosts _every_ instance of
 the binding (all namespaces/buckets). Miniflare creates a per-instance entry
 worker; here the instance name travels on the designator instead:
 
@@ -163,7 +163,7 @@ proxy; this runtime has no equivalent, so:
   `enableFakeTimers(ts)` in setup, `waitForFakeTasks()` before asserting
   background blob deletion, `sqlQuery`/`getBlob` for storage assertions.
 - Suite layer: `<X>TestWorkerLive.pipe(Layer.provideMerge(localRuntimeLayer),
-  Layer.provide(Layer.succeed(Plugin.UnsafeEnableControlEndpoints, true)))`.
+Layer.provide(Layer.succeed(Plugin.UnsafeEnableControlEndpoints, true)))`.
 - Persistence test: build a runtime layer over `Storage.layerDisk(tmp)`, run
   the worker twice ("restart"), and assert the on-disk layout
   (`{tmp}/<feature>/cloudflare-runtime-<Class>` + per-instance blob dir).

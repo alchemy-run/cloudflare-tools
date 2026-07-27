@@ -4,7 +4,7 @@ export * as AnalyticsEngine from "./analytics-engine/index.ts";
 export * as Artifacts from "./Artifacts.ts";
 export * as Assets from "./assets/Assets.ts";
 export * as Browser from "./Browser.ts";
-export * as D1 from "./D1.ts";
+export * as D1 from "./d1/index.ts";
 export * as Data from "./Data.ts";
 export * as DispatchNamespace from "./dispatch-namespace/index.ts";
 export * as DurableObjectNamespace from "./DurableObjectNamespace.ts";

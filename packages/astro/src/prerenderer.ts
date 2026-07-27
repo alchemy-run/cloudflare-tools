@@ -39,10 +39,7 @@ import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PrerenderRequest, StaticPathsResponse } from "./runtime/prerender-types.ts";
-import {
-  PRERENDER_ENDPOINT,
-  STATIC_PATHS_ENDPOINT,
-} from "./runtime/utils/prerender-constants.ts";
+import { PRERENDER_ENDPOINT, STATIC_PATHS_ENDPOINT } from "./runtime/utils/prerender-constants.ts";
 
 /** Matches `dev-server.ts` in `@distilled.cloud/cloudflare-vite-plugin`. */
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";

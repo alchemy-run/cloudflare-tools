@@ -25,6 +25,12 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * (local or in other dev instances) deliver to it.
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
+  /**
+   * Whether the Cache API (`caches.default` / `caches.open()`) stores
+   * responses. Defaults to `true`; when `false` every cache operation is a
+   * no-op (matching production behaviour on `workers.dev` subdomains).
+   */
+  readonly cache?: boolean;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 

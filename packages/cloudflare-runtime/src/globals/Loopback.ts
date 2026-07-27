@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Plugin from "../Plugin.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
+import { HEADER_CF_BLOB } from "./CfOptions.shared.ts";
 import * as LoopbackServer from "./LoopbackServer.ts";
 
 export class Loopback extends Plugin.Service<
@@ -25,7 +26,9 @@ export const LoopbackLive = Layer.effect(
           name: "loopback:server",
           external: {
             address: loopbackServer.address,
-            http: {},
+            // Serialise `request.cf` into a header so it round-trips to
+            // Node-side handlers (as Miniflare does).
+            http: { cfBlobHeader: HEADER_CF_BLOB },
           },
         },
         {

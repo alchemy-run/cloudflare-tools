@@ -1,9 +1,11 @@
 import type { ExportedHandler, Fetcher } from "@cloudflare/workers-types/experimental";
 import { makeErrorResponse } from "../internal/response.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
+import { HEADER_CF_BLOB } from "./CfOptions.shared.ts";
 
 interface Env {
   USER_WORKER: Fetcher;
+  CF_BLOB: Record<string, unknown>;
 }
 
 export interface EntryQueuePayload {
@@ -39,6 +41,39 @@ export default <ExportedHandler<Env>>{
         );
       }
     }
-    return await env.USER_WORKER.fetch(request);
+    // Build the user worker's `request.cf` (mirrors Miniflare's
+    // `workers/core/entry.worker.ts`): the `MF-CF-Blob` header wins if
+    // present, otherwise the configured blob is used, preserving the client's
+    // `Accept-Encoding` (defaulting to empty string so `undefined` survives
+    // proxying).
+    //
+    // The blob is parsed here rather than via workerd's `cfBlobHeader` socket
+    // option because workerd only provides `request.cf.clientIp` when no
+    // `cfBlobHeader` is configured.
+    const clientIp = request.cf?.clientIp as string | undefined;
+    const clientCfBlobHeader = request.headers.get(HEADER_CF_BLOB);
+    const cf: Record<string, unknown> = clientCfBlobHeader
+      ? JSON.parse(clientCfBlobHeader)
+      : {
+          ...env.CF_BLOB,
+          clientAcceptEncoding: request.headers.get("Accept-Encoding") ?? "",
+        };
+
+    const headers = new Headers(request.headers);
+    headers.delete(HEADER_CF_BLOB);
+    if (clientIp && !headers.get("CF-Connecting-IP")) {
+      // `clientIp` includes the port, e.g. `127.0.0.1:52621` or `[::1]:52621`
+      const ipv4Regex = /(?<ip>.*?):\d+/;
+      const ipv6Regex = /\[(?<ip>.*?)\]:\d+/;
+      const ip = clientIp.match(ipv6Regex)?.groups?.ip ?? clientIp.match(ipv4Regex)?.groups?.ip;
+      if (ip) {
+        headers.set("CF-Connecting-IP", ip);
+      }
+    }
+
+    // The experimental and standard workers-types `Request` generics
+    // disagree; at runtime these are the same class.
+    const userRequest = new Request(request as unknown as Request, { headers, cf });
+    return await env.USER_WORKER.fetch(userRequest as unknown as typeof request);
   },
 };

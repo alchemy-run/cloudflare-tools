@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import {
   AnalyticsEngine,
   Assets,
+  Cache,
   D1,
   DispatchNamespace,
   Hyperdrive,
@@ -53,6 +54,7 @@ export const layerLocalBindings = () =>
   Layer.mergeAll(
     AnalyticsEngine.AnalyticsEngineLive,
     Assets.AssetsLive,
+    Cache.CacheLive,
     D1.D1Live,
     DispatchNamespace.DispatchNamespaceLive,
     Hyperdrive.HyperdriveLive,
@@ -67,6 +69,7 @@ export const layerLocalBindings = () =>
 export type BindingServices =
   | AnalyticsEngine.AnalyticsEngine
   | Assets.Assets
+  | Cache.Cache
   | D1.D1
   | DispatchNamespace.DispatchNamespace
   | Hyperdrive.Hyperdrive

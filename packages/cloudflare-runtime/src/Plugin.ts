@@ -19,6 +19,12 @@ export interface PluginConfig {
   readonly sockets?: Array<WorkerdConfig.Socket>;
   readonly extensions?: Array<WorkerdConfig.Extension>;
   readonly middlewares?: Array<Middleware>;
+  /**
+   * Worker-level fields merged into the user worker's configuration (e.g.
+   * `cacheApiOutbound`). Merged in plugin order; `RuntimeWorker.unsafe` still
+   * takes precedence.
+   */
+  readonly userWorker?: Partial<WorkerdConfig.Worker>;
   readonly start?: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
 }
 

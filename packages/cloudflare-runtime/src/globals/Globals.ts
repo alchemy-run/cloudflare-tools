@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as EntryWorker from "worker:./entry.worker.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
+import * as Cf from "./Cf.ts";
 import * as Internet from "./Internet.ts";
 import * as Storage from "./Storage.ts";
 
@@ -13,6 +14,7 @@ export const GlobalsLive = Layer.effect(
   Effect.gen(function* () {
     const internet = yield* Internet.Internet;
     const storage = yield* Storage.Storage;
+    const cf = yield* Cf.Cf;
     return Globals.of({
       middlewares: [
         {
@@ -25,6 +27,7 @@ export const GlobalsLive = Layer.effect(
               "service_binding_extra_handlers",
             ],
             modules: formatInternalWorkerModules(yield* Effect.promise(EntryWorker.worker)),
+            bindings: [{ name: "CF_BLOB", json: JSON.stringify(cf) }],
           },
           upstreamBindingName: "USER_WORKER",
         },

@@ -159,6 +159,7 @@ export const RuntimeLive = Layer.effect(
                     localDisk: storage.name,
                   },
                   containerEngine,
+                  ...config.userWorker,
                   ...worker.unsafe,
                 },
               },

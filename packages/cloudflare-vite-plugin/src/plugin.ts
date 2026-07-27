@@ -17,6 +17,7 @@ import type {
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.ts";
+import { preview } from "./preview-plugin.ts";
 
 export interface CloudflareVitePluginDevOptions {
   /**
@@ -66,6 +67,7 @@ export default function cloudflareVitePlugin(
       },
     } as vite.Plugin,
     ...dev(options),
+    preview(options),
     // Some of the composed plugins are conditional (e.g. the nodejs-compat
     // family) and resolve to `null`; filter them out so integrations that
     // post-process the returned plugins don't have to handle sparse entries.

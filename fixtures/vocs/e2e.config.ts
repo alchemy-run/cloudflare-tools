@@ -12,6 +12,7 @@ export default Options.make({
         compatibilityFlags: ["nodejs_compat"],
         worker: {
           name: "fixtures-vocs",
+          bindings: [],
           assets: {
             htmlHandling: "drop-trailing-slash",
             notFoundHandling: "none",

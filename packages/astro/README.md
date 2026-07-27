@@ -40,7 +40,7 @@ The package separates two concerns (see `packages/framework-core/README.md`,
 | Half                             | Modules                                                                                                                                                          | Contents                                                                                                                                                                                                                                                                                                                                     |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Framework (platform-neutral)** | `src/index.ts`, `src/Astro.ts`, `src/Target.ts`, `src/environments.ts`                                                                                           | The `Framework` service implementation: inline-config synthesis (`makeAstroInlineConfig`), programmatic `build()`/`dev()` driving, the shared build-output collector (`entryEnvironment: "ssr"`, `skipEnvironments: ["astro", "prerender"]`), deploy-target resolution. **Zero Cloudflare imports** — enforced by `test/decoupling.test.ts`. |
-| **Cloudflare target**            | `src/cloudflare.ts` (subpath `@distilled.cloud/astro/cloudflare`), `src/integration.ts`, `src/config-plugin.ts`, `src/prerender-middleware.ts`, `src/runtime/**` | The `AstroTarget` factory plus everything Cloudflare: the forked `@astrojs/cloudflare` integration over our vite plugin, the vendored runtime entrypoints, the `virtual:astro-cloudflare:config` plugin, the dev node-prerender middleware plugin.                                                                                           |
+| **Cloudflare target**            | `src/cloudflare.ts` (subpath `@distilled.cloud/astro/cloudflare`), `src/integration.ts`, `src/config-plugin.ts`, `src/prerenderer.ts`, `src/prerender-environment.ts`, `src/prerender-middleware.ts`, `src/runtime/**` | The `AstroTarget` factory plus everything Cloudflare: the forked `@astrojs/cloudflare` integration over our vite plugin, the vendored runtime entrypoints, the `virtual:astro-cloudflare:config` plugin, the workerd prerenderer (build-side driver of the `__astro_*` protocol over cloudflare-runtime), the dev node-prerender middleware plugin.                                                                                           |
 | **alchemy source provider**      | `src/source.ts` (subpath `@distilled.cloud/astro/source`)                                                                                                        | The alchemy `Cloudflare.Workers` source module (structural `SourceProvider` mirror): `build`/`hash`/`dev` for the alchemy Worker resource. Cloudflare-specific by definition; constructs the Cloudflare target directly.                                                                                                                     |
 
 A future platform (e.g. AWS) is a new subpath implementing the same
@@ -152,11 +152,19 @@ be wrangler-free over `@distilled.cloud/cloudflare-vite-plugin`:
   runner with in-memory bindings; the dev `env.ASSETS` 404/asset fallback is
   satisfied by the runtime's vite-aware assets loopback (`Assets.local`).
 - **Dropped.** `loadWranglerEnv` + `.dev.vars`, wrangler-config file watchers,
-  the `previewEntrypoint` (our runtime serves the build output), the
-  output-`wrangler.json` patch, and the workerd prerenderer.
-- **Hardwired.** `prerenderEnvironment: "node"` (Astro's stock node
-  prerenderer + the dev node-prerender middleware plugin) and the
-  `passthrough` image service (see limitations).
+  the `previewEntrypoint` (our runtime serves the build output), and the
+  output-`wrangler.json` patch.
+- **Workerd prerendering (default, like upstream).**
+  `prerenderEnvironment: "workerd"` builds the `prerender` environment as a
+  Worker (same treatment as the `ssr` environment) and serves it from workerd
+  via `cloudflare-runtime` — no Vite preview server, no wrangler — while the
+  build drives upstream's `__astro_*` prerender HTTP protocol against it
+  (`src/prerenderer.ts`). Prerendered pages run in the production runtime:
+  top-level `cloudflare:workers` imports and the configured worker bindings
+  work at prerender time. `prerenderEnvironment: "node"` falls back to
+  Astro's stock node prerenderer (+ the dev node-prerender middleware
+  plugin) for pages that need Node-only APIs at build time.
+- **Hardwired.** The `passthrough` image service (see limitations).
 - **Kept (vendored).** The runtime entrypoints/handler/helpers (verified free
   of wrangler/`@cloudflare/vite-plugin` imports — enforced by the "vendored
   runtime purity" test), the `virtual:astro-cloudflare:config` plugin (not
@@ -213,13 +221,13 @@ generated `_redirects` and `_headers` files). No `wrangler.json`, no
 
 ## Limitations
 
-- **Node prerendering.** Prerendered routes (`export const prerender = true`)
-  execute in Astro's stock **node** prerender environment, not workerd
-  (upstream's `prerenderEnvironment: "node"` mode). Pages that import
-  `cloudflare:workers` (or otherwise rely on worker-only APIs) at prerender
-  time will fail to prerender. A workerd prerender loop over
-  cloudflare-runtime is possible later (the upstream HTTP protocol is small);
-  until then this is an accepted fidelity gap.
+- **Node prerender fallback loses worker APIs.** With
+  `prerenderEnvironment: "node"`, prerendered routes
+  (`export const prerender = true`) execute in Astro's stock **node**
+  prerender environment: pages that import `cloudflare:workers` (or otherwise
+  rely on worker-only APIs) at prerender time will fail to prerender there.
+  The default `"workerd"` mode does not have this gap — prerendering runs in
+  workerd with the worker's bindings attached.
 - **Image service is passthrough.** workerd cannot run sharp, and the `IMAGES`
   binding is remote-only in our runtime, so the integration hardwires Astro's
   `passthrough` image service: images are served as-is (no resizing /

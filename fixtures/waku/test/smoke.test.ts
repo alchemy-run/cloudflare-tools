@@ -1,5 +1,7 @@
 import * as Playwright from "@distilled.cloud/e2e/Playwright";
 import { expect, test } from "@playwright/test";
+import * as NodeFs from "node:fs/promises";
+import * as NodePath from "node:path";
 
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
@@ -89,6 +91,21 @@ for (const mode of Playwright.SERVER_METHODS) {
       });
     });
 
+    it("runs the src/middleware header middleware on worker responses", async ({ server }) => {
+      // "/" is dynamic, so it always goes through the worker (in live mode
+      // static assets bypass the middleware by design).
+      const response = await server.fetch("/");
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-waku-middleware")).toBe("fixtures-waku");
+    });
+
+    it("serves the page with a top-level cloudflare:workers import", async ({ page, server }) => {
+      const response = await page.goto(new URL("/ssg-env", server.url).toString());
+      expect(response?.status()).toBe(200);
+      await expect(page.getByTestId("ssg-env-marker")).toHaveText("SSG_ENV_MARKER");
+      await expect(page.getByTestId("ssg-env-message")).toHaveText("MESSAGE=hello-from-binding");
+    });
+
     it("keeps layout client state across client navigation", async ({ page, server }) => {
       await page.goto(server.url.toString());
       const counter = page.getByTestId("nav-counter");
@@ -122,5 +139,20 @@ test.describe("live ssg", () => {
   it("serves the SSG RSC payload from assets", async ({ server }) => {
     const response = await server.fetch("/RSC/R/about.txt");
     expect(response.status).toBe(200);
+  });
+
+  it("prerendered the cloudflare:workers page inside workerd with real bindings", async () => {
+    // The strongest SSG-in-workerd proof: the emitted static HTML for the
+    // page with a TOP-LEVEL `cloudflare:workers` import contains the binding
+    // value — the prerender ran inside workerd with the worker's env (in
+    // Node it would have failed with ERR_UNSUPPORTED_ESM_URL_SCHEME).
+    const html = await NodeFs.readFile(
+      NodePath.join(import.meta.dirname, "..", "dist", "public", "ssg-env", "index.html"),
+      "utf8",
+    );
+    expect(html).toContain("SSG_ENV_MARKER");
+    // React separates adjacent text nodes with `<!-- -->` in SSR output, so
+    // match with the comment stripped: `MESSAGE=<!-- -->hello-from-binding`.
+    expect(html.replaceAll("<!-- -->", "")).toContain("MESSAGE=hello-from-binding");
   });
 });

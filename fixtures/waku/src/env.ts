@@ -1,9 +1,9 @@
-// NOTE: a top-level `import { env } from "cloudflare:workers"` breaks the SSG
-// step of `buildApp` (waku imports every page module in Node to read
-// `getConfig`, and Node cannot load the `cloudflare:` scheme). Upstream has
-// the identical limitation when @cloudflare/vite-plugin's preview isn't
-// serving the SSG loopback (adapter "fallback middleware" path). So we use
-// the same guarded dynamic-import trick waku's adapter uses.
+// NOTE: a top-level `import { env } from "cloudflare:workers"` works too —
+// SSG runs inside workerd via the cloudflare vite plugin's preview mode (see
+// src/pages/ssg-env.tsx, which exercises exactly that). This guarded
+// dynamic-import variant (the same trick waku's own adapter uses) is kept as
+// the portable pattern for modules that must also load outside a Cloudflare
+// environment.
 const DO_NOT_BUNDLE = "";
 
 export async function readEnv(): Promise<Record<string, unknown>> {

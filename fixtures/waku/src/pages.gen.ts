@@ -11,13 +11,16 @@ import type { getConfig as File_About_getConfig } from './pages/about';
 import type { getConfig as File_Index_getConfig } from './pages/index';
 // prettier-ignore
 import type { getConfig as File_ItemsId_getConfig } from './pages/items/[id]';
+// prettier-ignore
+import type { getConfig as File_SsgEnv_getConfig } from './pages/ssg-env';
 
 // prettier-ignore
 type Page =
 | ({ path: '/_root' } & GetConfigResponse<typeof File_Root_getConfig>)
 | ({ path: '/about' } & GetConfigResponse<typeof File_About_getConfig>)
 | ({ path: '/' } & GetConfigResponse<typeof File_Index_getConfig>)
-| ({ path: '/items/[id]' } & GetConfigResponse<typeof File_ItemsId_getConfig>);
+| ({ path: '/items/[id]' } & GetConfigResponse<typeof File_ItemsId_getConfig>)
+| ({ path: '/ssg-env' } & GetConfigResponse<typeof File_SsgEnv_getConfig>);
 
 // prettier-ignore
 type Layout =

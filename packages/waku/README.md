@@ -82,10 +82,12 @@ factory shape `resolveDeployTarget` expects from a target module. It:
 
 The target's `config` is the cloudflare vite plugin's options: worker
 name/bindings/assets behavior, `compatibilityDate` / `compatibilityFlags`
-(`nodejs_als` is sufficient for waku core — full `nodejs_compat` only if
-user dependencies need it), and (from the alchemy source provider) the
-in-memory dev worker wiring. `main` and `viteEnvironments` are pinned and
-cannot be overridden.
+(defaulted to include `nodejs_als` — required by waku core — unless the
+user's flags already provide AsyncLocalStorage via `nodejs_als`,
+`nodejs_compat`, or `nodejs_compat_v2`; full `nodejs_compat` only if user
+dependencies need it), and (from the alchemy source provider) the in-memory
+dev worker wiring. `main` and `viteEnvironments` are pinned and cannot be
+overridden.
 
 ## How `build` works
 
@@ -105,9 +107,14 @@ Replicates waku's `runBuild` with zero CLI involvement:
    `process.env.NODE_ENV` set first (waku's environmentsPlugin bakes it into
    `define`) and `globalThis.__WAKU_START_PREVIEW_SERVER__` set — the SSG
    step of `buildApp` calls `unstable_startPreviewServer`, which throws
-   without it. The preview config omits the target's plugins, so SSG renders
-   through the adapter's Node fallback middleware (see the limitation
-   below).
+   without it. The preview server resolves the **same** waku config as the
+   build (upstream parity: waku's CLI reuses the loaded config's plugin
+   instances for both `createBuilder` and `vite.preview`), so the cloudflare
+   target's `configurePreviewServer` hook serves the freshly built worker
+   through workerd and **SSG renders inside workerd with real bindings** —
+   a top-level `import { env } from "cloudflare:workers"` in a page module
+   is fine. Waku's adapter registers its Node fallback middleware behind the
+   proxy; it only fires for targets without a preview mode.
 4. Collect the `BuildOutput` with framework-core's collector, using a
    **post-`buildApp` disk re-read**: waku writes
    `__waku_build_metadata.js` and prunes static-only server chunks _after_
@@ -210,37 +217,29 @@ framework: (options) => wakuFramework({ ...options, port: 3101, waku: { srcDir: 
 The deprecated top-level `vite` / `miniflare` fields keep working as aliases
 for `target.cloudflare.worker` / `target.cloudflare.preview`.
 
-## Limitations
+## SSG runs inside workerd
 
-> [!WARNING]
-> **SSG renders in Node, not workerd.** The SSG step of `buildApp` runs
-> through waku's adapter _fallback_ middleware in the Node process
-> (upstream parity: identical to running `waku build` without
-> `@cloudflare/vite-plugin`). Two consequences:
->
-> 1. A **top-level** `import { env } from "cloudflare:workers"` in _any_
->    page module breaks the build with
->    `ERR_UNSUPPORTED_ESM_URL_SCHEME` — waku imports every page module in
->    Node during SSG to read `getConfig`, even for dynamic-render pages.
->    Use a guarded dynamic import instead (the same trick waku's own
->    adapter uses):
->
->    ```ts
->    const DO_NOT_BUNDLE = "";
->    async function readEnv() {
->      try {
->        const mod = await import(/* @vite-ignore */ DO_NOT_BUNDLE + "cloudflare:workers");
->        return mod.env as Record<string, unknown>;
->      } catch {
->        return {}; // not in a Cloudflare environment (e.g. Node SSG)
->      }
->    }
->    ```
->
-> 2. Static pages that read Cloudflare bindings at build time render
->    without them. Workerd-backed SSG preview (serving the freshly built
->    worker during SSG, as upstream's `@cloudflare/vite-plugin` does via
->    `configurePreviewServer`) is the planned parity enhancement.
+The SSG step of `buildApp` boots a `vite.preview` server over the **same**
+resolved config as the build, and the cloudflare vite plugin's
+`configurePreviewServer` hook serves the freshly built worker through
+workerd (`cloudflare-runtime`'s `Runtime.start` over the built server
+modules + the client assets directory). Consequences:
+
+- A **top-level** `import { env } from "cloudflare:workers"` in a page
+  module works — waku prerenders every static page through the worker, not
+  the Node process, so the `cloudflare:` scheme resolves natively. (In a
+  build without a platform vite plugin, upstream renders SSG through the
+  adapter's Node fallback middleware and the same import breaks with
+  `ERR_UNSUPPORTED_ESM_URL_SCHEME`.)
+- Static pages that read Cloudflare bindings at build time render **with**
+  them — the preview worker is configured from the target's plugin options
+  (bindings, compatibility date/flags, assets), so the emitted HTML bakes in
+  real binding values.
+
+This matches what upstream's `@cloudflare/vite-plugin` provides via its own
+`configurePreviewServer` (miniflare over the built output).
+
+## Limitations
 
 - **Durable Objects cannot be defined in a waku app** (upstream
   limitation) — use service bindings to a separate worker.
@@ -249,7 +248,9 @@ for `target.cloudflare.worker` / `target.cloudflare.preview`.
   by running build/dev under a cwd lock; the e2e harness runs from the
   fixture directory anyway.
 - **`nodejs_als` is required** (AsyncLocalStorage); waku core needs nothing
-  more from nodejs_compat.
+  more from nodejs_compat. The cloudflare target defaults
+  `compatibilityFlags` to include `nodejs_als` when the user's flags provide
+  no ALS (`nodejs_als`, `nodejs_compat`, or `nodejs_compat_v2`).
 
 ## Version pinning
 

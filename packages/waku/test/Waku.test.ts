@@ -52,7 +52,7 @@ describe("makeWakuConfigInput", () => {
     expect(userIndex).toBeGreaterThan(targetIndex);
   });
 
-  it("injects no plugins when the target provides none (SSG preview parity)", () => {
+  it("injects no plugins when the target provides none", () => {
     const config = makeWakuConfigInput({ adapterPath: ADAPTER });
     expect(flatten(config.vite?.plugins)).toEqual([]);
   });

@@ -188,9 +188,11 @@ export interface WakuConfigInputs {
   readonly adapterPath: string;
   /**
    * Deploy-target vite plugins injected first inside `vite.plugins` (the
-   * target's `vitePlugins` hook). The SSG preview config passes none — the
-   * Node-rendered SSG fallback is upstream parity for a build without a
-   * platform plugin.
+   * target's `vitePlugins` hook). The SSG preview server resolves the same
+   * config — upstream parity: waku's CLI reuses the loaded config's plugin
+   * instances for both `createBuilder` and `vite.preview` — so a target
+   * whose plugins implement `configurePreviewServer` (the cloudflare
+   * target's does) serves SSG through its own runtime.
    */
   readonly plugins?: ReadonlyArray<ViteModule.PluginOption> | undefined;
   /** User waku config merged in (its `vite` config is preserved). */
@@ -285,9 +287,14 @@ interface WakuPreviewServer {
  * Replicates waku's `cmd-build.ts` `startPreviewServerImpl`: the SSG step of
  * `builder.buildApp()` (the adapter's `build`) calls
  * `unstable_startPreviewServer`, which throws unless this global is set. The
- * preview config omits the deploy target's plugins, so SSG renders through
- * the adapter's Node fallback middleware (upstream-parity: identical to
- * running `waku build` without a platform vite plugin).
+ * preview server resolves the SAME waku config as the build — upstream
+ * parity: waku's CLI calls `combinedPlugins(config)` for both
+ * `createBuilder` and `vite.preview`, reusing the loaded config's plugin
+ * instances across the two servers. A deploy target whose vite plugins
+ * implement `configurePreviewServer` (the cloudflare target serves the
+ * freshly built worker through workerd) therefore hosts the SSG rendering on
+ * its own runtime; waku's adapter registers its Node fallback middleware
+ * behind it, which only fires for targets without a preview mode.
  */
 const setPreviewServerGlobal = (
   vite: typeof ViteModule,
@@ -463,7 +470,6 @@ export const make = (
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
           });
           const wakuConfig = makeConfig(project, hooks);
-          const previewConfig = makeConfig(project, { ...hooks, plugins: [] });
           const collector = yield* FrameworkCore.makeBuildOutputCollector({
             entryEnvironment: "rsc",
             selectEntry: (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
@@ -481,7 +487,7 @@ export const make = (
                 },
                 null,
               );
-              setPreviewServerGlobal(project.vite, project.vitePlugins, root, previewConfig);
+              setPreviewServerGlobal(project.vite, project.vitePlugins, root, wakuConfig);
               try {
                 await builder.buildApp();
               } finally {

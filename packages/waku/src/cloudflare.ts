@@ -31,8 +31,25 @@ export interface WakuPluginOptionsInputs {
 }
 
 /**
+ * Waku requires `AsyncLocalStorage` on the worker runtime (its server entry
+ * imports `node:async_hooks` at the top level), so a config without any
+ * Node.js compatibility flag would fail at runtime with a module-resolution
+ * error. When the user enables neither `nodejs_als` nor
+ * `nodejs_compat`/`nodejs_compat_v2` (each of which provides ALS), the
+ * target defaults to the minimal `nodejs_als`.
+ */
+const withNodejsAls = (flags: Array<string> | undefined): Array<string> => {
+  const hasAls = flags?.some(
+    (flag) => flag === "nodejs_als" || flag === "nodejs_compat" || flag === "nodejs_compat_v2",
+  );
+  return hasAls ? [...flags!] : [...(flags ?? []), "nodejs_als"];
+};
+
+/**
  * The cloudflare plugin options for a waku project: user options with `main`
- * pinned to waku's rsc worker entry and the rsc/ssr environment topology.
+ * pinned to waku's rsc worker entry, the rsc/ssr environment topology, and
+ * `compatibilityFlags` defaulted to include `nodejs_als` (required by waku's
+ * server entry) unless the user already enabled ALS or full nodejs_compat.
  *
  * Pinning `main` is mandatory: waku's rsc environment declares two rolldown
  * inputs (`index` + `build`) while the dev plugin asserts exactly one entry.
@@ -43,6 +60,7 @@ export const makeWakuPluginOptions = (
   ...inputs.pluginOptions,
   main: NodePath.join(inputs.wakuDirectory, WAKU_SERVER_ENTRY_PATH),
   viteEnvironments: { entry: "rsc", children: ["ssr"] },
+  compatibilityFlags: withNodejsAls(inputs.pluginOptions?.compatibilityFlags),
 });
 
 /**

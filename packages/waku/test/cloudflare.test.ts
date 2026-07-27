@@ -47,6 +47,43 @@ describe("makeWakuPluginOptions", () => {
     expect(options.main).toBe(NodePath.join(WAKU_DIR, WAKU_SERVER_ENTRY_PATH));
     expect(options.viteEnvironments).toEqual({ entry: "rsc", children: ["ssr"] });
   });
+
+  it("defaults compatibilityFlags to nodejs_als (waku needs AsyncLocalStorage)", () => {
+    expect(makeWakuPluginOptions({ wakuDirectory: WAKU_DIR }).compatibilityFlags).toEqual([
+      "nodejs_als",
+    ]);
+    expect(
+      makeWakuPluginOptions({ wakuDirectory: WAKU_DIR, pluginOptions: { compatibilityFlags: [] } })
+        .compatibilityFlags,
+    ).toEqual(["nodejs_als"]);
+    expect(
+      makeWakuPluginOptions({
+        wakuDirectory: WAKU_DIR,
+        pluginOptions: { compatibilityFlags: ["global_fetch_strictly_public"] },
+      }).compatibilityFlags,
+    ).toEqual(["global_fetch_strictly_public", "nodejs_als"]);
+  });
+
+  it("keeps user compatibilityFlags that already provide AsyncLocalStorage", () => {
+    expect(
+      makeWakuPluginOptions({
+        wakuDirectory: WAKU_DIR,
+        pluginOptions: { compatibilityFlags: ["nodejs_als"] },
+      }).compatibilityFlags,
+    ).toEqual(["nodejs_als"]);
+    expect(
+      makeWakuPluginOptions({
+        wakuDirectory: WAKU_DIR,
+        pluginOptions: { compatibilityFlags: ["nodejs_compat"] },
+      }).compatibilityFlags,
+    ).toEqual(["nodejs_compat"]);
+    expect(
+      makeWakuPluginOptions({
+        wakuDirectory: WAKU_DIR,
+        pluginOptions: { compatibilityFlags: ["nodejs_compat_v2"] },
+      }).compatibilityFlags,
+    ).toEqual(["nodejs_compat_v2"]);
+  });
 });
 
 describe("makeWakuCloudflareTarget", () => {

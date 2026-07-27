@@ -148,8 +148,14 @@ const closeScope = async (scope: Scope.Scope) => {
   await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
 };
 
-const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
-  options: CloudflareVitePluginOptions<B>,
+// Deliberately non-generic: `CloudflareVitePluginOptions<BindingHooks>` is a
+// supertype of every instantiation, and `BindingRequirements<BindingHooks>`
+// collapses to `never`, so the effect's requirements are fully discharged by
+// the provided runtime context + scope. Keeping the caller's `B` generic here
+// would leave a deferred `BindingRequirements<B>` in the requirements that
+// `Effect.runPromise` cannot prove away.
+const serve = Effect.fn(function* (
+  options: CloudflareVitePluginOptions,
   build: PreviewWorkerBuild,
 ) {
   const runtime = yield* Runtime.Runtime;

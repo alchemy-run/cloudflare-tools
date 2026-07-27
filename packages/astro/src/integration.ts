@@ -5,20 +5,39 @@
  * - `@cloudflare/vite-plugin` swapped for `@distilled.cloud/cloudflare-vite-plugin`
  *   (main = this package's vendored server entrypoint, entry env `ssr`,
  *   Astro's node-side `astro`/`prerender` environments in `skipEnvironments`).
- * - `loadWranglerEnv`, wrangler config watchers, `previewEntrypoint`, the
- *   output-wrangler.json patch, and the workerd prerenderer all dropped.
- * - `prerenderEnvironment: 'node'` hardwired (Astro's stock node prerenderer).
- * - Sessions left unconfigured (no local KV in our runtime yet); the image
- *   service is `passthrough` (workerd cannot run sharp, and the IMAGES
- *   binding is remote-only in our runtime).
+ * - `loadWranglerEnv`, wrangler config watchers, `previewEntrypoint`, and the
+ *   output-wrangler.json patch dropped.
+ *   (The `astro:build:done` wrangler.json assets-directory patch is replaced
+ *   by the cloudflare target's `finish` pass over `BuildOutput` — see
+ *   `cloudflare.ts` — and the vestigial parse of a pre-existing `_redirects`
+ *   file, whose result upstream never uses, is dropped.)
+ * - `prerenderEnvironment: 'workerd'` by default like upstream, but the
+ *   prerenderer serves the built `prerender` environment through
+ *   `cloudflare-runtime` instead of a Vite preview server wrapped around
+ *   `@cloudflare/vite-plugin` (see `prerenderer.ts`); `'node'` falls back to
+ *   Astro's stock node prerenderer.
+ * - Zero-config sessions mirrored from upstream: when `config.session.driver`
+ *   is unset, the `cloudflareKVBinding` driver is configured against the
+ *   `sessionKVBindingName` KV binding; in dev, a local in-memory KV namespace
+ *   (`KvNamespace.local`) is injected into the worker bindings. Opt out with
+ *   `sessions: false`.
+ * - The image service is `passthrough` (workerd cannot run sharp, and the
+ *   IMAGES binding is remote-only in our runtime).
  */
+import { removeTrailingForwardSlash } from "@astrojs/internal-helpers/path";
+import { createRedirectsFromAstroRoutes, printAsRedirects } from "@astrojs/underscore-redirects";
 import type { CloudflareVitePluginOptions } from "@distilled.cloud/cloudflare-vite-plugin";
 import cloudflareVitePlugin from "@distilled.cloud/cloudflare-vite-plugin";
-import type { AstroIntegration } from "astro";
-import { passthroughImageService } from "astro/config";
+import { KvNamespace } from "@distilled.cloud/cloudflare-runtime/bindings";
+import type { AstroConfig, AstroIntegration, IntegrationResolvedRoute } from "astro";
+import { passthroughImageService, sessionDrivers } from "astro/config";
+import { appendFile, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import type * as vite from "vite";
 import { createConfigPlugin } from "./config-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
+import { buildAssetsHeadersContent } from "./headers.ts";
+import { createWorkerdPrerenderEnvironmentPlugin } from "./prerender-environment.ts";
 import { createNodePrerenderPlugin } from "./prerender-middleware.ts";
 
 /** The Worker entry module (the vendored `@astrojs/cloudflare` server entrypoint). */
@@ -36,39 +55,224 @@ export interface DistilledCloudflareOptions {
    */
   readonly vite?: CloudflareVitePluginOptions | undefined;
   /**
+   * Which runtime prerenders static pages at build time.
+   *
+   * - `'workerd'` (default, matching upstream): the `prerender` environment
+   *   is built as a Worker (same treatment as the `ssr` environment) and
+   *   served from workerd via `cloudflare-runtime`, so prerendered pages run
+   *   in the production runtime — top-level `cloudflare:*` imports and the
+   *   configured worker bindings included.
+   * - `'node'`: Astro's stock node prerender environment. Fallback for pages
+   *   that depend on Node-only APIs at build time.
+   * @default "workerd"
+   */
+  readonly prerenderEnvironment?: "workerd" | "node" | undefined;
+  /**
    * The name of the KV binding injected into Astro's session config when
    * present on the Worker env.
    * @default "SESSION"
    */
   readonly sessionKVBindingName?: string | undefined;
+  /**
+   * Zero-config sessions (mirrors upstream `@astrojs/cloudflare`): when no
+   * `session.driver` is configured, Astro's `cloudflareKVBinding` session
+   * driver is configured against the {@link sessionKVBindingName} KV
+   * binding. Set to `false` to leave the session config untouched (sessions
+   * stay off unless you configure a driver yourself).
+   * @default true
+   */
+  readonly sessions?: boolean | undefined;
+  /**
+   * In dev, automatically add an in-memory local KV namespace
+   * (`KvNamespace.local(sessionKVBindingName)`) to the worker bindings so
+   * zero-config sessions work without any setup. Disable when the dev
+   * bindings already carry a KV binding with that name (binding names must
+   * be unique) — e.g. when an outer toolchain provisions the session
+   * namespace itself and passes it through `vite.worker.bindings`.
+   * @default true
+   */
+  readonly sessionDevKV?: boolean | undefined;
+  /**
+   * Reports the absolute path of the *original* client build directory
+   * (`config.build.client` before the `base !== "/"` remap nests it). The
+   * cloudflare target's `finish` pass uses it to point
+   * `BuildOutput.clientDirectory` back at the directory that should be
+   * served at the URL root.
+   * @internal
+   */
+  readonly onOriginalClientDir?: ((dir: string) => void) | undefined;
 }
+
+/**
+ * Upstream `@astrojs/cloudflare` adapter options this fork deliberately does
+ * not support, with the reason / migration. Passing one raises immediately
+ * instead of being silently ignored.
+ */
+const UNSUPPORTED_UPSTREAM_OPTIONS: Record<string, string> = {
+  imageService:
+    "the image service is hardwired to `passthrough` (workerd cannot run sharp, and the IMAGES binding is remote-only in our runtime)",
+  imagesBindingName:
+    "the Cloudflare Images binding image service is not supported (the IMAGES binding is remote-only in our runtime)",
+  platformProxy:
+    "there is no wrangler platform proxy; dev bindings are passed via `vite.worker.bindings`",
+  configPath: "there is no wrangler config file; pass worker options via `vite`",
+  persistState: "workerd state is in-memory in this fork's dev runtime",
+  auxiliaryWorkers:
+    "auxiliary workers are not supported; compose bindings via `vite.worker.bindings`",
+  inspectorPort: "the workerd inspector is not exposed by this fork's dev runtime",
+  viteEnvironment: "the worker environment is pinned to Astro's `ssr` environment",
+  cloudflareModules:
+    "`.wasm`/`.bin`/`.txt` worker modules are handled by `@distilled.cloud/cloudflare-vite-plugin`",
+  experimental: "upstream experimental options are not supported by this fork",
+};
+
+/** Reject upstream adapter options we would otherwise silently ignore. */
+const assertSupportedOptions = (options: DistilledCloudflareOptions): void => {
+  const offending = Object.keys(options).filter((key) => key in UNSUPPORTED_UPSTREAM_OPTIONS);
+  if (offending.length > 0) {
+    throw new Error(
+      "@distilled.cloud/astro: unsupported @astrojs/cloudflare option(s):\n" +
+        offending.map((key) => `  - \`${key}\`: ${UNSUPPORTED_UPSTREAM_OPTIONS[key]}`).join("\n") +
+        "\nSupported options: `vite`, `prerenderEnvironment`, `sessionKVBindingName`, `sessions`, `sessionDevKV`.",
+    );
+  }
+};
+
+/**
+ * Whether the (possibly zero-config-defaulted) session config uses Astro's
+ * `cloudflareKVBinding` driver — vendored from upstream
+ * (`usesCloudflareKVSessionDriver`).
+ */
+const CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT = sessionDrivers.cloudflareKVBinding().entrypoint;
+
+type SessionConfigLike =
+  | {
+      driver?: string | { entrypoint: string | { toString(): string } } | undefined;
+      cookie?: unknown;
+      ttl?: unknown;
+    }
+  | undefined;
+
+export const usesCloudflareKVSessionDriver = (session: SessionConfigLike): boolean => {
+  const driver = session?.driver;
+  if (!driver) {
+    return false;
+  }
+  if (typeof driver === "string") {
+    return driver === "cloudflareKVBinding" || driver === "cloudflare-kv-binding";
+  }
+  const entrypoint =
+    typeof driver.entrypoint === "string" ? driver.entrypoint : driver.entrypoint.toString();
+  return (
+    entrypoint === CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT ||
+    entrypoint.endsWith("cloudflare-kv-binding")
+  );
+};
+
+/**
+ * Append the in-memory local session KV namespace to the dev worker
+ * bindings (exported for testing). Binding names must be unique per worker:
+ * if the dev bindings already carry a `sessionKVBindingName` KV binding,
+ * disable this injection with `sessionDevKV: false` (or rename via
+ * `sessionKVBindingName`).
+ */
+export const withDevSessionKv = (
+  viteOptions: CloudflareVitePluginOptions | undefined,
+  binding: string,
+): CloudflareVitePluginOptions => ({
+  ...viteOptions,
+  // A bindings-only worker is fine: the dev server generates a worker name
+  // when none is configured.
+  worker: {
+    ...viteOptions?.worker,
+    bindings: [...(viteOptions?.worker?.bindings ?? []), KvNamespace.local(binding)],
+  } as CloudflareVitePluginOptions["worker"],
+});
 
 /**
  * The `@distilled.cloud/cloudflare-vite-plugin` options for an Astro project:
  * user options with `main` pinned to the vendored server entrypoint, the
  * worker pinned to Astro's `ssr` environment, and Astro's node-side
  * environments merged into `skipEnvironments` (exported for testing).
+ *
+ * During a `build` with `prerenderEnvironment: "workerd"`, the `prerender`
+ * environment stops being a skipped node environment and becomes a child
+ * worker environment instead: it gets the full worker treatment (workerd
+ * resolve conditions, unenv polyfills, `cloudflare:` externals) so its
+ * output can be loaded into workerd by the prerenderer. In dev, `prerender`
+ * stays skipped in both modes — workerd mode has no prerender dev
+ * environment at all (prerenderable routes are served through the entry
+ * worker's dev-match path).
  */
 export const makeIntegrationPluginOptions = (
   viteOptions: CloudflareVitePluginOptions = {},
-): CloudflareVitePluginOptions => ({
-  ...viteOptions,
-  main: SERVER_ENTRYPOINT,
-  viteEnvironments: { entry: "ssr" },
-  skipEnvironments: [...new Set([...NODE_ENVIRONMENTS, ...(viteOptions.skipEnvironments ?? [])])],
-});
+  {
+    prerenderEnvironment = "node",
+    command = "dev",
+  }: {
+    prerenderEnvironment?: "workerd" | "node";
+    command?: "dev" | "build" | "preview" | "sync";
+  } = {},
+): CloudflareVitePluginOptions => {
+  const workerdPrerender = prerenderEnvironment === "workerd" && command === "build";
+  return {
+    ...viteOptions,
+    main: SERVER_ENTRYPOINT,
+    viteEnvironments: workerdPrerender
+      ? { entry: "ssr", children: ["prerender"] }
+      : { entry: "ssr" },
+    skipEnvironments: [
+      ...new Set(
+        [...NODE_ENVIRONMENTS, ...(viteOptions.skipEnvironments ?? [])].filter(
+          (name) => !(workerdPrerender && name === "prerender"),
+        ),
+      ),
+    ],
+  };
+};
 
 export function distilledCloudflare(options: DistilledCloudflareOptions = {}): AstroIntegration {
+  assertSupportedOptions(options);
+  const prerenderEnvironment = options.prerenderEnvironment ?? "workerd";
   const sessionKVBindingName = options.sessionKVBindingName ?? "SESSION";
+  const sessions = options.sessions ?? true;
+  const sessionDevKV = options.sessionDevKV ?? true;
+  let _config: AstroConfig;
+  let _buildOutput: "static" | "server";
+  let _originalClientDir: URL;
+  let _routes: Array<IntegrationResolvedRoute> = [];
   return {
     name: "@distilled.cloud/astro",
     hooks: {
-      "astro:config:setup": ({ command, config, updateConfig }) => {
+      "astro:config:setup": ({ command, config, updateConfig, logger }) => {
         const isTypeGenPhase = command === "build" || command === "sync";
         const userOptimizeDeps = config.vite?.optimizeDeps;
 
+        // Zero-config sessions (mirrors upstream): default the session
+        // driver to Cloudflare KV against `sessionKVBindingName` when the
+        // user hasn't configured one.
+        let session = config.session;
+        if (sessions && !session?.driver) {
+          logger.info(
+            `Enabling sessions with Cloudflare KV with the "${sessionKVBindingName}" KV binding.`,
+          );
+          session = {
+            driver: sessionDrivers.cloudflareKVBinding({ binding: sessionKVBindingName }),
+            cookie: session?.cookie,
+            ttl: session?.ttl,
+          } as typeof config.session;
+        }
+        const needsSessionKVBinding = sessions && usesCloudflareKVSessionDriver(session);
+
+        // In dev, satisfy the session KV binding with an in-memory local KV
+        // namespace so zero-config sessions work without any setup.
+        const viteOptions =
+          command === "dev" && needsSessionKVBinding && sessionDevKV
+            ? withDevSessionKv(options.vite, sessionKVBindingName)
+            : options.vite;
+
         const cloudflarePlugins = cloudflareVitePlugin(
-          makeIntegrationPluginOptions(options.vite),
+          makeIntegrationPluginOptions(viteOptions, { prerenderEnvironment, command }),
         ) as Array<vite.Plugin>;
 
         // Same trick as upstream (astro#16332): `build`/`sync` run type
@@ -84,9 +288,18 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
 
         updateConfig({
           build: { redirects: false },
+          session,
           vite: {
             plugins: [
-              ...(command === "dev" ? [createNodePrerenderPlugin()] : []),
+              // Node mode only: in workerd mode dev has no prerender
+              // environment — prerenderable routes are served through the
+              // entry worker's dev-match path, same as upstream.
+              ...(command === "dev" && prerenderEnvironment === "node"
+                ? [createNodePrerenderPlugin()]
+                : []),
+              ...(prerenderEnvironment === "workerd"
+                ? [createWorkerdPrerenderEnvironmentPlugin(SERVER_ENTRYPOINT)]
+                : []),
               cloudflarePlugins,
               {
                 name: "@distilled.cloud/astro:cf-imports",
@@ -200,7 +413,26 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
           },
         });
       },
-      "astro:config:done": ({ setAdapter, buildOutput }) => {
+      "astro:routes:resolved": ({ routes }) => {
+        _routes = routes;
+      },
+      "astro:config:done": ({ setAdapter, config, injectTypes, buildOutput }) => {
+        _config = config;
+        _buildOutput = buildOutput;
+        _originalClientDir = new URL(config.build.client.href);
+        if (config.base !== "/") {
+          // Nest the client build under the base so the assets directory can
+          // be served at the URL root (`/base/foo.css` →
+          // `dist/client/base/foo.css`). `astro:build:done` moves the special
+          // files back up, and the cloudflare target's `finish` pass points
+          // `BuildOutput.clientDirectory` back at the original directory.
+          config.build.client = new URL("." + config.base + "/", config.build.client);
+        }
+        options.onOriginalClientDir?.(fileURLToPath(_originalClientDir));
+        injectTypes({
+          filename: "cloudflare.d.ts",
+          content: '/// <reference types="@distilled.cloud/astro/types.d.ts" />',
+        });
         setAdapter({
           name: "@distilled.cloud/astro",
           adapterFeatures: {
@@ -219,6 +451,26 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
             envGetSecret: "stable",
           },
         });
+      },
+      "astro:build:start": async ({ setPrerenderer }) => {
+        if (prerenderEnvironment !== "workerd") {
+          return;
+        }
+        // Lazy: the prerenderer pulls Effect + cloudflare-runtime, which
+        // `astro dev` and node-mode builds never need.
+        const { createWorkerdPrerenderer } = await import("./prerenderer.ts");
+        setPrerenderer(
+          createWorkerdPrerenderer({
+            serverDir: _config.build.server,
+            // With `base !== "/"` the client build is nested under the base
+            // (`astro:config:done` above); assets are served from the
+            // original client root, so that is the prerender worker's assets
+            // directory too.
+            clientDir: _originalClientDir,
+            trailingSlash: _config.trailingSlash,
+            vite: options.vite,
+          }),
+        );
       },
       "astro:build:setup": ({ vite: viteConfig, target }) => {
         if (target === "server") {
@@ -240,6 +492,86 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
             "globalThis.__ASTRO_IMAGES_BINDING_NAME": JSON.stringify("IMAGES"),
             ...viteConfig.define,
           };
+        }
+      },
+      "astro:build:done": async ({ dir, logger, assets }) => {
+        // base !== "/": the client build was nested under the base
+        // (`astro:config:done` above); the asset-server special files must
+        // live at the served directory's root, so move them back up.
+        if (_config.base !== "/") {
+          for (const file of [".assetsignore", "_headers", "_redirects"]) {
+            try {
+              await rename(
+                new URL(`./${file}`, _config.build.client),
+                new URL(`./${file}`, _originalClientDir),
+              );
+            } catch {
+              // The file was not emitted for this build.
+            }
+          }
+          // Upstream also patches the emitted wrangler.json's
+          // `assets.directory` here; this build has no wrangler.json — the
+          // cloudflare target's `finish` pass rewrites
+          // `BuildOutput.clientDirectory` instead (see `cloudflare.ts`).
+        }
+
+        // Immutable Cache-Control for the content-hashed assets directory.
+        if (_config.build.assetsPrefix) {
+          logger.debug(
+            "Skipping Cache-Control injection for assets — `build.assetsPrefix` is set, so assets are served from a different origin.",
+          );
+        } else {
+          const headersPath = new URL("./_headers", _originalClientDir);
+          const result = await buildAssetsHeadersContent(
+            {
+              assetsDir: _config.build.assets,
+              basePrefix: removeTrailingForwardSlash(_config.base),
+              headersPath,
+            },
+            (path) => readFile(path, "utf-8"),
+          );
+          if (result === null) {
+            logger.debug(
+              "Skipping Cache-Control injection — _headers already sets Cache-Control on a matching rule.",
+            );
+          } else {
+            const tempPath = new URL("./_headers.tmp", _originalClientDir);
+            try {
+              await writeFile(tempPath, result.content);
+              await rename(tempPath, headersPath);
+            } catch (err) {
+              await unlink(tempPath).catch(() => {});
+              throw err;
+            }
+            logger.info(
+              `Injected immutable Cache-Control for ${result.assetsPattern} into _headers.`,
+            );
+          }
+        }
+
+        // Emit `_redirects` entries for Astro's redirect routes (config
+        // `redirects` + `Astro.redirect` route files) so prerendered/static
+        // redirects are handled by the asset server ahead of the Worker.
+        const trueRedirects = createRedirectsFromAstroRoutes({
+          config: _config,
+          routeToDynamicTargetMap: new Map(
+            Array.from(
+              _routes.filter((route) => route.type === "redirect").map((route) => [route, ""]),
+            ),
+          ),
+          dir,
+          buildOutput: _buildOutput,
+          assets,
+        });
+        if (!trueRedirects.empty()) {
+          try {
+            await appendFile(
+              new URL("./_redirects", _originalClientDir),
+              printAsRedirects(trueRedirects),
+            );
+          } catch {
+            logger.error("Failed to write _redirects file");
+          }
         }
       },
     },

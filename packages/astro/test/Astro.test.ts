@@ -44,6 +44,13 @@ type CapturedConfig = {
   };
 };
 
+const noopLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+};
+
 const runConfigSetup = (
   integration: AstroIntegration,
   command: "dev" | "build" | "sync",
@@ -58,6 +65,7 @@ const runConfigSetup = (
       captured = config as CapturedConfig;
       return {} as never;
     },
+    logger: noopLogger,
   } as never);
   if (!captured) throw new Error("updateConfig was not called");
   return captured;
@@ -191,8 +199,16 @@ describe("makeAstroInlineConfig", () => {
 });
 
 describe("distilledCloudflare astro:config:setup", () => {
-  it("injects the cloudflare plugins, config plugin, and dev prerender middleware in dev", () => {
-    const captured = runConfigSetup(distilledCloudflare(), "dev");
+  it("injects the cloudflare plugins, config plugin, and prerender plugins in dev", () => {
+    // Default (workerd) prerendering: no node dev middleware, the workerd
+    // prerender environment plugin instead.
+    const workerdNames = flatten(runConfigSetup(distilledCloudflare(), "dev").vite?.plugins).map(
+      (plugin) => plugin.name,
+    );
+    expect(workerdNames).toContain("@distilled.cloud/astro:workerd-prerender-environment");
+    expect(workerdNames).not.toContain("@distilled.cloud/astro:dev-server-prerender-middleware");
+
+    const captured = runConfigSetup(distilledCloudflare({ prerenderEnvironment: "node" }), "dev");
     const plugins = flatten(captured.vite?.plugins);
     const names = plugins.map((plugin) => plugin.name);
     expect(names).toContain("@distilled.cloud/astro:dev-server-prerender-middleware");
@@ -279,6 +295,11 @@ describe("distilledCloudflare astro:config:done", () => {
     if (!hook) throw new Error("astro:config:done hook missing");
     void hook({
       buildOutput: "server",
+      config: {
+        base: "/",
+        build: { client: new URL("file:///project/dist/client/") },
+      },
+      injectTypes: () => new URL("file:///dev/null"),
       setAdapter: (value: unknown) => {
         adapter = value as Record<string, unknown>;
       },

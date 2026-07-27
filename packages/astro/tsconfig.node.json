@@ -2,6 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "include": ["src"],
   "exclude": ["src/runtime"],
+  // The build-side prerenderer imports the prerender protocol's endpoint
+  // constants and types from the (worker-side) runtime project.
+  "references": [{ "path": "./tsconfig.runtime.json" }],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
     "outDir": "dist",

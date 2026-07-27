@@ -26,6 +26,8 @@ export default Options.make({
         compatibilityDate: "2026-03-10",
         compatibilityFlags: ["nodejs_compat"],
         bindings: { FIXTURE_VALUE },
+        // Zero-config sessions: the built app reads the SESSION KV binding.
+        kvNamespaces: ["SESSION"],
         assets: {
           binding: "ASSETS",
           routerConfig: {
@@ -50,6 +52,10 @@ export default Options.make({
       astro: {
         devToolbar: { enabled: false },
         redirects: { "/old-about": "/about/" },
+        // Emit stylesheets as hashed /_astro/ assets (instead of inlining)
+        // so the generated _headers immutable Cache-Control rule is
+        // observable end-to-end in live mode.
+        build: { inlineStylesheets: "never" },
       },
     }),
 });

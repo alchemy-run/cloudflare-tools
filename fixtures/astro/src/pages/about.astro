@@ -1,6 +1,7 @@
 ---
-// Prerendered at build time (node prerendering); served from the ASSETS
-// directory in production and by Astro's node prerender middleware in dev.
+// Prerendered at build time (workerd prerendering by default); served from
+// the ASSETS directory in production and through the entry worker's
+// dev-match path in dev.
 export const prerender = true;
 ---
 

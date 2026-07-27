@@ -15,8 +15,16 @@ The app exercises:
   `cloudflare:workers`, with a client-interactive counter script
 - middleware (`src/middleware.ts`): writes `Astro.locals` (rendered by
   `/locals`) and mutates response headers (`x-middleware`) on on-demand routes
-- a `redirects` config entry (`/old-about` → `/about/`), handled dynamically
-  by the worker (the integration sets `build: { redirects: false }`)
+- a `redirects` config entry (`/old-about` → `/about/`): emitted into the
+  generated `_redirects` file at build time (served by the asset layer ahead
+  of the worker in live mode) and handled dynamically by the worker in dev
+  (the integration sets `build: { redirects: false }`)
+- zero-config sessions (`/session`): no session driver configured anywhere —
+  the integration defaults to the Cloudflare KV driver (binding `SESSION`),
+  auto-injects an in-memory local KV namespace in dev, and the live preview
+  supplies a miniflare KV namespace (`preview.kvNamespaces`)
+- the generated `_headers` file: immutable `Cache-Control` on the hashed
+  `/_astro/*` assets, asserted end-to-end in live mode
 - a prerendered page (`/about/`) served from assets in production and by
   Astro's node prerender middleware in dev
 - a content-collection-driven static page (`/posts/hello-world/`): glob

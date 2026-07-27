@@ -1,5 +1,7 @@
 import * as Playwright from "@distilled.cloud/e2e/Playwright";
 import { expect, test } from "@playwright/test";
+import { readdir, readFile } from "node:fs/promises";
+import * as path from "node:path";
 
 const FIXTURE_VALUE = "hello-from-astro-binding";
 
@@ -34,6 +36,19 @@ for (const mode of Playwright.SERVER_METHODS) {
       const html = await response.text();
       expect(html).toContain('id="mode"');
       expect(html).toContain("prerendered");
+    });
+
+    it("prerenders inside workerd: top-level cloudflare:workers import + binding", async ({
+      server,
+    }) => {
+      // The page is impossible under node prerendering (top-level
+      // `cloudflare:workers` import); the baked binding value proves the
+      // workerd prerenderer ran with the worker's bindings attached.
+      const response = await server.fetch("/prerendered-env/");
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain("prerendered-workerd");
+      expect(html).toContain(FIXTURE_VALUE);
     });
 
     it("reads the binding from the API route", async ({ server }) => {
@@ -87,6 +102,48 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(html).toContain("Hello World");
       expect(html).toContain("content-collection body");
     });
+
+    it("round-trips Astro.session across requests (zero-config sessions)", async ({ server }) => {
+      // Plain HTTP against the listening URL in both modes — the live
+      // server's dispatchFetch helper does not forward request init.
+      const first = await fetch(new URL("/session", server.url));
+      expect(first.status).toBe(200);
+      expect(await first.text()).toContain('<p id="count">1</p>');
+      const setCookie = first.headers.get("set-cookie");
+      expect(setCookie).toBeTruthy();
+      const cookie = setCookie!.split(";")[0]!;
+      const second = await fetch(new URL("/session", server.url), {
+        headers: { cookie },
+      });
+      expect(second.status).toBe(200);
+      expect(await second.text()).toContain('<p id="count">2</p>');
+    });
+
+    if (mode === "live") {
+      it("emits _redirects and serves the redirect from the asset layer", async ({ server }) => {
+        const content = await readFile(path.join(process.cwd(), "dist/client/_redirects"), "utf-8");
+        expect(content).toMatch(/\/old-about\s+\/about\/\s+301/);
+        const response = await fetch(new URL("/old-about", server.url), {
+          redirect: "manual",
+        });
+        expect([301, 302, 308]).toContain(response.status);
+        expect(response.headers.get("location")).toContain("/about");
+      });
+
+      it("emits _headers and serves hashed assets with immutable Cache-Control", async ({
+        server,
+      }) => {
+        const content = await readFile(path.join(process.cwd(), "dist/client/_headers"), "utf-8");
+        expect(content).toContain("/_astro/*");
+        expect(content).toContain("Cache-Control: public, max-age=31536000, immutable");
+        const assets = await readdir(path.join(process.cwd(), "dist/client/_astro"));
+        expect(assets.length).toBeGreaterThan(0);
+        const response = await fetch(new URL(`/_astro/${assets[0]}`, server.url));
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+        await response.arrayBuffer();
+      });
+    }
 
     it("serves public assets", async ({ server }) => {
       const response = await server.fetch("/robots.txt");

@@ -35,6 +35,21 @@ export type PluginBuilder<Api = never> =
 
 export type PluginIdentifier<T extends string = string> = `cloudflare-runtime/plugin/${T}`;
 
+/**
+ * When true, simulator services backed by Durable Objects (KV, R2, ...)
+ * handle control operations (fake timers, storage inspection) sent via their
+ * reserved control-op header.
+ *
+ * **Only intended for tests** (provide with
+ * `Layer.succeed(UnsafeEnableControlEndpoints, true)`): anyone able to reach
+ * such a service can then run arbitrary SQL queries and read arbitrary blobs
+ * across every namespace/bucket in this runtime.
+ */
+export const UnsafeEnableControlEndpoints = Context.Reference(
+  "cloudflare-runtime/plugin/UnsafeEnableControlEndpoints",
+  { defaultValue: () => false },
+);
+
 export type PluginService<
   Self,
   Identifier extends PluginIdentifier,

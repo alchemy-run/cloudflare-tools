@@ -25,6 +25,18 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * (local or in other dev instances) deliver to it.
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
+  /**
+   * Whether the Cache API (`caches.default` / `caches.open()`) stores
+   * responses. Defaults to `true`; when `false` every cache operation is a
+   * no-op (matching production behaviour on `workers.dev` subdomains).
+   */
+  readonly cache?: boolean;
+  /**
+   * Per-worker `request.cf` blob. Merged the way Miniflare does — used
+   * verbatim unless the request carries an `MF-CF-Blob` header. Falls back
+   * to the runtime-wide `Cf` reference (a static placeholder by default).
+   */
+  readonly cf?: Record<string, unknown>;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 

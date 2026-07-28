@@ -3,27 +3,59 @@ import {
   InternalWorkerImportPlugin,
 } from "@distilled.cloud/build-utils";
 import cloudflare from "@distilled.cloud/cloudflare-rolldown-plugin";
-import { defineConfig } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
+
+/**
+ * Internal workers are built per compatibility-flag set: the `cloudflare`
+ * plugin adjusts its bundling (Node.js polyfills, warnings) based on the
+ * flags, which apply to a whole build.
+ */
+const workerConfig = (
+  entry: Array<string> | Record<string, string>,
+  options: { compatibilityFlags?: Array<string>; clean?: boolean } = {},
+): UserConfig => ({
+  entry,
+  outDir: "dist/workers",
+  clean: options.clean,
+  tsconfig: "tsconfig.workers.json",
+  format: "esm",
+  minify: {
+    mangle: false,
+  },
+  target: "esnext",
+  dts: false,
+  plugins: [
+    cloudflare({
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: options.compatibilityFlags,
+    }),
+    InternalWorkerExportPlugin(),
+  ],
+  deps: {
+    alwaysBundle: [/.+/],
+  },
+  outputOptions: {
+    entryFileNames: "[name].mjs",
+  },
+});
 
 export default defineConfig([
-  {
-    entry: ["src/**/*.worker.ts"],
-    outDir: "dist/workers",
-    tsconfig: "tsconfig.workers.json",
-    format: "esm",
-    minify: {
-      mangle: false,
-    },
-    target: "esnext",
-    dts: false,
-    plugins: [cloudflare({ compatibilityDate: "2026-03-10" }), InternalWorkerExportPlugin()],
-    deps: {
-      alwaysBundle: [/.+/],
-    },
-    outputOptions: {
-      entryFileNames: "[name].mjs",
-    },
-  },
+  // `internal/shared.worker.ts` is a module shared between the workers, not a
+  // worker itself, so it isn't an entry: it's bundled into its importers (as
+  // a shared chunk when there are several).
+  workerConfig([
+    "src/**/*.worker.ts",
+    "!src/internal/shared.worker.ts",
+    "!src/**/R2Bucket.worker.ts",
+  ]),
+  // The R2 worker uses `node:crypto` and runs with `nodejs_compat`. Don't
+  // clean the shared `dist/workers` directory, which the previous config
+  // already populated. The entry is named explicitly to keep the output at
+  // the path `worker:` imports resolve to.
+  workerConfig(
+    { "bindings/r2-bucket/R2Bucket.worker": "src/bindings/r2-bucket/R2Bucket.worker.ts" },
+    { compatibilityFlags: ["nodejs_compat"], clean: false },
+  ),
   {
     entry: ["src/**/*.ts", "!src/**/*.worker.ts", "!src/global.d.ts"],
     exports: {

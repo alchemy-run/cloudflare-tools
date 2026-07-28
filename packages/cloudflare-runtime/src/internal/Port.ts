@@ -37,6 +37,33 @@ interface PortsOptions {
   readonly cache: boolean;
 }
 
+/**
+ * Process-wide port coordination.
+ *
+ * Every runtime instance constructs its own {@link Ports}, but they all
+ * allocate from the same OS port space. With per-instance state, two
+ * instances can probe the same free port in the same tick and hand it to
+ * two workerd processes — and near-simultaneous `bind()`s BOTH succeed on
+ * macOS (the SO_REUSEADDR bind/listen window), leaving two listeners
+ * silently splitting the port's traffic. A shared search lock plus a
+ * shared reservation table (port → expiry) makes allocation atomic across
+ * instances; the reservation outlives the probe long enough for the
+ * winning workerd to establish its listener, after which real binds fail
+ * cleanly for everyone else.
+ */
+const RESERVATION_TTL_MS = 30_000;
+const globalSearchLock = Semaphore.makeUnsafe(1);
+const globalReservations = new Map<number, number>();
+const isReserved = (port: number) => {
+  const expiry = globalReservations.get(port);
+  if (expiry === undefined) return false;
+  if (expiry <= Date.now()) {
+    globalReservations.delete(port);
+    return false;
+  }
+  return true;
+};
+
 export const make = (options: PortsOptions) =>
   Effect.gen(function* () {
     const addressInUseError = (port: number) =>
@@ -71,17 +98,23 @@ export const make = (options: PortsOptions) =>
         timeToLive: (exit) => (exit._tag === "Success" && exit.value ? 0 : "30 seconds"),
       },
     );
-    const reserve = (port: number) => Cache.set(cache, port, false);
+    const reserveLocal = (port: number) => Cache.set(cache, port, false);
+    const reserve = (port: number) =>
+      Effect.sync(() => {
+        globalReservations.set(port, Date.now() + RESERVATION_TTL_MS);
+      }).pipe(Effect.andThen(reserveLocal(port)));
     // Serializes the search loop so that concurrent lookups for the same
     // starting port each reserve a distinct port. Without this, concurrent
     // callers all observe the starting port as available and return it. On
     // Windows this is the only safeguard, since duplicate binds don't fail
     // there and so the higher-level bind-and-retry fallback never kicks in.
-    const searchLock = yield* Semaphore.make(1);
+    // The lock and the reservation table are process-wide (see above) so
+    // concurrent runtime instances coordinate too.
+    const searchLock = globalSearchLock;
     const search = Effect.fn(function* (start: number) {
       let port = start;
       while (port <= MAX_PORT) {
-        const available = yield* Cache.get(cache, port);
+        const available = !isReserved(port) && (yield* Cache.get(cache, port));
         if (available) {
           yield* reserve(port);
           return port;
@@ -102,15 +135,24 @@ export const make = (options: PortsOptions) =>
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {
-          return yield* bind(port).pipe(Effect.tap(reserve));
+          // OS-assigned ephemeral ports are unique by construction — no
+          // global reservation, so a caller handed one can immediately
+          // request it back (e.g. `find(0)` then `serve({ port })`).
+          return yield* bind(port).pipe(Effect.tap(reserveLocal));
         }
         return yield* search(port);
       }),
       check: (port) =>
-        Cache.get(cache, port).pipe(
-          Effect.flatMap((available) =>
-            available ? reserve(port).pipe(Effect.as(port)) : Effect.fail(addressInUseError(port)),
-          ),
+        Effect.suspend(() =>
+          isReserved(port)
+            ? Effect.fail(addressInUseError(port))
+            : Cache.get(cache, port).pipe(
+                Effect.flatMap((available) =>
+                  available
+                    ? reserve(port).pipe(Effect.as(port))
+                    : Effect.fail(addressInUseError(port)),
+                ),
+              ),
         ),
       reserve,
     } as Ports;

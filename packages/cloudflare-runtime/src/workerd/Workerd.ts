@@ -61,6 +61,20 @@ const make = (
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (config, args) {
+        // Debug facility: dump each serve's full workerd config as JSON.
+        // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
+        const dumpDir = process.env.WORKERD_DUMP_CONFIG;
+        if (dumpDir) {
+          yield* Effect.promise(async () => {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+            await fs.mkdir(dumpDir, { recursive: true });
+            await fs.writeFile(
+              path.join(dumpDir, `workerd-config-${Date.now()}.json`),
+              JSON.stringify(config, null, 2),
+            );
+          });
+        }
         const handle = yield* spawn(
           workerd.bin,
           [
@@ -108,6 +122,50 @@ const make = (
     ),
   });
 
+/**
+ * A single consumer per child stream, started at spawn. A web
+ * `ReadableStream` can only be locked once — previously `error()` (raced
+ * against `control()` during startup) locked stderr, and `pipe()`'s later
+ * `pipeTo` silently failed, swallowing ALL worker console output under Bun.
+ * The pump buffers chunks until forwarding is enabled, then streams them
+ * through; `done` resolves with the full accumulated text at stream end
+ * (process death) for error classification.
+ */
+const makeStreamPump = (
+  // Bun and lib.dom disagree on the byte-stream element type
+  // (`Uint8Array<ArrayBuffer>` vs `BufferSource`); the pump only ever pipes
+  // through a TextDecoderStream, so accept either.
+  stream: ReadableStream<any>,
+  sink: (chunk: string) => void,
+) => {
+  const chunks: Array<string> = [];
+  let forwarded = 0;
+  let forwarding = false;
+  const done = (async () => {
+    try {
+      for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
+        chunks.push(chunk);
+        if (forwarding) {
+          sink(chunk);
+          forwarded = chunks.length;
+        }
+      }
+    } catch {
+      // Stream closed/aborted with the process — the buffer is complete.
+    }
+    return chunks.join("");
+  })();
+  return {
+    done,
+    forward: () => {
+      forwarding = true;
+      while (forwarded < chunks.length) {
+        sink(chunks[forwarded++]);
+      }
+    },
+  };
+};
+
 const makeBun = () =>
   make((command, args, config) =>
     Effect.sync(() =>
@@ -117,77 +175,59 @@ const makeBun = () =>
         killSignal: "SIGKILL",
       }),
     ).pipe(
-      Effect.map((child) => ({
-        control: (count) =>
-          Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
-            if (!child.stdio[3]) {
-              return resume(
-                new SystemError({
-                  subtag: "WorkerdSpawn",
-                  message: "The workerd process did not have a control fd.",
-                }),
-              );
-            }
-            const file = Bun.file(child.stdio[3]);
-            const collect = async () => {
-              let lines = "";
-              for await (const chunk of file.stream().pipeThrough(new TextDecoderStream(), {
-                signal,
-              })) {
-                lines += chunk;
-                const messages = lines
-                  .split("\n")
-                  .filter((line) => line.trim() !== "")
-                  .map((line) => JSON.parse(line) as ControlMessage);
-                if (messages.length === count) {
-                  return resume(Effect.succeed(messages));
+      Effect.map((child) => {
+        const stdout = makeStreamPump(child.stdout, (chunk) => {
+          process.stdout.write(chunk);
+        });
+        const stderr = makeStreamPump(child.stderr, (chunk) => {
+          process.stderr.write(chunk);
+        });
+        return {
+          control: (count) =>
+            Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
+              if (!child.stdio[3]) {
+                return resume(
+                  new SystemError({
+                    subtag: "WorkerdSpawn",
+                    message: "The workerd process did not have a control fd.",
+                  }),
+                );
+              }
+              const file = Bun.file(child.stdio[3]);
+              const collect = async () => {
+                let lines = "";
+                for await (const chunk of file.stream().pipeThrough(new TextDecoderStream(), {
+                  signal,
+                })) {
+                  lines += chunk;
+                  const messages = lines
+                    .split("\n")
+                    .filter((line) => line.trim() !== "")
+                    .map((line) => JSON.parse(line) as ControlMessage);
+                  if (messages.length === count) {
+                    return resume(Effect.succeed(messages));
+                  }
                 }
-              }
-            };
-            // Ignore errors here and let the error callback handle it instead.
-            // Errors here are a symptom; the error callback reports the actual cause.
-            void collect().catch(() => null);
-          }),
-        error: () =>
-          Effect.callback<never, ConfigError | SystemError>((resume, signal) => {
-            const collect = async () => {
-              let stderr = "";
-              for await (const chunk of child.stderr.pipeThrough(new TextDecoderStream(), {
-                signal,
-              })) {
-                stderr += chunk;
-              }
-              return stderr;
-            };
-            void collect()
-              .catch(() => "Bun child process stderr is empty.")
-              .then((stderr) =>
-                resume(classifyWorkerdError(stderr, child.exitCode, child.signalCode)),
-              );
-          }),
-        pipe: () =>
-          Effect.promise((signal) =>
-            Promise.all([
-              child.stdout.pipeTo(
-                new WritableStream({
-                  write(chunk) {
-                    process.stdout.write(chunk);
-                  },
-                }),
-                { signal },
-              ),
-              child.stderr.pipeTo(
-                new WritableStream({
-                  write(chunk) {
-                    process.stderr.write(chunk);
-                  },
-                }),
-                { signal },
-              ),
-            ]),
-          ).pipe(Effect.forkScoped),
-        kill: () => child.kill("SIGKILL"),
-      })),
+              };
+              // Ignore errors here and let the error callback handle it instead.
+              // Errors here are a symptom; the error callback reports the actual cause.
+              void collect().catch(() => null);
+            }),
+          error: () =>
+            Effect.callback<never, ConfigError | SystemError>((resume) => {
+              void stderr.done.then(async (text) => {
+                await child.exited.catch(() => null);
+                resume(classifyWorkerdError(text, child.exitCode, child.signalCode));
+              });
+            }),
+          pipe: () =>
+            Effect.sync(() => {
+              stdout.forward();
+              stderr.forward();
+            }),
+          kill: () => child.kill("SIGKILL"),
+        };
+      }),
     ),
   );
 

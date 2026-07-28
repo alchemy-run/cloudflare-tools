@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as QueueBrokerWorker from "worker:./QueueBroker.worker.ts";
+import * as QueueShimForwardWorker from "worker:./QueueShimForward.worker.ts";
 import { SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
@@ -32,6 +33,15 @@ export class Queue extends Plugin.Service<
     readonly registerProducer: (
       props: QueueProducerProps,
     ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    /**
+     * Record a remote producer binding: the workerd `queue` designator
+     * targets a pass-through forwarder service that relays the queue wire
+     * protocol to a REAL deployed shim worker holding the actual queue
+     * binding (see {@link QueueRemoteProducerProps}).
+     */
+    readonly registerRemote: (
+      props: QueueRemoteProducerProps,
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/Queue") {}
 
@@ -43,6 +53,7 @@ export const QueueLive = Layer.succeed(
       const proxy = yield* ctx.get(RegistryProxy);
       const consumers = ctx.worker.queueConsumers ?? [];
       const producers: Array<QueueProducerEntry> = [];
+      const remoteProducers: Array<QueueRemoteProducerProps> = [];
 
       const queueServiceName = (queueName: string): string => `queues:${queueName}`;
 
@@ -130,6 +141,30 @@ export const QueueLive = Layer.succeed(
         };
       });
 
+      const remoteShimServiceName = (binding: string): string => `queue-shim:${binding}`;
+
+      /**
+       * Build the pass-through forwarder service for one remote producer
+       * binding. Outbound fetches from the forwarder use workerd's default
+       * global outbound (the internet), which is exactly where the shim
+       * lives.
+       */
+      const remoteShimService = Effect.fnUntraced(function* (props: QueueRemoteProducerProps) {
+        return {
+          name: remoteShimServiceName(props.binding),
+          worker: {
+            compatibilityDate: BROKER_COMPATIBILITY_DATE,
+            modules: formatInternalWorkerModules(
+              yield* Effect.promise(QueueShimForwardWorker.worker),
+            ),
+            bindings: [
+              { name: "SHIM_URL", text: props.url },
+              { name: "SHIM_TOKEN", text: props.token },
+            ],
+          },
+        };
+      });
+
       return {
         api: {
           registerProducer: (props) =>
@@ -137,11 +172,22 @@ export const QueueLive = Layer.succeed(
               producers.push({ queueName: props.queueName, deliveryDelay: props.deliveryDelay });
               return queueConsumerServiceDesignator(props.queueName);
             }),
+          registerRemote: (props) =>
+            Effect.sync(() => {
+              remoteProducers.push(props);
+              return { name: remoteShimServiceName(props.binding) };
+            }),
         },
         defer: Effect.suspend(() =>
-          Effect.forEach(consumers, queueConsumerService, { concurrency: "unbounded" }).pipe(
-            Effect.map((services) => ({ services })),
-          ),
+          Effect.all(
+            [
+              Effect.forEach(consumers, queueConsumerService, { concurrency: "unbounded" }),
+              Effect.forEach(remoteProducers, remoteShimService, { concurrency: "unbounded" }),
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(Effect.map(([consumerServices, shimServices]) => ({
+            services: [...consumerServices, ...shimServices],
+          }))),
         ),
       };
     }),
@@ -172,6 +218,41 @@ export const local = (
 ): PluginContext.BindingHook<Queue | RegistryProxy> =>
   Plugin.use(Queue, (queues) =>
     Effect.map(queues.api.registerProducer(props), (queue) => ({
+      name: props.binding,
+      queue,
+    })),
+  );
+
+/** Options for a remote queue producer binding targeting a deployed shim. */
+export interface QueueRemoteProducerProps {
+  /** Binding name exposed on `env`. */
+  readonly binding: string;
+  /** Logical name of the real queue this binding produces to. */
+  readonly queueName: string;
+  /** HTTPS URL of the deployed shim worker holding the real queue binding. */
+  readonly url: string;
+  /** Bearer token the shim requires. */
+  readonly token: string;
+}
+
+/**
+ * Bind a queue producer to a REAL Cloudflare queue.
+ *
+ * Cloudflare's preview/remote-binding sessions reject queue bindings
+ * outright (cloudflare/workers-sdk#9929), so remote production goes through
+ * a deployed shim worker instead: the local binding targets a pass-through
+ * forwarder service that relays workerd's queue wire protocol to the shim
+ * over HTTPS with a bearer token, and the shim decodes it back into
+ * `send()`/`sendBatch()` on its real queue binding.
+ *
+ * Producer-only: consuming a remote queue locally is not covered by this
+ * binding — Cloudflare pushes to deployed consumers.
+ */
+export const remote = (
+  props: QueueRemoteProducerProps,
+): PluginContext.BindingHook<Queue | RegistryProxy> =>
+  Plugin.use(Queue, (queues) =>
+    Effect.map(queues.api.registerRemote(props), (queue) => ({
       name: props.binding,
       queue,
     })),

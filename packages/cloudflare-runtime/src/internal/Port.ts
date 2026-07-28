@@ -114,8 +114,7 @@ export const make = (options: PortsOptions) =>
     const search = Effect.fn(function* (start: number) {
       let port = start;
       while (port <= MAX_PORT) {
-        const available =
-          !isReserved(port) && (yield* Cache.get(cache, port));
+        const available = !isReserved(port) && (yield* Cache.get(cache, port));
         if (available) {
           yield* reserve(port);
           return port;

@@ -138,7 +138,7 @@ const makeStreamPump = (
   stream: ReadableStream<any>,
   sink: (chunk: string) => void,
 ) => {
-  const chunks: string[] = [];
+  const chunks: Array<string> = [];
   let forwarded = 0;
   let forwarding = false;
   const done = (async () => {

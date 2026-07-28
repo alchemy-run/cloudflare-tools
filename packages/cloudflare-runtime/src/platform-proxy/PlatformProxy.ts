@@ -52,6 +52,7 @@ import type {
 } from "./PlatformProxyProtocol.shared.ts";
 import {
   BINDING_PLATFORM_PROXY_TOKEN,
+  base64ToBytes,
   decodeValue,
   encodeValue,
   HEADER_BINDING,
@@ -249,7 +250,68 @@ const decodeNodeValue = (encoded: EncodedValue): { readonly value: unknown } | u
   if (encoded.$ === "durable-object-id") {
     return { value: makeDurableObjectId(encoded.id, encoded.name) };
   }
+  if (encoded.$ === "r2-object") {
+    return { value: decodeR2Object(encoded) };
+  }
   return undefined;
+};
+
+/**
+ * Rehydrate an `R2Object` / `R2ObjectBody`: the plain fields plus, when the
+ * worker captured a `get` result's content, a body stream and the buffering
+ * accessors (`arrayBuffer`/`bytes`/`text`/`json`/`blob`). `writeHttpMetadata`
+ * mirrors the native behavior over the decoded `httpMetadata`.
+ */
+const decodeR2Object = (encoded: Extract<EncodedValue, { $: "r2-object" }>): unknown => {
+  const fields = decodeValue({ $: "object", value: encoded.fields }, decodeNodeValue) as Record<
+    string,
+    unknown
+  >;
+  const httpMetadata = (fields.httpMetadata ?? {}) as Record<string, unknown>;
+  const object: Record<string, unknown> = {
+    checksums: {},
+    ...fields,
+    writeHttpMetadata: (headers: Headers) => {
+      const set = (name: string, value: unknown) => {
+        if (typeof value === "string") headers.set(name, value);
+      };
+      set("content-type", httpMetadata.contentType);
+      set("content-language", httpMetadata.contentLanguage);
+      set("content-disposition", httpMetadata.contentDisposition);
+      set("content-encoding", httpMetadata.contentEncoding);
+      set("cache-control", httpMetadata.cacheControl);
+      if (httpMetadata.cacheExpiry instanceof Date) {
+        headers.set("expires", httpMetadata.cacheExpiry.toUTCString());
+      }
+    },
+  };
+  if (encoded.body !== undefined) {
+    const bytes = base64ToBytes(encoded.body.base64);
+    let bodyUsed = false;
+    const consume = <T>(f: () => T): T => {
+      bodyUsed = true;
+      return f();
+    };
+    Object.defineProperties(object, {
+      bodyUsed: { get: () => bodyUsed, enumerable: true },
+      body: {
+        get: () => consume(() => new Response(copyBytes(bytes)).body),
+        enumerable: true,
+      },
+    });
+    object.arrayBuffer = () => Promise.resolve(consume(() => copyBytes(bytes).buffer));
+    object.bytes = () => Promise.resolve(consume(() => copyBytes(bytes)));
+    object.text = () => Promise.resolve(consume(() => new TextDecoder().decode(bytes)));
+    object.json = () => Promise.resolve(consume(() => JSON.parse(new TextDecoder().decode(bytes))));
+    object.blob = () => Promise.resolve(consume(() => new Blob([copyBytes(bytes)])));
+  }
+  return object;
+};
+
+const copyBytes = (bytes: Uint8Array): Uint8Array<ArrayBuffer> => {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy as Uint8Array<ArrayBuffer>;
 };
 
 const decodeCallError = async (response: Response): Promise<Error> => {

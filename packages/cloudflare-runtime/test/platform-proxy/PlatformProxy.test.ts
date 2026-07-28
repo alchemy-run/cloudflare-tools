@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
 import * as Json from "../../src/bindings/Json.ts";
 import * as KvNamespace from "../../src/bindings/kv-namespace/index.ts";
+import * as R2Bucket from "../../src/bindings/r2-bucket/index.ts";
 import * as Text from "../../src/bindings/Text.ts";
 import { ExecutionContext, open } from "../../src/platform-proxy/PlatformProxy.ts";
 import { localRuntimeLayer } from "../helpers/runtime.ts";
@@ -32,6 +33,7 @@ const openTestProxy = open({
     Text.local("TEXT", "text-value"),
     Json.local("CONFIG", { nested: { flag: true }, values: [1, 2, 3] }),
     KvNamespace.local({ binding: "KV" }),
+    R2Bucket.local({ binding: "R2", id: "platform-proxy-test" }),
     DurableObjectNamespace.local({ binding: "DO", className: "Counter" }),
   ],
   modules: [{ name: "user.mjs", type: "ESModule", content: DO_SCRIPT }],
@@ -71,6 +73,53 @@ layer(localRuntimeLayer, { excludeTestServices: true })("PlatformProxy", (it) =>
           expect(list.keys.map((key: { name: string }) => key.name)).toContain("key");
           await kv.delete("key");
           expect(await kv.get("key")).toBeNull();
+        });
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "proxies R2 rich objects (put/get/head/list/delete) from plain Node code",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* openTestProxy;
+        yield* Effect.promise(async () => {
+          const r2 = (proxy.env as Record<string, any>).R2;
+          const put = await r2.put("greeting.txt", "hello r2", {
+            httpMetadata: { contentType: "text/plain" },
+            customMetadata: { from: "node" },
+          });
+          expect(put.key).toBe("greeting.txt");
+          expect(typeof put.etag).toBe("string");
+
+          const head = await r2.head("greeting.txt");
+          expect(head.key).toBe("greeting.txt");
+          expect(head.size).toBe("hello r2".length);
+          expect(head.uploaded).toBeInstanceOf(Date);
+          expect(head.httpMetadata).toEqual({ contentType: "text/plain" });
+          expect(head.customMetadata).toEqual({ from: "node" });
+          const headers = new Headers();
+          head.writeHttpMetadata(headers);
+          expect(headers.get("content-type")).toBe("text/plain");
+
+          const got = await r2.get("greeting.txt");
+          expect(got.key).toBe("greeting.txt");
+          expect(got.bodyUsed).toBe(false);
+          expect(await got.text()).toBe("hello r2");
+          expect(got.bodyUsed).toBe(true);
+          const gotAgain = await r2.get("greeting.txt");
+          expect(new TextDecoder().decode(await gotAgain.arrayBuffer())).toBe("hello r2");
+          expect(await r2.get("missing")).toBeNull();
+          expect(await r2.head("missing")).toBeNull();
+
+          const list = await r2.list();
+          expect(list.truncated).toBe(false);
+          expect(list.objects.map((object: { key: string }) => object.key)).toContain(
+            "greeting.txt",
+          );
+
+          await r2.delete("greeting.txt");
+          expect(await r2.get("greeting.txt")).toBeNull();
         });
       }),
     { timeout: 30_000 },

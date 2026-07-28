@@ -14,6 +14,7 @@ import type {
 } from "./PlatformProxyProtocol.shared.ts";
 import {
   BINDING_PLATFORM_PROXY_TOKEN,
+  bytesToBase64,
   decodeValue,
   encodeValue,
   HEADER_BINDING,
@@ -118,7 +119,79 @@ const encodeWorkerValue = (value: unknown): EncodedValue | undefined => {
     const id = value as DurableObjectId;
     return { $: "durable-object-id", id: id.toString(), ...(id.name ? { name: id.name } : {}) };
   }
+  if (isR2ObjectLike(value)) {
+    // Bodyless here (nested positions — e.g. the objects of a `list`
+    // result). A top-level `get` result's body is captured by the async
+    // pre-pass in `encodeResult`.
+    return encodeR2Object(value);
+  }
   return undefined;
+};
+
+// ---------------------------------------------------------------------------
+// R2 rich objects (R2Object / R2ObjectBody / R2Objects)
+// ---------------------------------------------------------------------------
+
+interface R2ObjectLike {
+  readonly key: string;
+  readonly version: string;
+  readonly size: number;
+  readonly etag: string;
+  readonly httpEtag: string;
+  readonly uploaded: Date;
+  readonly httpMetadata?: unknown;
+  readonly customMetadata?: unknown;
+  readonly storageClass?: string;
+  readonly range?: unknown;
+  readonly checksums?: { toJSON?: () => unknown };
+  readonly writeHttpMetadata: (headers: Headers) => void;
+  readonly body?: ReadableStream;
+  readonly arrayBuffer?: () => Promise<ArrayBuffer>;
+}
+
+const isR2ObjectLike = (value: unknown): value is R2ObjectLike =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as R2ObjectLike).key === "string" &&
+  typeof (value as R2ObjectLike).etag === "string" &&
+  typeof (value as R2ObjectLike).httpEtag === "string" &&
+  typeof (value as R2ObjectLike).writeHttpMetadata === "function";
+
+/** `R2Objects` — the container a `list` call returns. */
+const isR2ObjectsLike = (
+  value: unknown,
+): value is {
+  objects: Array<unknown>;
+  truncated: boolean;
+  cursor?: string;
+  delimitedPrefixes: Array<string>;
+} =>
+  typeof value === "object" &&
+  value !== null &&
+  Array.isArray((value as { objects?: unknown }).objects) &&
+  typeof (value as { truncated?: unknown }).truncated === "boolean" &&
+  Array.isArray((value as { delimitedPrefixes?: unknown }).delimitedPrefixes);
+
+const encodeR2Object = (value: R2ObjectLike, body?: { base64: string }): EncodedValue => {
+  const fields: Record<string, EncodedValue> = {};
+  const plain: Record<string, unknown> = {
+    key: value.key,
+    version: value.version,
+    size: value.size,
+    etag: value.etag,
+    httpEtag: value.httpEtag,
+    uploaded: value.uploaded,
+    httpMetadata: value.httpMetadata,
+    customMetadata: value.customMetadata,
+    storageClass: value.storageClass,
+    range: value.range,
+    checksums: value.checksums?.toJSON?.(),
+  };
+  for (const [key, entry] of Object.entries(plain)) {
+    if (entry === undefined) continue;
+    fields[key] = encodeValue(entry, encodeWorkerValue);
+  }
+  return { $: "r2-object", fields, ...(body !== undefined ? { body } : {}) };
 };
 
 const decodeArg = async (env: Env, binding: string, arg: EncodedValue): Promise<unknown> => {
@@ -177,9 +250,34 @@ const resultHeaders = (kind: ResultKind, extra?: Record<string, string>) => ({
   ...extra,
 });
 
-const encodeResult = (result: unknown): Response => {
+const encodeResult = async (result: unknown): Promise<Response> => {
   if (result instanceof ReadableStream) {
     return new Response(result, { headers: resultHeaders("stream") });
+  }
+  // R2 rich objects: a `get` result carries a one-shot body — buffer it
+  // here (async) so the sync encoder can ship it; bodyless heads/lists
+  // fall through to the generic path via `encodeWorkerValue`.
+  if (isR2ObjectLike(result) && result.body !== undefined && result.arrayBuffer !== undefined) {
+    const bytes = new Uint8Array(await result.arrayBuffer());
+    return Response.json(
+      { value: encodeR2Object(result, { base64: bytesToBase64(bytes) }) },
+      { headers: resultHeaders("json") },
+    );
+  }
+  if (isR2ObjectsLike(result)) {
+    // The container is itself a class instance — encode it field-wise.
+    const encoded: Record<string, EncodedValue> = {
+      objects: encodeValue(result.objects, encodeWorkerValue),
+      truncated: encodeValue(result.truncated),
+      delimitedPrefixes: encodeValue(result.delimitedPrefixes),
+    };
+    if (result.cursor !== undefined) {
+      encoded.cursor = encodeValue(result.cursor);
+    }
+    return Response.json(
+      { value: { $: "object", value: encoded } satisfies EncodedValue },
+      { headers: resultHeaders("json") },
+    );
   }
   if (result instanceof ArrayBuffer) {
     return new Response(result, {
@@ -205,7 +303,7 @@ const handleCall = async (request: WorkerRequest, env: Env): Promise<Response> =
     throw new ProxyRequestError("platform-proxy: malformed /call request body");
   }
   const result = await evaluateChain(env, binding, chain);
-  return encodeResult(result);
+  return await encodeResult(result);
 };
 
 // ---------------------------------------------------------------------------

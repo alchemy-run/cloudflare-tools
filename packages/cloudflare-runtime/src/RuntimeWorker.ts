@@ -31,6 +31,12 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * no-op (matching production behaviour on `workers.dev` subdomains).
    */
   readonly cache?: boolean;
+  /**
+   * Per-worker `request.cf` blob. Merged the way Miniflare does — used
+   * verbatim unless the request carries an `MF-CF-Blob` header. Falls back
+   * to the runtime-wide `Cf` reference (a static placeholder by default).
+   */
+  readonly cf?: Record<string, unknown>;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 

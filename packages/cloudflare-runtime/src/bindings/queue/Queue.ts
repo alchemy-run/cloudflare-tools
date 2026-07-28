@@ -1,3 +1,5 @@
+import * as queues from "@distilled.cloud/cloudflare/queues";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as QueueBrokerWorker from "worker:./QueueBroker.worker.ts";
@@ -45,17 +47,25 @@ export class Queue extends Plugin.Service<
   }
 >()("cloudflare-runtime/plugin/Queue") {}
 
-export const QueueLive = Layer.succeed(
+export const QueueLive = Layer.effect(
   Queue,
-  Queue.of(
-    Effect.gen(function* () {
-      const ctx = yield* PluginContext.PluginContext;
-      const proxy = yield* ctx.get(RegistryProxy);
-      const consumers = ctx.worker.queueConsumers ?? [];
-      const producers: Array<QueueProducerEntry> = [];
-      const remoteProducers: Array<QueueRemoteProducerProps> = [];
+  Effect.gen(function* () {
+    // Captured for the pull loops (consumers of REAL Cloudflare queues):
+    // the distilled pull/ack ops need cloud credentials + an HttpClient.
+    // The full ambient context is captured lazily so a credential-free
+    // embedder (e.g. the local-only test suites) pays nothing — pull
+    // consumers simply require an embedder that provides `Credentials`.
+    const ambient = yield* Effect.context<never>();
 
-      const queueServiceName = (queueName: string): string => `queues:${queueName}`;
+    return Queue.of(
+      Effect.gen(function* () {
+          const ctx = yield* PluginContext.PluginContext;
+          const proxy = yield* ctx.get(RegistryProxy);
+          const consumers = ctx.worker.queueConsumers ?? [];
+          const producers: Array<QueueProducerEntry> = [];
+          const remoteProducers: Array<QueueRemoteProducerProps> = [];
+
+          const queueServiceName = (queueName: string): string => `queues:${queueName}`;
 
       for (const consumer of consumers) {
         if (
@@ -165,6 +175,78 @@ export const QueueLive = Layer.succeed(
         };
       });
 
+      /**
+       * Consumers of REAL Cloudflare queues: each gets a loopback socket
+       * onto its local broker service plus a Node-side pull loop that
+       * drains the real queue via the HTTP pull API and feeds the wire
+       * protocol into the broker, which then delivers to the user worker's
+       * `queue()` handler with the usual local batching/retry semantics.
+       */
+      const pullConsumers = consumers.filter(
+        (consumer) => consumer.pull !== undefined,
+      );
+      const pullSocketName = (queueName: string): string => `queue-pull:${queueName}`;
+
+      const pullLoop = (
+        consumer: QueueConsumer,
+        pull: { queueId: string; accountId: string },
+        port: number,
+      ) =>
+        Effect.gen(function* () {
+          const endpoint = `http://127.0.0.1:${port}/message`;
+
+          const iteration = Effect.gen(function* () {
+            const res = yield* queues.pullMessage({
+              accountId: pull.accountId,
+              queueId: pull.queueId,
+              batchSize: consumer.maxBatchSize ?? 10,
+              visibilityTimeoutMs: 30_000,
+            });
+            const messages = res.messages ?? [];
+            const acks: Array<{ leaseId: string }> = [];
+            for (const message of messages) {
+              if (!message.leaseId) continue;
+              const { body, contentType } = decodePulledMessage(message);
+              const response = yield* Effect.tryPromise(() =>
+                fetch(endpoint, {
+                  method: "POST",
+                  headers: { "X-Msg-Fmt": contentType },
+                  body,
+                }),
+              );
+              if (response.ok) {
+                acks.push({ leaseId: message.leaseId });
+              }
+              // Non-ok: leave unacked — the visibility timeout redelivers.
+            }
+            if (acks.length > 0) {
+              yield* queues.ackMessage({
+                accountId: pull.accountId,
+                queueId: pull.queueId,
+                acks,
+              });
+            }
+            return messages.length > 0;
+          });
+
+          yield* iteration.pipe(
+            Effect.flatMap((busy) =>
+              busy ? Effect.void : Effect.sleep("1 second"),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `[queue-pull:${consumer.queueName}] pull iteration failed`,
+                Cause.squash(cause),
+              ).pipe(Effect.andThen(Effect.sleep("2 seconds"))),
+            ),
+            Effect.forever,
+          );
+        }).pipe(
+          // Credentials + HttpClient come from the embedder's ambient
+          // context; `Context<never>` can't prove that statically.
+          Effect.provideContext(ambient),
+        ) as Effect.Effect<never>;
+
       return {
         api: {
           registerProducer: (props) =>
@@ -178,6 +260,22 @@ export const QueueLive = Layer.succeed(
               return { name: remoteShimServiceName(props.binding) };
             }),
         },
+        sockets: pullConsumers.map((consumer) => ({
+          name: pullSocketName(consumer.queueName),
+          address: "127.0.0.1:0",
+          service: { name: queueServiceName(consumer.queueName) },
+        })),
+        start: (ports) =>
+          Effect.forEach(
+            pullConsumers,
+            (consumer) => {
+              const port = ports[pullSocketName(consumer.queueName)];
+              return port === undefined
+                ? Effect.void
+                : Effect.forkScoped(pullLoop(consumer, consumer.pull!, port));
+            },
+            { discard: true },
+          ),
         defer: Effect.suspend(() =>
           Effect.all(
             [
@@ -190,9 +288,36 @@ export const QueueLive = Layer.succeed(
           }))),
         ),
       };
-    }),
-  ),
+      }),
+    );
+  }),
 );
+
+/**
+ * Decode one pulled message into the queue wire protocol's `POST /message`
+ * shape. The pull API returns `body` as a string; binary formats (`bytes`,
+ * `v8`) arrive base64-encoded, text/json arrive verbatim. The content type
+ * rides on the message metadata when present, defaulting to text.
+ */
+const decodePulledMessage = (message: {
+  body?: string | null;
+  metadata?: unknown;
+}): { body: string | Uint8Array; contentType: string } => {
+  const metadata = message.metadata;
+  const contentType =
+    typeof metadata === "object" &&
+    metadata !== null &&
+    "contentType" in metadata &&
+    typeof (metadata as { contentType: unknown }).contentType === "string"
+      ? (metadata as { contentType: string }).contentType
+      : "text";
+  const raw = message.body ?? "";
+  const body =
+    contentType === "bytes" || contentType === "v8"
+      ? Uint8Array.from(atob(raw), (c) => c.charCodeAt(0))
+      : raw;
+  return { body, contentType };
+};
 
 /** Options for a queue producer binding (`env.QUEUE.send()`). */
 export interface QueueProducerProps {

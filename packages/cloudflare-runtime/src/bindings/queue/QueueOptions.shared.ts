@@ -10,6 +10,19 @@ export type QueueContentType = "text" | "json" | "bytes" | "v8";
 export interface QueueConsumer {
   /** Logical name of the queue this worker consumes. */
   readonly queueName: string;
+  /**
+   * When set, this consumer's queue is a REAL Cloudflare queue: the runtime
+   * attaches a pull loop that drains it via the HTTP pull API (the queue
+   * must have an `http_pull` consumer attached) and feeds the batches into
+   * the local broker, which delivers them to this worker's `queue()`
+   * handler with the usual local batching/retry semantics.
+   */
+  readonly pull?: {
+    /** Id of the real Cloudflare queue to pull from. */
+    readonly queueId: string;
+    /** Cloudflare account the queue lives in. */
+    readonly accountId: string;
+  };
   /** Maximum number of messages per batch (0-100, default 5). */
   readonly maxBatchSize?: number;
   /** Maximum seconds to wait before flushing a partial batch (0-60, default 1). */

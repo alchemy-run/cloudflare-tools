@@ -269,10 +269,11 @@ export const DockerLive = Layer.effect(
       // is genuinely missing. Any failure to even run `inspect` (unlike
       // `pull`, it doesn't normalize its error channel) falls back to the
       // pre-existing pull behavior rather than failing here.
-      Effect.flatMap(
-        inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(Effect.orElseSucceed(() => "")),
-        (imageId) =>
-          imageId.trim() !== "" ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
+      inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(
+        Effect.orElseSucceed(() => undefined),
+        Effect.flatMap((imageId) =>
+          imageId?.trim() ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
+        ),
       ),
       (socketPath) => ({
         localDocker: {

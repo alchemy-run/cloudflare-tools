@@ -257,7 +257,23 @@ export const DockerLive = Layer.effect(
           return getAddress(server);
         }),
       ),
-      pull({ imageUri: containerEgressInterceptorImage }),
+      // Skip the eager pull when the interceptor image is already present
+      // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
+      // local-only tag that exists in the Docker daemon but resolves in no
+      // registry (e.g. a locally-built dev image) — an unconditional
+      // `docker pull` there fails, this detached fiber dies, and every
+      // caller of `getWorkerdDockerConfiguration` (joined on first use)
+      // fails with it. `docker image inspect` prints the image id when
+      // present and empty stdout when absent (`run` reports the non-zero
+      // exit rather than failing the effect), so only pull when the image
+      // is genuinely missing. Any failure to even run `inspect` (unlike
+      // `pull`, it doesn't normalize its error channel) falls back to the
+      // pre-existing pull behavior rather than failing here.
+      Effect.flatMap(
+        inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(Effect.orElseSucceed(() => "")),
+        (imageId) =>
+          imageId.trim() !== "" ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
+      ),
       (socketPath) => ({
         localDocker: {
           socketPath,

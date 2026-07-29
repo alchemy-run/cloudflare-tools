@@ -10,5 +10,11 @@ export interface RemoteWorkerResult {
   readonly headers: Record<string, string>;
 }
 
-type Metadata = NonNullable<NonNullable<workers.CreateScriptEdgePreviewRequest["metadata"]>>;
-export type RemoteBinding = NonNullable<NonNullable<Metadata["bindings"]>>[number];
+/**
+ * A worker binding entry for the edge-preview upload metadata: one of the
+ * SDK's script-upload binding variants, plus the edge-preview-only `raw`
+ * flag some kinds contribute.
+ */
+export type RemoteBinding = NonNullable<
+  workers.PutScriptMetadata["bindings"]
+>[number] & { readonly raw?: boolean };

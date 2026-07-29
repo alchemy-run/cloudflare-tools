@@ -44,11 +44,11 @@
 
 ## [v0.13.5](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.5) (2026-07-12)
 
-*No significant changes*
+_No significant changes_
 
 ## [v0.13.4](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.4) (2026-07-12)
 
-*No significant changes*
+_No significant changes_
 
 ## [v0.13.3](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.3) (2026-07-09)
 
@@ -80,7 +80,7 @@
 
 ## [v0.12.2](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.2) (2026-07-07)
 
-*No significant changes*
+_No significant changes_
 
 ## [v0.12.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.12.1) (2026-07-02)
 
@@ -146,7 +146,7 @@
 
 ## [v0.10.11](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.11) (2026-06-09)
 
-*No significant changes*
+_No significant changes_
 
 ## [v0.10.10](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.10) (2026-06-07)
 
@@ -159,7 +159,7 @@
 
 ## [v0.10.9](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.9) (2026-06-05)
 
-*No significant changes*
+_No significant changes_
 
 ## [v0.10.8](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.10.8) (2026-06-05)
 

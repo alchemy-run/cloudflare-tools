@@ -25,7 +25,8 @@ for (const mode of Playwright.SERVER_METHODS) {
       });
     });
 
-    it("fetches database", async ({ server }) => {
+    const skipIfNoDatabase = process.env.TEST_POSTGRES_URL ? it : it.skip;
+    skipIfNoDatabase("fetches database", async ({ server }) => {
       const response = await server.fetchJson<[{ "?column?": number }]>("/api/db");
       expect(response).toMatchObject([{ "?column?": 1 }]);
     });

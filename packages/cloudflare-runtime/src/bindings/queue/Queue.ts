@@ -105,6 +105,23 @@ export const QueueLive = Layer.effect(
                 queueName,
               });
 
+        // Dead-letter-queue targets are resolved eagerly, at plugin init:
+        // `defer` phases run concurrently across plugins, so a registry
+        // `subscribe` issued from inside this plugin's defer can land after
+        // the RegistryProxy's defer has already decided (from an empty
+        // subscriber list) not to emit the proxy service — the DLQ binding
+        // would then reference `cloudflare-runtime:registry-proxy` without it
+        // being defined and workerd would fail to start.
+        const dlqServices = new Map<string, WorkerdConfig.ServiceDesignator>();
+        for (const consumer of consumers) {
+          if (consumer.deadLetterQueue !== undefined && !dlqServices.has(consumer.deadLetterQueue)) {
+            dlqServices.set(
+              consumer.deadLetterQueue,
+              yield* queueConsumerServiceDesignator(consumer.deadLetterQueue),
+            );
+          }
+        }
+
         /**
          * Build the workerd service for a single consumed queue. A single service both
          * hosts the `QueueBrokerObject` Durable Object and exposes the entry `fetch`
@@ -142,7 +159,7 @@ export const QueueLive = Layer.effect(
                   ? [
                       {
                         name: BINDING_QUEUE_DLQ(consumer.deadLetterQueue),
-                        service: yield* queueConsumerServiceDesignator(consumer.deadLetterQueue),
+                        service: dlqServices.get(consumer.deadLetterQueue)!,
                       },
                     ]
                   : []),

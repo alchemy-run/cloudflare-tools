@@ -8,26 +8,11 @@ and fully programmatic (no `astro.config.*`), this fixture is the inverse: a
 and respect per the user-config principle, driving an app where every route is
 on-demand unless it opts into prerendering.
 
-## Status: PENDING — gated until the user-config wave lands
+## Status: ENABLED
 
-The current integration pins `configFile: false` (the fixture's
-`astro.config.mjs` is ignored), so this suite is written against the
-**intended** behavior and cannot pass yet. To keep CI green, `bun run test`
-routes through `scripts/e2e.mjs`, which prints
-
-```
-astro-ssr: pending the user-config wave — see fixtures/astro-ssr/README.md
-```
-
-and exits 0 unless `ASTRO_SSR_ENABLE=1` is set. The enablement pass (after
-the "respect user config files" wave refactors `packages/astro`) should run
-
-```sh
-ASTRO_SSR_ENABLE=1 bun run test
-```
-
-and, once green, remove the gate (make `test` call `playwright test`
-directly, restoring the `pretest` chromium install).
+The user-config wave landed: the integration loads the project's
+`astro.config.*` natively and injects the toolchain as an inline overlay, so
+this suite runs ungated (`bun run test` calls `playwright test` directly).
 
 ## What the app exercises
 
@@ -58,5 +43,5 @@ directly, restoring the `pretest` chromium install).
 bun run dev       # astro dev with the ssr environment in workerd (port 3106)
 bun run build     # astro build -> dist/ + dist/build.json
 bun run preview   # miniflare over dist/build.json
-bun run test      # GATED: no-op unless ASTRO_SSR_ENABLE=1 (see above)
+bun run test      # playwright e2e over dev + live
 ```

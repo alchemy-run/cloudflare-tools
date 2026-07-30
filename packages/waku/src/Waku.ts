@@ -33,13 +33,52 @@ type ResolvedWakuConfig = ReturnType<WakuInternalsModule["unstable_resolveConfig
 export const WAKU_SERVER_ENTRY_PATH = "dist/lib/vite-entries/entry.server.js";
 
 /**
- * The server module that must become `serverModules[0]`: waku's own `index`
- * input of the rsc environment (`dist/server/index.js`), whose default export
- * is the adapter's `ExportedHandler`. The entry environment emits multiple
- * entry chunks (`index`, `build`, and any wrapped worker entry), so entry
- * selection is pinned to this name.
+ * The server module that must become `serverModules[0]` when the app has no
+ * user worker entry: waku's own `index` input of the rsc environment
+ * (`dist/server/index.js`), whose default export is the adapter's
+ * `ExportedHandler`. The entry environment emits multiple entry chunks
+ * (`index`, `build`, and any wrapped worker entry), so entry selection is
+ * pinned to this name. When the deploy target carries a user entry
+ * (`target.entry`), the chunk built from the user's `main` is pinned instead
+ * (framework-core's `selectEntryByFacade`) and this module remains an
+ * ordinary chunk the user entry imports.
  */
 export const WAKU_SERVER_ENTRY_MODULE = NodePath.join("server", "index.js");
+
+/**
+ * The stable importable specifier for waku's server handler — the module a
+ * USER worker entry wraps (the deploy-target user-entry seam; precedent:
+ * React Router's `virtual:react-router/server-build`). Resolves to waku's
+ * rsc server entry ({@link WAKU_SERVER_ENTRY_PATH}), whose default export is
+ * the adapter's `ExportedHandler`, in dev and build alike:
+ *
+ * ```ts
+ * // src/worker-entry.ts
+ * import wakuHandler from "virtual:waku/server-entry";
+ * export class Counter extends DurableObject {}
+ * export default {
+ *   fetch: (request, env, ctx) => wakuHandler.fetch(request, env, ctx),
+ * };
+ * ```
+ */
+export const WAKU_SERVER_ENTRY_ID = "virtual:waku/server-entry";
+
+/**
+ * The vite plugin resolving {@link WAKU_SERVER_ENTRY_ID} to the project's
+ * installed waku server entry. Platform-neutral (the id maps to the same
+ * framework module for every deploy target) and always injected first in
+ * `vite.plugins`, so the id resolves for the dev module runner, the
+ * production build, and the SSG preview server alike.
+ */
+export const makeWakuServerEntryPlugin = (wakuDirectory: string): ViteModule.Plugin => ({
+  name: "distilled-waku:server-entry",
+  resolveId(id) {
+    if (id === WAKU_SERVER_ENTRY_ID) {
+      return NodePath.join(wakuDirectory, WAKU_SERVER_ENTRY_PATH);
+    }
+    return undefined;
+  },
+});
 
 /**
  * The inputs a {@link WakuTarget} hook receives: enough to synthesize the
@@ -566,7 +605,11 @@ export const make = (
         return project.internals.unstable_resolveConfig(
           makeWakuConfigInput({
             adapterPath: inputs.adapterPath,
-            plugins: inputs.plugins,
+            // The server-entry resolver goes first so
+            // `virtual:waku/server-entry` (the wrappable-handler seam a user
+            // worker entry imports) resolves in dev, build, and the SSG
+            // preview server alike.
+            plugins: [makeWakuServerEntryPlugin(project.wakuDirectory), ...inputs.plugins],
             userConfig,
           }),
         );
@@ -598,9 +641,19 @@ export const make = (
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
           });
           const wakuConfig = yield* makeConfig(project, root, hooks);
+          // Entry selection (the user-entry seam): when the deploy target
+          // carries a user worker entry, the chunk built from it must become
+          // `serverModules[0]` — waku's own `server/index.js` remains an
+          // ordinary chunk the user entry imports (via
+          // `virtual:waku/server-entry`). Without one, waku's own `index`
+          // entry chunk is pinned by name as before.
+          const userEntry = FrameworkCore.resolveDeployTargetEntry(target, { root });
           const collector = yield* FrameworkCore.makeBuildOutputCollector({
             entryEnvironment: "rsc",
-            selectEntry: (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
+            selectEntry:
+              userEntry !== undefined
+                ? FrameworkCore.selectEntryByFacade(userEntry)
+                : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
           }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
           yield* Effect.tryPromise({
             try: async () => {

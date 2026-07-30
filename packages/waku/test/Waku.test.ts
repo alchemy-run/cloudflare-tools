@@ -9,9 +9,11 @@ import framework, {
   DEFAULT_TARGET_SPECIFIER,
   make,
   makeWakuConfigInput,
+  makeWakuServerEntryPlugin,
   mergeUserWakuConfig,
   selectWakuTargetInput,
   WAKU_CONFIG_FILES,
+  WAKU_SERVER_ENTRY_ID,
   WAKU_SERVER_ENTRY_MODULE,
   type WakuTarget,
 } from "../src/index.ts";
@@ -223,5 +225,18 @@ describe("framework factory", () => {
 
   it("pins the server entry to waku's rsc index module", () => {
     expect(WAKU_SERVER_ENTRY_MODULE).toBe(NodePath.join("server", "index.js"));
+  });
+});
+
+describe("virtual:waku/server-entry", () => {
+  it("resolves the wrappable-handler id to the installed waku server entry", () => {
+    const wakuDirectory = "/project/node_modules/waku";
+    const plugin = makeWakuServerEntryPlugin(wakuDirectory);
+    const resolveId = plugin.resolveId as (id: string) => string | undefined;
+    expect(resolveId(WAKU_SERVER_ENTRY_ID)).toBe(
+      NodePath.join(wakuDirectory, "dist/lib/vite-entries/entry.server.js"),
+    );
+    expect(resolveId("virtual:waku/other")).toBeUndefined();
+    expect(resolveId("./src/worker-entry.ts")).toBeUndefined();
   });
 });

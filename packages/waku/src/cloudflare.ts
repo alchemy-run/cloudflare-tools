@@ -24,6 +24,8 @@ export type { WakuTarget, WakuTargetContext } from "./Waku.ts";
 
 /** Inputs for {@link makeWakuPluginOptions} (exported for testing). */
 export interface WakuPluginOptionsInputs {
+  /** Absolute project root (a relative user `main` resolves against it). */
+  readonly root: string;
   /** Directory of the project's installed `waku` package. */
   readonly wakuDirectory: string;
   /** User cloudflare plugin options (the target's config). */
@@ -47,21 +49,33 @@ const withNodejsAls = (flags: Array<string> | undefined): Array<string> => {
 
 /**
  * The cloudflare plugin options for a waku project: user options with `main`
- * pinned to waku's rsc worker entry, the rsc/ssr environment topology, and
+ * defaulted to waku's rsc worker entry, the rsc/ssr environment topology, and
  * `compatibilityFlags` defaulted to include `nodejs_als` (required by waku's
  * server entry) unless the user already enabled ALS or full nodejs_compat.
  *
- * Pinning `main` is mandatory: waku's rsc environment declares two rolldown
- * inputs (`index` + `build`) while the dev plugin asserts exactly one entry.
+ * An explicit `main` is mandatory either way: waku's rsc environment declares
+ * two rolldown inputs (`index` + `build`) while the dev plugin asserts exactly
+ * one entry. A USER `main` (the deploy target's user-entry seam — a worker
+ * entry that wraps `virtual:waku/server-entry` and re-exports Durable Object
+ * classes) takes precedence over waku's own entry and is resolved against the
+ * project root; without one, waku's rsc server entry is pinned as before.
  */
 export const makeWakuPluginOptions = (
   inputs: WakuPluginOptionsInputs,
-): CloudflareVitePluginOptions => ({
-  ...inputs.pluginOptions,
-  main: NodePath.join(inputs.wakuDirectory, WAKU_SERVER_ENTRY_PATH),
-  viteEnvironments: { entry: "rsc", children: ["ssr"] },
-  compatibilityFlags: withNodejsAls(inputs.pluginOptions?.compatibilityFlags),
-});
+): CloudflareVitePluginOptions => {
+  const userMain = inputs.pluginOptions?.main;
+  return {
+    ...inputs.pluginOptions,
+    main:
+      userMain !== undefined
+        ? NodePath.isAbsolute(userMain)
+          ? userMain
+          : NodePath.resolve(inputs.root, userMain)
+        : NodePath.join(inputs.wakuDirectory, WAKU_SERVER_ENTRY_PATH),
+    viteEnvironments: { entry: "rsc", children: ["ssr"] },
+    compatibilityFlags: withNodejsAls(inputs.pluginOptions?.compatibilityFlags),
+  };
+};
 
 /**
  * Build the Cloudflare deploy target for waku:
@@ -70,11 +84,15 @@ export const makeWakuPluginOptions = (
  *   adapter (`@distilled.cloud/waku/adapter`): behavior-identical to upstream
  *   except `buildEnhancers: []`, dropping the sole wrangler-file writer.
  * - `vitePlugins` — `@distilled.cloud/cloudflare-vite-plugin` with `main`
- *   pinned to waku's rsc worker entry and the `{ entry: "rsc", children:
- *   ["ssr"] }` environment topology. Injected inside waku's `vite.plugins`
- *   (before waku's own plugins), so in dev the rsc environment runs in
- *   workerd and the workerd proxy middleware registers ahead of waku's Node
- *   request bridge.
+ *   set to the user's own worker entry when the config carries one (the
+ *   user-entry seam), or pinned to waku's rsc worker entry otherwise, plus
+ *   the `{ entry: "rsc", children: ["ssr"] }` environment topology. Injected
+ *   inside waku's `vite.plugins` (before waku's own plugins), so in dev the
+ *   rsc environment runs in workerd and the workerd proxy middleware
+ *   registers ahead of waku's Node request bridge.
+ * - `entry` — surfaces the config's `main` as the generic user-entry
+ *   carriage, so the platform-neutral framework half can pin the built
+ *   user-entry chunk as `serverModules[0]`.
  * - `bundle` — the workerd resolve conditions and `cloudflare:` externals for
  *   any pass that bundles server code for this target.
  */
@@ -84,6 +102,7 @@ export const makeWakuCloudflareTarget = (
   makeDeployTarget({
     platform: "cloudflare",
     config,
+    entry: config?.main !== undefined ? { main: config.main } : undefined,
     bundle: {
       conditions: ["workerd", "worker", "module", "browser"],
       external: ["cloudflare:"],
@@ -102,6 +121,7 @@ export const makeWakuCloudflareTarget = (
       Effect.sync(() => [
         cloudflareVitePlugin(
           makeWakuPluginOptions({
+            root: context.root,
             wakuDirectory: context.wakuDirectory,
             pluginOptions: config,
           }),

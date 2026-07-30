@@ -22,42 +22,65 @@ const flatten = (plugins: ReadonlyArray<ViteModule.PluginOption>): Array<ViteMod
     );
 
 describe("makeWakuPluginOptions", () => {
-  it("pins main to waku's rsc worker entry and the rsc/ssr topology", () => {
-    const options = makeWakuPluginOptions({ wakuDirectory: WAKU_DIR });
+  it("defaults main to waku's rsc worker entry and pins the rsc/ssr topology", () => {
+    const options = makeWakuPluginOptions({ root: "/project", wakuDirectory: WAKU_DIR });
     expect(options.main).toBe(NodePath.join(WAKU_DIR, WAKU_SERVER_ENTRY_PATH));
     expect(options.viteEnvironments).toEqual({ entry: "rsc", children: ["ssr"] });
   });
 
-  it("preserves user cloudflare options but overrides main and viteEnvironments", () => {
+  it("preserves user cloudflare options but overrides viteEnvironments", () => {
     const options = makeWakuPluginOptions({
+      root: "/project",
       wakuDirectory: WAKU_DIR,
       pluginOptions: {
         compatibilityDate: "2026-03-10",
         compatibilityFlags: ["nodejs_als"],
         worker: { name: "fixtures-waku", bindings: [] },
-        main: "/somewhere/else.ts",
         viteEnvironments: { entry: "ssr" },
       },
     });
     expect(options.compatibilityDate).toBe("2026-03-10");
     expect(options.compatibilityFlags).toEqual(["nodejs_als"]);
     expect(options.worker?.name).toBe("fixtures-waku");
-    // waku-structural options always win: two rsc inputs require an explicit
-    // main, and the worker must run in the rsc environment.
+    // The environment topology always wins: the worker must run in the rsc
+    // environment.
     expect(options.main).toBe(NodePath.join(WAKU_DIR, WAKU_SERVER_ENTRY_PATH));
     expect(options.viteEnvironments).toEqual({ entry: "rsc", children: ["ssr"] });
   });
 
+  it("lets a user main (the user-entry seam) take precedence over waku's entry", () => {
+    const absolute = makeWakuPluginOptions({
+      root: "/project",
+      wakuDirectory: WAKU_DIR,
+      pluginOptions: { main: "/project/src/worker-entry.ts" },
+    });
+    expect(absolute.main).toBe("/project/src/worker-entry.ts");
+
+    // A relative main resolves against the project root, not process.cwd().
+    const relative = makeWakuPluginOptions({
+      root: "/project",
+      wakuDirectory: WAKU_DIR,
+      pluginOptions: { main: "./src/worker-entry.ts" },
+    });
+    expect(relative.main).toBe(NodePath.resolve("/project", "src/worker-entry.ts"));
+    // The topology stays pinned even with a user main.
+    expect(relative.viteEnvironments).toEqual({ entry: "rsc", children: ["ssr"] });
+  });
+
   it("defaults compatibilityFlags to nodejs_als (waku needs AsyncLocalStorage)", () => {
-    expect(makeWakuPluginOptions({ wakuDirectory: WAKU_DIR }).compatibilityFlags).toEqual([
-      "nodejs_als",
-    ]);
     expect(
-      makeWakuPluginOptions({ wakuDirectory: WAKU_DIR, pluginOptions: { compatibilityFlags: [] } })
-        .compatibilityFlags,
+      makeWakuPluginOptions({ root: "/project", wakuDirectory: WAKU_DIR }).compatibilityFlags,
     ).toEqual(["nodejs_als"]);
     expect(
       makeWakuPluginOptions({
+        root: "/project",
+        wakuDirectory: WAKU_DIR,
+        pluginOptions: { compatibilityFlags: [] },
+      }).compatibilityFlags,
+    ).toEqual(["nodejs_als"]);
+    expect(
+      makeWakuPluginOptions({
+        root: "/project",
         wakuDirectory: WAKU_DIR,
         pluginOptions: { compatibilityFlags: ["global_fetch_strictly_public"] },
       }).compatibilityFlags,
@@ -67,18 +90,21 @@ describe("makeWakuPluginOptions", () => {
   it("keeps user compatibilityFlags that already provide AsyncLocalStorage", () => {
     expect(
       makeWakuPluginOptions({
+        root: "/project",
         wakuDirectory: WAKU_DIR,
         pluginOptions: { compatibilityFlags: ["nodejs_als"] },
       }).compatibilityFlags,
     ).toEqual(["nodejs_als"]);
     expect(
       makeWakuPluginOptions({
+        root: "/project",
         wakuDirectory: WAKU_DIR,
         pluginOptions: { compatibilityFlags: ["nodejs_compat"] },
       }).compatibilityFlags,
     ).toEqual(["nodejs_compat"]);
     expect(
       makeWakuPluginOptions({
+        root: "/project",
         wakuDirectory: WAKU_DIR,
         pluginOptions: { compatibilityFlags: ["nodejs_compat_v2"] },
       }).compatibilityFlags,
@@ -127,5 +153,13 @@ describe("makeWakuCloudflareTarget", () => {
     const plugins = flatten(Effect.runSync(target.vitePlugins(context)));
     expect(plugins.length).toBeGreaterThan(0);
     expect(plugins.some((plugin) => plugin.name.startsWith("distilled-cloudflare"))).toBe(true);
+  });
+
+  it("surfaces the config's main as the generic user-entry carriage", () => {
+    expect(makeWakuCloudflareTarget().entry).toBeUndefined();
+    expect(makeWakuCloudflareTarget({ compatibilityDate: "2026-03-10" }).entry).toBeUndefined();
+    expect(makeWakuCloudflareTarget({ main: "./src/worker-entry.ts" }).entry).toEqual({
+      main: "./src/worker-entry.ts",
+    });
   });
 });

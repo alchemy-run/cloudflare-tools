@@ -21,3 +21,15 @@
 	path = upstream/waku
 	url = https://github.com/wakujs/waku
 	shallow = true
+[submodule "upstream/nuxt"]
+	path = upstream/nuxt
+	url = https://github.com/nuxt/nuxt
+	shallow = true
+[submodule "upstream/nitro"]
+	path = upstream/nitro
+	url = https://github.com/nitrojs/nitro
+	shallow = true
+[submodule "upstream/nitro-cloudflare-dev"]
+	path = upstream/nitro-cloudflare-dev
+	url = https://github.com/nitrojs/nitro-cloudflare-dev
+	shallow = true

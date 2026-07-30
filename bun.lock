@@ -31,6 +31,49 @@
         "vite": "catalog:",
       },
     },
+    "fixtures/astro-ssr": {
+      "name": "@fixtures/astro-ssr",
+      "dependencies": {
+        "astro": "7.1.0",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:workers",
+        "@distilled.cloud/astro": "workspace:*",
+        "@distilled.cloud/cloudflare-runtime": "workspace:*",
+        "@distilled.cloud/e2e": "workspace:*",
+        "@effect/platform-node": "catalog:effect",
+        "@playwright/test": "catalog:",
+        "effect": "catalog:effect",
+        "vite": "catalog:",
+      },
+    },
+    "fixtures/astro-static": {
+      "name": "@fixtures/astro-static",
+      "dependencies": {
+        "astro": "7.1.0",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:workers",
+        "@distilled.cloud/astro": "workspace:*",
+        "@distilled.cloud/cloudflare-runtime": "workspace:*",
+        "@distilled.cloud/e2e": "workspace:*",
+        "@effect/platform-node": "catalog:effect",
+        "@playwright/test": "catalog:",
+        "effect": "catalog:effect",
+        "vite": "catalog:",
+      },
+    },
+    "fixtures/monorepo-workspace": {
+      "name": "@fixtures/monorepo-workspace",
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:workers",
+        "@distilled.cloud/e2e": "workspace:*",
+        "@distilled.cloud/framework-core": "workspace:*",
+        "@playwright/test": "catalog:",
+        "effect": "catalog:effect",
+        "vite": "catalog:",
+      },
+    },
     "fixtures/react-router-rsc": {
       "name": "@fixtures/react-router-rsc",
       "dependencies": {
@@ -99,6 +142,21 @@
         "devalue": "5.8.1",
         "uuid": "^14.0.1",
       },
+      "devDependencies": {
+        "@distilled.cloud/cloudflare-runtime": "workspace:*",
+        "@distilled.cloud/e2e": "workspace:*",
+        "@distilled.cloud/sveltekit": "workspace:*",
+        "@playwright/test": "catalog:",
+        "@sveltejs/kit": "3.0.0-next.9",
+        "@sveltejs/vite-plugin-svelte": "^7.2.0",
+        "@types/node": "^24.12.0",
+        "effect": "catalog:effect",
+        "svelte": "^5.56.6",
+        "vite": "catalog:",
+      },
+    },
+    "fixtures/sveltekit-spa": {
+      "name": "@fixtures/sveltekit-spa",
       "devDependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/e2e": "workspace:*",
@@ -187,6 +245,27 @@
         "@types/node": "^24.12.0",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
+        "vite": "catalog:",
+      },
+    },
+    "fixtures/waku-durable-objects": {
+      "name": "@fixtures/waku-durable-objects",
+      "dependencies": {
+        "hono": "^4.12.14",
+        "react": "~19.2.6",
+        "react-dom": "~19.2.6",
+        "react-server-dom-webpack": "~19.2.6",
+        "waku": "1.0.0-beta.7",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:workers",
+        "@distilled.cloud/cloudflare-runtime": "workspace:*",
+        "@distilled.cloud/e2e": "workspace:*",
+        "@distilled.cloud/waku": "workspace:*",
+        "@playwright/test": "catalog:",
+        "@types/node": "^24.12.0",
+        "@types/react": "~19.2.17",
+        "@types/react-dom": "~19.2.3",
         "vite": "catalog:",
       },
     },
@@ -732,6 +811,12 @@
 
     "@fixtures/astro": ["@fixtures/astro@workspace:fixtures/astro"],
 
+    "@fixtures/astro-ssr": ["@fixtures/astro-ssr@workspace:fixtures/astro-ssr"],
+
+    "@fixtures/astro-static": ["@fixtures/astro-static@workspace:fixtures/astro-static"],
+
+    "@fixtures/monorepo-workspace": ["@fixtures/monorepo-workspace@workspace:fixtures/monorepo-workspace"],
+
     "@fixtures/react-router-rsc": ["@fixtures/react-router-rsc@workspace:fixtures/react-router-rsc"],
 
     "@fixtures/solid-ssr": ["@fixtures/solid-ssr@workspace:fixtures/solid-ssr"],
@@ -742,11 +827,15 @@
 
     "@fixtures/sveltekit": ["@fixtures/sveltekit@workspace:fixtures/sveltekit"],
 
+    "@fixtures/sveltekit-spa": ["@fixtures/sveltekit-spa@workspace:fixtures/sveltekit-spa"],
+
     "@fixtures/tanstack-start": ["@fixtures/tanstack-start@workspace:fixtures/tanstack-start"],
 
     "@fixtures/vocs": ["@fixtures/vocs@workspace:fixtures/vocs"],
 
     "@fixtures/waku": ["@fixtures/waku@workspace:fixtures/waku"],
+
+    "@fixtures/waku-durable-objects": ["@fixtures/waku-durable-objects@workspace:fixtures/waku-durable-objects"],
 
     "@floating-ui/core": ["@floating-ui/core@1.8.0", "", { "dependencies": { "@floating-ui/utils": "^0.2.12" } }, "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ=="],
 

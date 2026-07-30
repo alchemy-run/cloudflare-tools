@@ -6,7 +6,10 @@ declare module "cloudflare:workers" {
     protected ctx: {
       storage: {
         sql: {
-          exec(query: string, ...bindings: Array<unknown>): {
+          exec(
+            query: string,
+            ...bindings: Array<unknown>
+          ): {
             toArray(): Array<Record<string, unknown>>;
           };
         };

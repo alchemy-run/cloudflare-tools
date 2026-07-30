@@ -53,8 +53,8 @@ fixture were needed; both are enablement targets for the harness:
 
 ## Enablement target: memo-busting assertions
 
-The remaining goal — *editing `lib/src` busts the rebuild memo while an
-untouched rebuild stays memoized* — is **not yet assertable in this harness**:
+The remaining goal — _editing `lib/src` busts the rebuild memo while an
+untouched rebuild stays memoized_ — is **not yet assertable in this harness**:
 
 - `e2e build` rebuilds unconditionally (`Server.buildAndPersist` always calls
   `Framework.build()`); the harness has no input-hash memo of its own.

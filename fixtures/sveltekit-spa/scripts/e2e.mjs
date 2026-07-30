@@ -9,9 +9,7 @@
 import { spawnSync } from "node:child_process";
 
 if (process.env.SVELTEKIT_SPA_ENABLE !== "1") {
-  console.log(
-    "sveltekit-spa: pending the user-config wave — see fixtures/sveltekit-spa/README.md",
-  );
+  console.log("sveltekit-spa: pending the user-config wave — see fixtures/sveltekit-spa/README.md");
   process.exit(0);
 }
 

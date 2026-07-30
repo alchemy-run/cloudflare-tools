@@ -627,7 +627,12 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding", (it) =
         modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
         bindings: [Queue.local({ binding: "QUEUE", queueName: "orphan-dlq-src" })],
         queueConsumers: [
-          { queueName: "orphan-dlq-src", maxBatchTimeout: 0, maxRetries: 0, deadLetterQueue: "orphan-dlq" },
+          {
+            queueName: "orphan-dlq-src",
+            maxBatchTimeout: 0,
+            maxRetries: 0,
+            deadLetterQueue: "orphan-dlq",
+          },
         ],
       });
 
@@ -1092,7 +1097,12 @@ layer(localRuntimeLayer, {
           modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
           bindings: [Queue.local({ binding: "QUEUE", queueName: "cross-dlq-src" })],
           queueConsumers: [
-            { queueName: "cross-dlq-src", maxBatchTimeout: 0, maxRetries: 0, deadLetterQueue: "cross-dlq" },
+            {
+              queueName: "cross-dlq-src",
+              maxBatchTimeout: 0,
+              maxRetries: 0,
+              deadLetterQueue: "cross-dlq",
+            },
           ],
         });
 

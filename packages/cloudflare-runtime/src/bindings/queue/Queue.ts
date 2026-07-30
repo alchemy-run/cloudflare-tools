@@ -114,7 +114,10 @@ export const QueueLive = Layer.effect(
         // being defined and workerd would fail to start.
         const dlqServices = new Map<string, WorkerdConfig.ServiceDesignator>();
         for (const consumer of consumers) {
-          if (consumer.deadLetterQueue !== undefined && !dlqServices.has(consumer.deadLetterQueue)) {
+          if (
+            consumer.deadLetterQueue !== undefined &&
+            !dlqServices.has(consumer.deadLetterQueue)
+          ) {
             dlqServices.set(
               consumer.deadLetterQueue,
               yield* queueConsumerServiceDesignator(consumer.deadLetterQueue),

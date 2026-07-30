@@ -53,12 +53,18 @@ test.describe("build output", () => {
     expect(parsed.serverModules?.length ?? 0).toBeGreaterThan(0);
   });
 
-  // Enablement target (NOT yet assertable in the e2e harness): editing
-  // lib/src must bust the rebuild memo while an untouched rebuild stays
-  // memoized. The harness's `e2e build` rebuilds unconditionally
-  // (Server.buildAndPersist always calls Framework.build) — the input-hash
-  // memo lives in alchemy's Website/Command.Memo machinery, which consumes
-  // `externalWorkspaces` as `memo.workspaces: "auto"`. Asserting memo
-  // behavior here needs a harness-level memoized build (or an alchemy-side
-  // test driving Website over this fixture). See README.md.
+  // Aspirational spec, intentionally NOT assertable in this harness: the e2e
+  // harness has NO build memoization by design (`e2e build` rebuilds
+  // unconditionally). The input-hash memo that consumes `externalWorkspaces`
+  // lives in alchemy's `Website`/`Command.Memo` machinery
+  // (`memo.workspaces: "auto"` hashes the workspace directories recorded in
+  // the build output), so the memo-bust behavior is asserted by an
+  // alchemy-side `Website` memo test over this shape — see the memo-workspace
+  // coverage in `alchemy-effect/packages/alchemy/test/Cloudflare/Website/`.
+  // This fixture pins the prerequisite: the collector reports `lib/` so the
+  // memo layer has the right inputs (the assertion above).
+  it.skip("editing lib/src busts the rebuild memo; an untouched rebuild stays memoized", () => {
+    // Covered by alchemy's Website memo tests (memo.workspaces: "auto"), not
+    // by this harness — see the comment above.
+  });
 });

@@ -7,7 +7,7 @@ that imports code across a package boundary.
 
 ```
 fixtures/monorepo-workspace/   ← fixture root (bun workspace member; harness cwd)
-  e2e.config.ts                ← built-in Vite framework path, re-rooted at app/
+  e2e.config.ts                ← built-in Vite framework path, `root: "./app"`
   app/                         ← the Vite project root (SSR worker, no client assets)
     src/server.ts              ← imports ../../lib/src/greeting.ts
   lib/                         ← sibling directory with its own package.json + src
@@ -17,16 +17,22 @@ fixtures/monorepo-workspace/   ← fixture root (bun workspace member; harness c
 
 Deliberate choices:
 
-- **Vite framework path, not a framework package.** `e2e.config.ts` wraps the
-  harness's built-in `makeViteFramework` with a Framework layer that pins
-  `root: app/` for `build`/`dev`. This isolates the workspace machinery from
-  framework churn.
+- **Vite framework path, not a framework package.** `e2e.config.ts` uses the
+  harness's built-in Vite implementation with the first-class `root` option
+  (`Options.root`, resolved against the fixture root and threaded by the
+  Cli/Server into `Framework.build`/`Framework.dev`). This isolates the
+  workspace machinery from framework churn.
 - **Relative import, no bun workspace-protocol tricks.** `lib/` is NOT a bun
   workspace member (the root glob is `fixtures/*`, one level up). The app
   reaches it via `../../lib/src/greeting.ts`; framework-core's collector
   detects cross-boundary module ids **by path** (absolute id outside the
   project root, not under `node_modules`) and resolves each to its nearest
   `package.json` directory (`collectExternalWorkspaces`).
+- **The client environment's default entry is `index.html`.** A
+  worker-rendered app has none; `app/vite.config.ts` points the client build
+  at `src/client.ts`. (User-config-respecting behavior working as intended —
+  noted because a client-less SSR app cannot express "skip the client
+  environment" through `e2e.config.ts` alone.)
 
 ## What the specs assert
 
@@ -35,45 +41,25 @@ Deliberate choices:
 - `live`: `dist/build.json`'s `externalWorkspaces` contains the absolute path
   of `lib/` — and does NOT contain `app/` or the fixture root.
 
-All five specs pass ungated against the current packages (verified from a
-clean checkout state, `rm -rf dist app/dist`). Two workarounds inside the
-fixture were needed; both are enablement targets for the harness:
+The suite runs ungated (`bun run test` → `playwright test`). The two harness
+gaps the original scaffold worked around are fixed upstream:
 
-1. **`writeBuildOutput` does not create `dist/`.** With a nested project
-   root the Vite build writes to `app/dist`, so `<fixtureRoot>/dist` never
-   exists and `Server.buildAndPersist` fails with ENOENT. The fixture's
-   framework wrapper pre-creates it (`ensureDistDirectory` in
-   `e2e.config.ts`); framework-core's `writeBuildOutput` should `mkdir -p`
-   the parent instead.
-2. **The client environment's default entry is `index.html`.** A
-   worker-rendered app has none; `app/vite.config.ts` points the client build
-   at `src/client.ts`. (This is user-config-respecting behavior working as
-   intended — noted here because a client-less SSR app cannot express "skip
-   the client environment" through `e2e.config.ts` alone.)
+1. `writeBuildOutput` now `mkdir -p`s its target's parent, so the nested-root
+   build (Vite writes to `app/dist` while the harness persists
+   `<fixtureRoot>/dist/build.json`) no longer hits ENOENT.
+2. `Options.root` is a first-class harness option threaded into
+   `FrameworkBuildOptions.root` / `FrameworkDevOptions.root` — the fixture no
+   longer wraps `makeViteFramework` in its own Framework layer.
 
-## Enablement target: memo-busting assertions
+## Out of scope here: memo-busting assertions
 
-The remaining goal — _editing `lib/src` busts the rebuild memo while an
-untouched rebuild stays memoized_ — is **not yet assertable in this harness**:
-
-- `e2e build` rebuilds unconditionally (`Server.buildAndPersist` always calls
-  `Framework.build()`); the harness has no input-hash memo of its own.
-- The memo that consumes `externalWorkspaces` lives in alchemy's
-  `Website`/`Command.Memo` machinery (`memo.workspaces: "auto"` hashes the
-  workspace directories recorded in the build output).
-
-To make it assertable, either (a) grow a harness-level memoized build (`e2e
-build --memo`?) that reuses `dist/build.json` when input hashes match and
-exposes whether the build was skipped, or (b) drive this fixture from an
-alchemy-side `Website` test. Until then this fixture pins the prerequisite:
-the collector must report `lib/` so the memo layer has the right inputs.
-
-## CI gate
-
-`bun run test` prints a pending notice and exits 0 unless `MONOREPO_WS_ENABLE=1`
-is set (see `scripts/e2e.mjs`). This keeps CI green while the enablement pass
-verifies the nested-root Vite path end to end. Run the real suite with:
-
-```sh
-MONOREPO_WS_ENABLE=1 bun run test
-```
+The aspirational spec — _editing `lib/src` busts the rebuild memo while an
+untouched rebuild stays memoized_ — is intentionally **skipped** in
+`test/smoke.test.ts`: the e2e harness has no build memoization by design
+(`e2e build` rebuilds unconditionally). The memo that consumes
+`externalWorkspaces` lives in alchemy's `Website`/`Command.Memo` machinery
+(`memo.workspaces: "auto"` hashes the workspace directories recorded in the
+build output), and the memo-bust behavior is asserted by an alchemy-side
+`Website` memo test (see `alchemy-effect/packages/alchemy/test/Cloudflare/Website/`).
+This fixture pins the prerequisite: the collector must report `lib/` so the
+memo layer has the right inputs.

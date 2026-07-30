@@ -216,6 +216,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       },
       ...(options.worker?.durableObjectNamespaces ?? []),
     ],
+    workflows: options.worker?.workflows,
     hyperdrives: options.worker?.hyperdrives,
     assets: options.worker?.assets,
     unsafe: {
@@ -289,6 +290,10 @@ async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<
       ...(options.worker?.durableObjectNamespaces ?? []).map(
         (namespace) =>
           `export const ${namespace.className} = createDurableObjectWrapper("${namespace.className}");`,
+      ),
+      ...(options.worker?.workflows ?? []).map(
+        (workflow) =>
+          `export const ${workflow.className} = createWorkflowEntrypointWrapper("${workflow.className}");`,
       ),
     ].join("\n"),
     ...moduleRunnerWorker.modules,

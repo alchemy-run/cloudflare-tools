@@ -27,6 +27,7 @@ export class PluginContext extends Context.Service<
         sockets: Array<WorkerdConfig.Socket>;
         services: Array<WorkerdConfig.Service>;
         extensions: Array<WorkerdConfig.Extension>;
+        userWorker: Partial<WorkerdConfig.Worker>;
       },
       RuntimeError
     >;
@@ -60,6 +61,7 @@ export const make = (
         const services = configs.flatMap((config) => config.services ?? []);
         const sockets = configs.flatMap((config) => config.sockets ?? []);
         const extensions = configs.flatMap((config) => config.extensions ?? []);
+        const userWorker = Object.assign({}, ...configs.map((config) => config.userWorker ?? {}));
         const middlewares = configs
           .flatMap((config) => config.middlewares ?? [])
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -67,6 +69,7 @@ export const make = (
           entry: middlewares[0]?.name,
           sockets,
           extensions,
+          userWorker,
           services: [
             ...services,
             ...middlewares.map((middleware, index) => ({

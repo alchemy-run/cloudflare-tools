@@ -61,6 +61,7 @@ const importPlatformServices = Effect.promise(async () => {
 const makeLayer = (persist: GetPlatformProxyOptions["persist"]) =>
   Runtime.RuntimeLive.pipe(
     Layer.provideMerge(RuntimeServices.layerLocalBindings()),
+    Layer.provideMerge(RuntimeServices.layerProxy()),
     Layer.provide(Globals.GlobalsLive),
     Layer.provideMerge(RuntimeServices.layerLoopback()),
     Layer.provide(
@@ -106,12 +107,22 @@ export const getPlatformProxy = async <
 ): Promise<PlatformProxy<Env>> => {
   const scope = Scope.makeUnsafe();
   try {
+    // The layer must be BUILT INTO the dispose scope, not provided around
+    // `open` — `Effect.provide` closes the layer's build scope as soon as
+    // the effect resolves, tearing down the scoped services (temp storage
+    // directory, loopback server, registry watcher) out from under the
+    // still-running workerd instance. The first binding call then fails
+    // with an opaque "Network connection lost".
+    //
     // The binding hooks' requirements are dynamic here (`B` is unbounded), so
     // the local-only layer cannot discharge them statically. A hook that
     // needs a service the local layer does not provide (e.g. remote bindings
     // without credentials) fails at startup with a descriptive defect.
+    const context = await Effect.runPromise(
+      Layer.build(makeLayer(options.persist)).pipe(Scope.provide(scope)),
+    );
     const effect = open<B, Env>(options).pipe(
-      Effect.provide(makeLayer(options.persist)),
+      Effect.provideContext(context),
       Scope.provide(scope),
     ) as Effect.Effect<PlatformProxyInstance<Env>>;
     const instance = await Effect.runPromise(effect);

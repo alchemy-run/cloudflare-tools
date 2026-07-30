@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.14.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.14.0) (2026-07-29)
+
+### Features
+
+- **cloudflare-runtime**: platform proxy (getPlatformProxy) - by sam in [#88](https://github.com/alchemy-run/cloudflare-tools/pull/88) [(477cd97)](https://github.com/alchemy-run/cloudflare-tools/commit/477cd9772a3f4b90213baccccd5197afc7489741)
+- **cloudflare-runtime**: local bindings - by John Royal in [#85](https://github.com/alchemy-run/cloudflare-tools/pull/85) [(7ca4dee)](https://github.com/alchemy-run/cloudflare-tools/commit/7ca4deec28d560357af11f6499a2e35e0698e2c2)
+
+### Bug Fixes
+
+- **runtime**: refresh stale remote-binding preview sessions - by sam in [#87](https://github.com/alchemy-run/cloudflare-tools/pull/87) [(b193951)](https://github.com/alchemy-run/cloudflare-tools/commit/b1939513d9319385da8848c157dd56df473ad893)
+- **vite-plugin**: preserve base path in worker requests - by @WaryaWayne in [#86](https://github.com/alchemy-run/cloudflare-tools/pull/86) [(e64d5cc)](https://github.com/alchemy-run/cloudflare-tools/commit/e64d5cc8127b8bd86f0b5da569a31d9d51d513eb)
+
+## [v0.13.10](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.10) (2026-07-24)
+
+### Features
+
+- **cloudflare-runtime**: local send_email stub that logs under alchemy dev - by Zé Yuri in [#76](https://github.com/alchemy-run/cloudflare-tools/pull/76) [(99f9952)](https://github.com/alchemy-run/cloudflare-tools/commit/99f99526fef5f5154cc0b4fe6aa2cb73cc2c0cee)
+
+### Bug Fixes
+
+- **runtime,vite-plugin**: declare owned workflows on RuntimeWorker like DOs - by John Royal in [#83](https://github.com/alchemy-run/cloudflare-tools/pull/83) [(64d6bc7)](https://github.com/alchemy-run/cloudflare-tools/commit/64d6bc75f0e0f7a122c89ce765861a7b9f56cf97)
+- **ci**: stop test tasks racing their own package build (Windows Queue.test flake) - by sam in [#80](https://github.com/alchemy-run/cloudflare-tools/pull/80) [(321d76a)](https://github.com/alchemy-run/cloudflare-tools/commit/321d76aebb0b3410b967d9d25b31e63d7ebed7e6)
+
+## [v0.13.9](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.9) (2026-07-22)
+
+### Bug Fixes
+
+- **runtime**: dev container image-tag race — scope cleanup to own tag - by sam in [#79](https://github.com/alchemy-run/cloudflare-tools/pull/79) [(d9df021)](https://github.com/alchemy-run/cloudflare-tools/commit/d9df021f2ce4ca57cdabeafeaa4f6c1f77e6cce9)
+
+## [v0.13.8](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.8) (2026-07-21)
+
+### Bug Fixes
+
+- **rolldown-plugin**: inject esmExternalRequirePlugin at top level - by John Royal in [#77](https://github.com/alchemy-run/cloudflare-tools/pull/77) [(7f77734)](https://github.com/alchemy-run/cloudflare-tools/commit/7f77734ef811f572134c34fecd1edf794602eb07)
+- **runtime**: workerd control-fd hang on Windows under Bun - by Michael K in [#75](https://github.com/alchemy-run/cloudflare-tools/pull/75) [(7e400a6)](https://github.com/alchemy-run/cloudflare-tools/commit/7e400a6766a6c2225eb615469a1e03d0c1cc472a)
+
 ## [v0.13.7](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.7) (2026-07-20)
 
 ### Bug Fixes

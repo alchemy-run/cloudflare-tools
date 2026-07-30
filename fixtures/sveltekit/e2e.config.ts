@@ -39,7 +39,7 @@ export default Options.make({
             Text.local("FIXTURE_OVERRIDE", OVERRIDE_BINDING_VALUE),
             // a real (non-literal) resource binding: served in dev through
             // cloudflare-runtime's platform proxy
-            KvNamespace.local("FIXTURE_KV"),
+            KvNamespace.local({ binding: "FIXTURE_KV" }),
           ],
           assets: {
             htmlHandling: "auto-trailing-slash",

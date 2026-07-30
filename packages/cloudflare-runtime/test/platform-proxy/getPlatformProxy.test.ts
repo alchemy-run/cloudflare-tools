@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import * as KvNamespace from "../../src/bindings/KvNamespace.ts";
+import * as KvNamespace from "../../src/bindings/kv-namespace/index.ts";
 import * as Text from "../../src/bindings/Text.ts";
 import { getPlatformProxy } from "../../src/platform-proxy/getPlatformProxy.ts";
 
@@ -13,7 +13,7 @@ interface TestEnv {
 
 it("getPlatformProxy provides working bindings from plain Node code", async () => {
   const proxy = await getPlatformProxy<TestEnv>({
-    bindings: [Text.local("TEXT", "from-promise-api"), KvNamespace.local("KV")],
+    bindings: [Text.local("TEXT", "from-promise-api"), KvNamespace.local({ binding: "KV" })],
   });
   try {
     expect(proxy.env.TEXT).toBe("from-promise-api");
@@ -31,7 +31,7 @@ it("getPlatformProxy provides working bindings from plain Node code", async () =
 
 it("dispose is idempotent and shuts the instance down", async () => {
   const proxy = await getPlatformProxy<TestEnv>({
-    bindings: [Text.local("TEXT", "dispose-test"), KvNamespace.local("KV")],
+    bindings: [Text.local("TEXT", "dispose-test"), KvNamespace.local({ binding: "KV" })],
   });
   await proxy.env.KV.put("key", "value");
   await proxy.dispose();

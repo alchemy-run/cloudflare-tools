@@ -93,7 +93,8 @@ jobs:
   # ── Build + publish each changed package in parallel. ─────────────────────
   publish:
     needs: [detect-changes, tags]
-    if: needs.detect-changes.outputs.packages != '[]'
+    # Skip when PR_PACKAGE_TOKEN is unset (e.g. forks, or secrets not configured).
+    if: needs.detect-changes.outputs.packages != '[]' && secrets.PR_PACKAGE_TOKEN != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -162,8 +163,16 @@ jobs:
   comment:
     needs: [detect-changes, tags, publish]
     # `always()` so a single matrix failure doesn't drop the comment for every
-    # other package that did publish.
-    if: always() && github.event_name == 'pull_request' && needs.detect-changes.outputs.packages != '[]' && needs.tags.result == 'success'
+    # other package that did publish. Skip when publish was skipped (no token)
+    # or the bot app secrets are unset.
+    if: >-
+      always()
+      && github.event_name == 'pull_request'
+      && needs.detect-changes.outputs.packages != '[]'
+      && needs.tags.result == 'success'
+      && needs.publish.result != 'skipped'
+      && secrets.ALCHEMY_VERSION_BOT_ID != ''
+      && secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -222,7 +231,11 @@ jobs:
   # anything merged to main.
   commit-comment:
     needs: [detect-changes, tags, publish]
-    if: github.event_name == 'push' && needs.detect-changes.outputs.packages != '[]'
+    if: >-
+      github.event_name == 'push'
+      && needs.detect-changes.outputs.packages != '[]'
+      && secrets.ALCHEMY_VERSION_BOT_ID != ''
+      && secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -264,7 +277,11 @@ jobs:
   # commit in the PR across every package project. 404s are ignored (tag may
   # have been TTL'd or never set).
   cleanup:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == false
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.action == 'closed'
+      && github.event.pull_request.merged == false
+      && secrets.PR_PACKAGE_TOKEN != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

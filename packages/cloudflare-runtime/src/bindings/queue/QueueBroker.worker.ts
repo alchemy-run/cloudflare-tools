@@ -7,6 +7,7 @@ import type {
   ServiceBindingQueueMessage,
 } from "@cloudflare/workers-types/experimental";
 import { DurableObject } from "cloudflare:workers";
+import { HttpError } from "../../internal/shared.worker.ts";
 import type { QueueConsumer, QueueContentType, QueueProducerEntry } from "./QueueOptions.shared.ts";
 import {
   BINDING_QUEUE_BROKER,
@@ -375,19 +376,6 @@ class QueueMessage {
       case "v8":
         return body.byteLength;
     }
-  }
-}
-
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-
-  toResponse(): Response {
-    return new Response(this.message, { status: this.status });
   }
 }
 

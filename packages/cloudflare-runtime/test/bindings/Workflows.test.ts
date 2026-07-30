@@ -79,6 +79,7 @@ describe("Workflows binding", () => {
               compatibilityDate: "2024-11-20",
               compatibilityFlags: [],
               modules: [{ name: "main.js", type: "ESModule", content: WORKFLOW_SCRIPT }],
+              workflows: [{ workflowName: "MY_WORKFLOW", className: "MyWorkflow" }],
               bindings: [
                 Workflows.local({
                   binding: "MY_WORKFLOW",
@@ -179,6 +180,7 @@ const startLifecycleWorker = () =>
     compatibilityDate: "2026-03-09",
     compatibilityFlags: [],
     modules: [{ name: "main.js", type: "ESModule", content: LIFECYCLE_SCRIPT }],
+    workflows: [{ workflowName: "LIFECYCLE_WORKFLOW", className: "LifecycleWorkflow" }],
     bindings: [
       Workflows.local({
         binding: "LIFECYCLE_WORKFLOW",
@@ -190,10 +192,7 @@ const startLifecycleWorker = () =>
 
 // A single worker that owns two workflows. Each owned workflow contributes a
 // `workflows:<name>` Engine service plus a *shared* `workflows:storage`
-// service; the storage service must only be created once. Both `register`
-// calls run concurrently during binding resolution, so a naive
-// `services.length === 0` guard creates it twice and workerd fails to start
-// with "Config defines multiple services named workflows:storage".
+// service; the storage service must only be created once.
 const TWO_WORKFLOWS_SCRIPT = `
 import { WorkflowEntrypoint } from "cloudflare:workers";
 export class AlphaWorkflow extends WorkflowEntrypoint {
@@ -301,10 +300,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
 
   // Regression: a worker that owns more than one workflow must start. Each
   // owned workflow contributes a `workflows:<name>` Engine service plus a
-  // *shared* `workflows:storage` service that must be created only once;
-  // creating it per-workflow makes workerd fail to boot with "Config defines
-  // multiple services named workflows:storage". Booting and running both
-  // workflows proves the storage service is created exactly once.
+  // *shared* `workflows:storage` service that must be created only once.
   it.effect(
     "a worker can own two workflows without duplicating workflows:storage",
     () =>
@@ -319,6 +315,10 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
               type: "ESModule",
               content: TWO_WORKFLOWS_SCRIPT,
             },
+          ],
+          workflows: [
+            { workflowName: "ALPHA_WORKFLOW", className: "AlphaWorkflow" },
+            { workflowName: "BETA_WORKFLOW", className: "BetaWorkflow" },
           ],
           bindings: [
             Workflows.local({
@@ -398,6 +398,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
       () =>
         Effect.gen(function* () {
           // Owner: defines the WorkflowEntrypoint class and hosts the Engine.
+          // Ownership comes from `workflows` — no local binding is required.
           yield* startTestWorker({
             name: "cross-owner",
             compatibilityDate: "2026-03-09",
@@ -409,13 +410,8 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
                 content: CROSS_INSTANCE_OWNER_SCRIPT,
               },
             ],
-            bindings: [
-              Workflows.local({
-                binding: "CROSS_WORKFLOW",
-                workflowName: "CROSS_WORKFLOW",
-                className: "CrossWorkflow",
-              }),
-            ],
+            workflows: [{ workflowName: "CROSS_WORKFLOW", className: "CrossWorkflow" }],
+            bindings: [],
           });
 
           // Consumer: declares the binding with `scriptName` pointing at

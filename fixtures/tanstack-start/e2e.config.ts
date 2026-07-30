@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
 export default Config.string("TEST_POSTGRES_URL").pipe(
+  Config.orElse(() => Config.succeed("")),
   Effect.map((url) =>
     Options.make({
       vite: {

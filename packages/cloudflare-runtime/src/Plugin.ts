@@ -19,6 +19,12 @@ export interface PluginConfig {
   readonly sockets?: Array<WorkerdConfig.Socket>;
   readonly extensions?: Array<WorkerdConfig.Extension>;
   readonly middlewares?: Array<Middleware>;
+  /**
+   * Worker-level fields merged into the user worker's configuration (e.g.
+   * `cacheApiOutbound`). Merged in plugin order; `RuntimeWorker.unsafe` still
+   * takes precedence.
+   */
+  readonly userWorker?: Partial<WorkerdConfig.Worker>;
   readonly start?: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
 }
 
@@ -34,6 +40,21 @@ export type PluginBuilder<Api = never> =
   | Effect.Effect<Plugin<Api>, RuntimeError, PluginContext>;
 
 export type PluginIdentifier<T extends string = string> = `cloudflare-runtime/plugin/${T}`;
+
+/**
+ * When true, simulator services backed by Durable Objects (KV, R2, ...)
+ * handle control operations (fake timers, storage inspection) sent via their
+ * reserved control-op header.
+ *
+ * **Only intended for tests** (provide with
+ * `Layer.succeed(UnsafeEnableControlEndpoints, true)`): anyone able to reach
+ * such a service can then run arbitrary SQL queries and read arbitrary blobs
+ * across every namespace/bucket in this runtime.
+ */
+export const UnsafeEnableControlEndpoints = Context.Reference(
+  "cloudflare-runtime/plugin/UnsafeEnableControlEndpoints",
+  { defaultValue: () => false },
+);
 
 export type PluginService<
   Self,

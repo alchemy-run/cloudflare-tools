@@ -3,7 +3,6 @@ import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
-import type { OutputSink } from "./workerd/Workerd.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
@@ -15,39 +14,30 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
   /**
+   * Workflows whose `WorkflowEntrypoint` class is exported by this worker.
+   * Each entry hosts a local engine service (`workflows:<name>`) in this
+   * process and is published to the dev registry for cross-instance bindings.
+   */
+  readonly workflows?: ReadonlyArray<Workflow>;
+  /**
    * Queues this worker consumes via its `queue()` handler. Each consumed
    * queue gets an in-memory broker hosted in this worker's process; producers
    * (local or in other dev instances) deliver to it.
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
   /**
-   * Controls how output from the underlying `workerd` process is surfaced.
-   *
-   * By default, workerd does not log uncaught exceptions thrown by the
-   * worker — they surface as bare `500 Internal Server Error` responses with
-   * no output anywhere. Set `verbose: true` to have workerd log them
-   * (message + stack) to stderr, and optionally `onOutput` to capture the
-   * process output instead of inheriting the parent process's stdio.
+   * Whether the Cache API (`caches.default` / `caches.open()`) stores
+   * responses. Defaults to `true`; when `false` every cache operation is a
+   * no-op (matching production behaviour on `workers.dev` subdomains).
    */
-  readonly logging?: WorkerdLogging;
+  readonly cache?: boolean;
+  /**
+   * Per-worker `request.cf` blob. Merged the way Miniflare does — used
+   * verbatim unless the request carries an `MF-CF-Blob` header. Falls back
+   * to the runtime-wide `Cf` reference (a static placeholder by default).
+   */
+  readonly cf?: Record<string, unknown>;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
-}
-
-export interface WorkerdLogging {
-  /**
-   * Pass `--verbose` to workerd. Enables INFO-level logging, which includes
-   * uncaught exceptions thrown by the worker (message + stack, written to
-   * stderr) — without it, those exceptions surface as bare
-   * `500 Internal Server Error` responses with no log output anywhere.
-   */
-  readonly verbose?: boolean;
-  /**
-   * Capture the workerd process's stdout/stderr output instead of piping it
-   * to the parent process's stdio. Output produced before the process
-   * finishes starting is not captured; startup failures surface as typed
-   * errors instead.
-   */
-  readonly onOutput?: OutputSink;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;
@@ -88,4 +78,20 @@ export interface DurableObjectNamespace {
    * it as `ctx.container`.
    */
   container?: ContainerImage;
+}
+
+export interface Workflow {
+  /**
+   * Logical name of the workflow. Used as the engine identity
+   * (`workflows:<workflowName>`) and published to the dev registry.
+   */
+  workflowName: string;
+  /**
+   * Class name of the `WorkflowEntrypoint` exported by this worker.
+   */
+  className: string;
+  /**
+   * Optional step limit enforced by the local workflow engine.
+   */
+  stepLimit?: number;
 }

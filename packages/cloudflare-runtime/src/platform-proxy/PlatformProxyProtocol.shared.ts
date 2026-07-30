@@ -66,7 +66,19 @@ export type EncodedValue =
       readonly stack?: string;
     }
   | { readonly $: "durable-object-id"; readonly id: string; readonly name?: string }
-  | { readonly $: "chain"; readonly chain: Array<EncodedChainSegment> };
+  | { readonly $: "chain"; readonly chain: Array<EncodedChainSegment> }
+  /**
+   * An `R2Object` / `R2ObjectBody` (rich class instances the generic object
+   * rules reject). Fields are the plain data properties (key, etag, size,
+   * uploaded, httpMetadata, …); `body` carries a `get` result's content so
+   * the Node side can rehydrate the body stream and its buffering
+   * accessors.
+   */
+  | {
+      readonly $: "r2-object";
+      readonly fields: Record<string, EncodedValue>;
+      readonly body?: { readonly base64: string };
+    };
 
 export type BytesKind = "arraybuffer" | "uint8array" | string;
 
@@ -231,6 +243,7 @@ export const decodeValue = (
     }
     case "durable-object-id":
     case "chain":
+    case "r2-object":
       throw new UnsupportedValueError(
         `platform-proxy: unexpected "${encoded.$}" value in this context.`,
       );

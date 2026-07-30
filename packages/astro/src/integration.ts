@@ -84,7 +84,7 @@ export interface DistilledCloudflareOptions {
   readonly sessions?: boolean | undefined;
   /**
    * In dev, automatically add an in-memory local KV namespace
-   * (`KvNamespace.local(sessionKVBindingName)`) to the worker bindings so
+   * (`KvNamespace.local({ binding: sessionKVBindingName })`) to the worker bindings so
    * zero-config sessions work without any setup. Disable when the dev
    * bindings already carry a KV binding with that name (binding names must
    * be unique) — e.g. when an outer toolchain provisions the session
@@ -185,7 +185,7 @@ export const withDevSessionKv = (
   // when none is configured.
   worker: {
     ...viteOptions?.worker,
-    bindings: [...(viteOptions?.worker?.bindings ?? []), KvNamespace.local(binding)],
+    bindings: [...(viteOptions?.worker?.bindings ?? []), KvNamespace.local({ binding })],
   } as CloudflareVitePluginOptions["worker"],
 });
 

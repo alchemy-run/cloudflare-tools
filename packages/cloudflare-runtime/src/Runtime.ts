@@ -94,14 +94,24 @@ export const RuntimeLive = Layer.effect(
             Effect.andThen(docker.validate(tag)),
             Effect.tap(() => {
               const unregister = exitHook(() => docker.removeContainerSync(tag));
+              // Each start cleans up ONLY its own image tag when its scope
+              // closes. Do NOT prune other same-name tags as "stale" here: a
+              // dev session starts the worker more than once (precreate stub
+              // → reconcile), and a cleanup that guesses which sibling tags
+              // are dead can untag the tag a live workerd is about to
+              // `docker create` from — every container start then fails and
+              // the session serves 500s until redeploy.
               return Effect.addFinalizer(() =>
                 docker
                   .removeContainer(tag)
-                  .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+                  .pipe(
+                    Effect.andThen(docker.removeImageTag(tag)),
+                    Effect.andThen(Effect.sync(() => unregister())),
+                    Effect.ignore,
+                  ),
               );
             }),
             Effect.tap(() => registerImage(className, tag, container.env)),
-            Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );
         },
         { concurrency: "unbounded", discard: true },
@@ -149,6 +159,7 @@ export const RuntimeLive = Layer.effect(
                     localDisk: storage.name,
                   },
                   containerEngine,
+                  ...config.userWorker,
                   ...worker.unsafe,
                 },
               },

@@ -79,9 +79,17 @@ async function startDevServer(source: string) {
     throw new Error("Dev server did not report a local URL");
   }
 
+  // A request that lands while the Worker runtime is being replaced can fail
+  // outright, so callers get a status they can retry on rather than a throw.
   const greet = async (name: string) => {
-    const response = await fetch(new URL(`/?entrypoint=${name}`, url));
-    return { status: response.status, body: await response.text() };
+    try {
+      const response = await fetch(new URL(`/?entrypoint=${name}`, url), {
+        signal: AbortSignal.timeout(10_000),
+      });
+      return { status: response.status, body: await response.text() };
+    } catch (error) {
+      return { status: 0, body: String(error) };
+    }
   };
 
   return { greet, write };

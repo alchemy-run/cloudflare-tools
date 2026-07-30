@@ -7,17 +7,17 @@ import type {
   RolldownPluginOption,
 } from "rolldown";
 import { rolldown } from "rolldown";
-import type { CloudflarePluginOptions } from "../../src/options.js";
+import type { RolldownPluginOptions } from "../../src/plugin.js";
 import cloudflare from "../../src/plugin.js";
 import { getEntryChunk } from "./output.js";
 
-const DEFAULT_PLUGIN_OPTIONS: CloudflarePluginOptions = {
+const DEFAULT_PLUGIN_OPTIONS: RolldownPluginOptions = {
   compatibilityDate: "2025-07-01",
 };
 
 interface BuildFixtureOptions {
   fixture: string;
-  pluginOptions?: CloudflarePluginOptions;
+  pluginOptions?: RolldownPluginOptions;
   plugins?: Array<RolldownPluginOption>;
   inputOptions?: Omit<InputOptions, "input" | "plugins">;
   generateOptions?: Omit<OutputOptions, "file" | "format" | "sourcemap">;

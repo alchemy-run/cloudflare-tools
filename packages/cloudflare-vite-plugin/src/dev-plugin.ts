@@ -176,6 +176,11 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       };
 
       if (input) {
+        // Vite's internal CSS plugins rely on `buildStart` having run for the
+        // client environment before a server environment transforms a module.
+        // Vite does that while initializing the dev server, which is after
+        // this hook, and evaluating the entry now would fail without it.
+        await server.environments.client.pluginContainer.buildStart();
         // Detect up front so that the first request already reaches a Worker
         // exposing every entrypoint the entry module defines.
         const detected = await entryEnvironments()[0]?.requestExportTypes();
@@ -212,6 +217,19 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
           request.on("response", (response) => {
             res.writeHead(response.statusCode ?? 500, response.headers);
             response.pipe(res);
+          });
+          // Without a listener a connection error is an unhandled `error`
+          // event, which takes down the dev server. Requests in flight while
+          // the Worker runtime is being replaced hit exactly that.
+          request.on("error", (error) => {
+            server.config.logger.error(`Worker request failed: ${error.message}`, {
+              error,
+              timestamp: true,
+            });
+            if (!res.headersSent) {
+              res.writeHead(502, { "content-type": "text/plain" });
+            }
+            res.end("Bad Gateway");
           });
         });
       };

@@ -4,7 +4,7 @@ import type * as vite from "vite";
 import { createPlugin } from "../factory.js";
 import { parseViteEnvironments, type BasePluginOptions } from "../options.js";
 import { hasNodejsCompat } from "../utils.js";
-import { WORKER_ENTRY_PREFIX } from "./virtual-modules.js";
+import { workerEntryId } from "./virtual-modules.js";
 
 const DEFAULT_RESOLVE_CONDITION_NAMES = ["workerd", "worker", "module", "browser"];
 const DEFAULT_RESOLVE_MAIN_FIELDS = ["browser", "module", "jsnext:main", "jsnext", "main"];
@@ -249,22 +249,8 @@ const resolveInputPath = (id: string, root: string): string => {
   return fs.existsSync(resolved) ? resolved : id;
 };
 
-// Worker entry ids are embedded into synthetic `\0distilled:worker-entry:` module
-// specifiers and round-tripped through Rolldown/Vite id handling, which expects
-// POSIX-style separators. On Windows the input is an absolute path with `\`
-// separators (e.g. `D:\app\entry-server.ts`), which corrupts the virtual id and
-// breaks resolution (`\0distilled:user-entry:D:\app\…` fails to resolve).
-// Normalize to forward slashes so the virtual id stays valid on every platform —
-// a no-op on POSIX, where ids already use `/`.
-const normalizeEntryId = (id: string): string => id.replace(/\\/g, "/");
-
 const wrapInput = (input: Record<string, string>) =>
-  Object.fromEntries(
-    Object.entries(input).map(([key, id]) => [
-      key,
-      `${WORKER_ENTRY_PREFIX}${normalizeEntryId(id)}` as const,
-    ]),
-  );
+  Object.fromEntries(Object.entries(input).map(([key, id]) => [key, workerEntryId(id)]));
 
 const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => {
   return {

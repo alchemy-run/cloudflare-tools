@@ -1,8 +1,18 @@
+import type { ExportTypes } from "@distilled.cloud/cloudflare-rolldown-plugin/export-types";
+import { isExportTypes } from "@distilled.cloud/cloudflare-rolldown-plugin/export-types";
 import { MODULE_REFERENCE_REGEX } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import assert from "node:assert";
 import * as vite from "vite";
 import type { FetchFunctionOptions } from "vite/module-runner";
-import { ENVIRONMENT_NAME_HEADER, INIT_PATH } from "./module-runner/constants.shared";
+import {
+  ENVIRONMENT_NAME_HEADER,
+  EXPORT_TYPES_EVENT,
+  INIT_PATH,
+  REQUEST_EXPORT_TYPES_EVENT,
+} from "./module-runner/constants.shared";
+
+/** How long to wait for the Worker to report its export types before giving up. */
+const EXPORT_TYPES_TIMEOUT_MS = 10_000;
 
 export class DistilledDevEnvironment extends vite.DevEnvironment {
   transport: HotChannel;
@@ -37,6 +47,32 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
     });
     this.transport.ws = ws;
   }
+
+  /**
+   * Asks the Worker to evaluate the entry module and classify its exports.
+   *
+   * Resolves to `undefined` if the Worker could not evaluate the entry — the
+   * error is surfaced to the user by whichever request hits the entry next, and
+   * the dev server keeps whatever export types it already has.
+   */
+  async requestExportTypes(
+    timeoutMs: number = EXPORT_TYPES_TIMEOUT_MS,
+  ): Promise<ExportTypes | undefined> {
+    return await new Promise<ExportTypes | undefined>((resolve) => {
+      let timer: ReturnType<typeof setTimeout>;
+      const listener = (data: unknown) => {
+        clearTimeout(timer);
+        this.transport.off(EXPORT_TYPES_EVENT, listener);
+        resolve(isExportTypes(data) ? data : undefined);
+      };
+      timer = setTimeout(() => {
+        this.transport.off(EXPORT_TYPES_EVENT, listener);
+        resolve(undefined);
+      }, timeoutMs);
+      this.transport.on(EXPORT_TYPES_EVENT, listener);
+      this.transport.send({ type: "custom", event: REQUEST_EXPORT_TYPES_EVENT });
+    });
+  }
   override async fetchModule(
     id: string,
     importer?: string,
@@ -60,11 +96,21 @@ class HotChannel implements vite.HotChannel {
   queue?: Array<string>;
   listeners = new Map<string, Set<vite.HotChannelListener>>();
 
+  /**
+   * Replaces the socket, which also happens when the Worker runtime is
+   * restarted mid-session.
+   *
+   * Messages are dispatched from the moment a socket is attached rather than
+   * from `listen()`: the dev server queries the Worker for its export types
+   * during `configureServer`, which is before Vite calls `listen()`.
+   */
   set ws(ws: WebSocket) {
+    this.#ws?.removeEventListener("message", this.boundDispatch);
     this.#ws = ws;
+    ws.addEventListener("message", this.boundDispatch);
     if (this.queue) {
       for (const message of this.queue) {
-        this.#ws.send(message);
+        ws.send(message);
       }
       this.queue = undefined;
     }
@@ -94,12 +140,11 @@ class HotChannel implements vite.HotChannel {
 
   listen() {
     assert(this.#ws, "WebSocket is not connected");
-    this.#ws.addEventListener("message", this.boundDispatch);
+    // Already dispatching — see the `ws` setter.
   }
 
   close() {
-    assert(this.#ws, "WebSocket is not connected");
-    this.#ws.removeEventListener("message", this.boundDispatch);
+    this.#ws?.removeEventListener("message", this.boundDispatch);
   }
 
   private dispatch(event: MessageEvent) {

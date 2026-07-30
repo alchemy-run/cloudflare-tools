@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as NodeCrypto from "node:crypto";
@@ -72,6 +73,9 @@ export const sortServerModules = (
  * Serialize a {@link BuildOutput} for persistence (`dist/build.json`).
  * Sets are serialized as sorted arrays; binary content relies on Buffer's
  * `{ type: "Buffer", data }` JSON form.
+ *
+ * @internal harness plumbing (the e2e harness's persistence mechanism), not
+ * part of the public framework-integration API.
  */
 export const stringifyBuildOutput = (output: BuildOutput): string =>
   JSON.stringify(
@@ -83,6 +87,9 @@ export const stringifyBuildOutput = (output: BuildOutput): string =>
 /**
  * Parse a persisted {@link BuildOutput}, reviving `Buffer` content and the
  * `externalWorkspaces` Set (tolerating the legacy `{}` serialization).
+ *
+ * @internal harness plumbing (the e2e harness's persistence mechanism), not
+ * part of the public framework-integration API.
  */
 export const parseBuildOutput = (content: string): BuildOutput => {
   const parsed = JSON.parse(content, (_, value) => {
@@ -104,16 +111,31 @@ export const parseBuildOutput = (content: string): BuildOutput => {
 /**
  * Persist a {@link BuildOutput} to disk (conventionally `dist/build.json`,
  * so preview/serve flows stay uniform across frameworks).
+ *
+ * Creates the target's parent directory if it does not exist — with a nested
+ * project root (e.g. `fixtures/x/app`) the framework writes its own output to
+ * `app/dist`, so the harness-level `<cwd>/dist` may not exist yet.
+ *
+ * @internal harness plumbing (the e2e harness's persistence mechanism), not
+ * part of the public framework-integration API.
  */
 export const writeBuildOutput = (
-  path: string,
+  filePath: string,
   output: BuildOutput,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.writeFileString(path, stringifyBuildOutput(output)),
-  );
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fs.makeDirectory(path.dirname(filePath), { recursive: true });
+    yield* fs.writeFileString(filePath, stringifyBuildOutput(output));
+  });
 
-/** Read a persisted {@link BuildOutput} from disk. */
+/**
+ * Read a persisted {@link BuildOutput} from disk.
+ *
+ * @internal harness plumbing (the e2e harness's persistence mechanism), not
+ * part of the public framework-integration API.
+ */
 export const readBuildOutput = (
   path: string,
 ): Effect.Effect<BuildOutput, PlatformError, FileSystem.FileSystem> =>

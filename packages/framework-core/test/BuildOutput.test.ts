@@ -67,6 +67,21 @@ describe("build output persistence", () => {
     expect(parsed.externalWorkspaces).toEqual(new Set(["/workspaces/a", "/workspaces/b"]));
   });
 
+  it("creates the target's parent directory when it does not exist", async () => {
+    const root = await makeProject({});
+    // Nested-root shape: the framework built into app/dist, so <root>/dist
+    // does not exist when the harness persists build.json.
+    const path = NodePath.join(root, "dist", "build.json");
+    const output: BuildOutput = {
+      clientDirectory: undefined,
+      serverModules: undefined,
+      externalWorkspaces: new Set(["/workspaces/lib"]),
+    };
+    await run(writeBuildOutput(path, output));
+    const parsed = await run(readBuildOutput(path));
+    expect(parsed.externalWorkspaces).toEqual(new Set(["/workspaces/lib"]));
+  });
+
   it("serializes Sets as sorted arrays", () => {
     const json = stringifyBuildOutput({
       clientDirectory: undefined,

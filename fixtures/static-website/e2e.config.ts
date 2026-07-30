@@ -19,17 +19,13 @@ export default Options.make({
           },
         },
       },
+      // ASSETS-ONLY preview: the harness (CloudflareTarget.serve) detects the
+      // module-less BuildOutput, synthesizes the stub script miniflare
+      // requires, and forces `has_user_worker: false` itself — the fixture
+      // declares only the asset semantics.
       preview: {
-        modules: [
-          {
-            type: "ESModule",
-            path: "index.js",
-            contents: `export default { fetch: (request) => new Response("Not Found", { status: 404 }) }`,
-          },
-        ],
         assets: {
           routerConfig: {
-            has_user_worker: false,
             invoke_user_worker_ahead_of_assets: false,
             debug: true,
           },

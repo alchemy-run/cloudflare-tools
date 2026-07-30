@@ -20,25 +20,17 @@ export default Options.make({
         },
       },
       // ASSETS-ONLY preview: a fully-static Astro build must deploy with no
-      // user worker. Miniflare still requires a script, so — exactly like
-      // fixtures/static-website — a stub 404 worker stands in behind
-      // `has_user_worker: false`; every real request must be answered by the
-      // asset layer (including the built 404.html via `not_found_handling:
-      // "404-page"`). If a request ever reaches the stub, routing is wrong.
+      // user worker. The harness (CloudflareTarget.serve) detects the
+      // module-less BuildOutput, synthesizes the stub script miniflare
+      // requires, and forces `has_user_worker: false` itself — the fixture
+      // declares only the asset semantics (the built 404.html serves via
+      // `not_found_handling: "404-page"`).
       preview: {
         compatibilityDate: "2026-03-10",
         compatibilityFlags: ["nodejs_compat"],
-        modules: [
-          {
-            type: "ESModule",
-            path: "index.js",
-            contents: `export default { fetch: () => new Response("stub worker reached — astro-static must be assets-only", { status: 500 }) }`,
-          },
-        ],
         assets: {
           binding: "ASSETS",
           routerConfig: {
-            has_user_worker: false,
             invoke_user_worker_ahead_of_assets: false,
           },
           assetConfig: {

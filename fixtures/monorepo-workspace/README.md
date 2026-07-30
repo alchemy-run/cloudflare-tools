@@ -35,6 +35,22 @@ Deliberate choices:
 - `live`: `dist/build.json`'s `externalWorkspaces` contains the absolute path
   of `lib/` — and does NOT contain `app/` or the fixture root.
 
+All five specs pass ungated against the current packages (verified from a
+clean checkout state, `rm -rf dist app/dist`). Two workarounds inside the
+fixture were needed; both are enablement targets for the harness:
+
+1. **`writeBuildOutput` does not create `dist/`.** With a nested project
+   root the Vite build writes to `app/dist`, so `<fixtureRoot>/dist` never
+   exists and `Server.buildAndPersist` fails with ENOENT. The fixture's
+   framework wrapper pre-creates it (`ensureDistDirectory` in
+   `e2e.config.ts`); framework-core's `writeBuildOutput` should `mkdir -p`
+   the parent instead.
+2. **The client environment's default entry is `index.html`.** A
+   worker-rendered app has none; `app/vite.config.ts` points the client build
+   at `src/client.ts`. (This is user-config-respecting behavior working as
+   intended — noted here because a client-less SSR app cannot express "skip
+   the client environment" through `e2e.config.ts` alone.)
+
 ## Enablement target: memo-busting assertions
 
 The remaining goal — *editing `lib/src` busts the rebuild memo while an

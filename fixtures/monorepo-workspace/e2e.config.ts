@@ -3,6 +3,7 @@ import * as Options from "@distilled.cloud/e2e/Options";
 import { Framework } from "@distilled.cloud/framework-core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 
 /**
@@ -28,8 +29,21 @@ const withAppRoot = (base: Options.Options.FrameworkLayer): Options.Options.Fram
     Framework,
     Effect.gen(function* () {
       const framework = yield* Framework;
+      // Harness gap workaround: `Server.buildAndPersist` writes
+      // `<cwd>/dist/build.json` but framework-core's `writeBuildOutput` does
+      // not create the parent directory. With a nested project root the Vite
+      // build writes to `app/dist`, so `<fixtureRoot>/dist` never exists
+      // (`dist` is gitignored repo-wide, so it can't be checked in either).
+      // Pre-create it before every build. Enablement target: writeBuildOutput
+      // should `mkdir -p` the parent, then this can go.
+      const ensureDistDirectory = Effect.sync(() => {
+        NodeFs.mkdirSync(NodePath.join(import.meta.dirname, "dist"), { recursive: true });
+      });
       return Framework.of({
-        build: (options) => framework.build({ ...options, root: options?.root ?? APP_ROOT }),
+        build: (options) =>
+          ensureDistDirectory.pipe(
+            Effect.andThen(framework.build({ ...options, root: options?.root ?? APP_ROOT })),
+          ),
         dev: (options) => framework.dev({ ...options, root: options?.root ?? APP_ROOT }),
       });
     }),

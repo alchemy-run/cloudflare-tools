@@ -6,10 +6,11 @@
  *   `cloudflare-runtime`'s platform proxy (a workerd instance hosting the
  *   configured bindings) and injects a {@link DevConnectInfo} into nitro's
  *   `runtimeConfig`;
- * - the WORKER half (`./plugin.ts` + `./client.ts`) is a nitro plugin
- *   bundled into nitro's dev SSR worker THREAD: it reads the
- *   {@link DevConnectInfo} back out of `useRuntimeConfig()` and
- *   reconstructs the proxied `env` over HTTP.
+ * - the WORKER half (`./plugin.ts`) is a nitro plugin bundled into nitro's
+ *   dev SSR worker THREAD: it reads the {@link DevConnectInfo} back out of
+ *   `useRuntimeConfig()` and reconstructs the proxied platform over HTTP
+ *   with `cloudflare-runtime`'s runtime-free client
+ *   (`platform-proxy/connect`).
  *
  * The entire client state of the platform proxy is `{ url, token }` — two
  * plain strings — which is what makes the worker-thread hop trivial:
@@ -31,14 +32,14 @@ export interface DevConnectInfo {
   /** The proxy instance's auth token (all proxy endpoints 401 without it). */
   readonly token: string;
   /**
-   * Absolute path of `cloudflare-runtime`'s public platform-proxy protocol
-   * module (`platform-proxy/PlatformProxyProtocol`), resolved by the HOST
-   * from its own dependency tree. The plugin dynamically imports it by path
-   * — the dev worker cannot resolve the bare specifier itself when
+   * Absolute path of `cloudflare-runtime`'s runtime-free platform-proxy
+   * client module (`platform-proxy/connect`), resolved by the HOST from its
+   * own dependency tree. The plugin dynamically imports it by path — the
+   * dev worker cannot resolve the bare specifier itself when
    * `cloudflare-runtime` is only a transitive dependency of the project
    * (isolated installs expose direct dependencies only).
    */
-  readonly protocolModule: string;
+  readonly clientModule: string;
   /**
    * Literal env values laid over the proxied bindings — a same-named
    * literal always wins (mirrors the SvelteKit dev platform's contract).

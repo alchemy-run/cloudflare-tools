@@ -18,6 +18,7 @@ Code must pass linting, formatting, and typechecking. Use `bun run check` to run
 - `packages/cloudflare-runtime`: Effect-native local runtime for Cloudflare Workers, powered by `workerd`.
 - `packages/cloudflare-vite-plugin`: Vite plugin for Cloudflare Workers; composes `cloudflare-rolldown-plugin` and `cloudflare-runtime`.
 - `packages/framework-core`: Platform-neutral framework-integration core: the `BuildOutput` contract, the `alchemy:build-output` Vite collector plugin, the project module loader, the `Framework` service contract, and the `DeployTarget` contract (the deploy target as a value passed to framework integrations).
+- `packages/nuxt`: Wrangler-free Nuxt integration implementing the `Framework` service (programmatic build over the project's `@nuxt/kit`; the Cloudflare target — nitro's `cloudflare_module` preset with `deployConfig` off and the entry/exports seam — ships at `@distilled.cloud/nuxt/cloudflare`).
 - `packages/sveltekit`: Wrangler-free SvelteKit integration implementing the `Framework` service; the Cloudflare deploy target (in-memory kit adapter + rolldown re-bundle for workerd + dev stub platform) ships at `@distilled.cloud/sveltekit/cloudflare`.
 - `packages/waku`: Wrangler-free Waku integration implementing the `Framework` service (platform-neutral programmatic build/dev; the Cloudflare target — `cloudflare-vite-plugin` injection + the adapter fork — ships at `@distilled.cloud/waku/cloudflare`).
 

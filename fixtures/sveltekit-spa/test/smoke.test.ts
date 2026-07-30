@@ -9,7 +9,7 @@ for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
     const it = Playwright.make(mode);
 
-    it("hydrates the home page (no SSR) and honors svelte.config.js", async ({
+    it("hydrates the home page (no SSR) and honors the user svelte config", async ({
       page,
       server,
     }) => {
@@ -17,8 +17,9 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(response?.status()).toBe(200);
       await expect(page.locator("#home-title")).toHaveText("sveltekit-spa-home");
       await expect(page.locator("#hydrated")).toHaveText("hydrated:yes");
-      // The preprocessor registered in the user's svelte.config.js rewrote
-      // the literal — only observable if that config file was loaded.
+      // The user preprocess registered in vite.config.ts's `sveltekit(...)`
+      // call (kit v3 forbids svelte.config.js) rewrote the literal — only
+      // observable if the user's config file was loaded.
       await expect(page.locator("#svelte-config")).toHaveText("marker:svelte-config-loaded");
     });
 

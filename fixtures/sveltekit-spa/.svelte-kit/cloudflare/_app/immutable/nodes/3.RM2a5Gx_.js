@@ -1,0 +1,1 @@
+import{M as e,f as t,m as n}from"../chunks/LSVETuk-.js";import"../chunks/BItd1IHl.js";var r=n(`<h1 id="about-title">sveltekit-spa-about</h1> <p id="about-note">client-routed-about-page</p>`,1);function i(n){var i=r();e(2),t(n,i)}export{i as component};

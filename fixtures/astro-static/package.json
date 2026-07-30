@@ -6,8 +6,9 @@
     "dev": "e2e dev --port 3107",
     "build": "e2e build",
     "preview": "e2e preview",
-    "test": "node scripts/e2e.mjs",
-    "test:update-snapshots": "ASTRO_STATIC_ENABLE=1 node scripts/e2e.mjs --update-snapshots"
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "pretest": "playwright install chromium"
   },
   "dependencies": {
     "astro": "7.1.0"

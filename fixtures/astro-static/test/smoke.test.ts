@@ -2,11 +2,16 @@ import * as Playwright from "@distilled.cloud/e2e/Playwright";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
-// NOTE: this suite is written against the INTENDED behavior of the
-// static-output path: a pure `output: "static"` Astro site deploys
-// ASSETS-ONLY (no worker, `BuildOutput.serverModules` undefined/empty). It
-// is gated behind ASTRO_STATIC_ENABLE=1 until the assets-only wave lands —
-// see scripts/e2e.mjs and README.md.
+// The static-output path: a pure `output: "static"` Astro site deploys
+// ASSETS-ONLY (no worker, `BuildOutput.serverModules` undefined/empty).
+//
+// The live-only assertions live INSIDE the loop's `live` describe (not a
+// separate describe block): each describe can land on its own Playwright
+// worker, and the worker-scoped `server` fixture builds when
+// `dist/build.json` is missing — two describes owning `live` servers means
+// two workers racing the same astro build in the same dist/ on a fresh
+// checkout (astro's prerender cleanup in one build deletes chunks the
+// other's manifest injection still reads).
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
     const it = Playwright.make(mode);
@@ -64,30 +69,27 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(response.status).toBe(404);
       expect(await response.text()).toContain("Page not found");
     });
+
+    // Live-only assertions: the production artifact itself.
+    if (mode === "live") {
+      it("serves build-frozen HTML (no per-request rendering)", async ({ server }) => {
+        // `#built-at` is stamped at BUILD time; two requests must be
+        // byte-identical. (Dev renders on demand by design, so live-only.)
+        const first = await (await server.fetch("/")).text();
+        const second = await (await server.fetch("/")).text();
+        expect(first).toBe(second);
+        expect(first).toContain('id="built-at"');
+      });
+
+      // THE POINT of this fixture: a fully-static build must be assets-only.
+      it("build output contains NO server modules (assets-only)", async ({ server }) => {
+        // The harness builds before serving live mode, so dist/build.json
+        // exists once the worker-scoped server fixture is up.
+        void server;
+        const raw = await readFile(new URL("../dist/build.json", import.meta.url), "utf8");
+        const build = JSON.parse(raw) as { serverModules?: Array<{ name: string }> | undefined };
+        expect(build.serverModules ?? []).toEqual([]);
+      });
+    }
   });
 }
-
-// Live-only assertions: the production artifact itself.
-test.describe("live", () => {
-  const it = Playwright.make("live");
-
-  it("serves build-frozen HTML (no per-request rendering)", async ({ server }) => {
-    // `#built-at` is stamped at BUILD time; two requests must be
-    // byte-identical. (Dev renders on demand by design, so live-only.)
-    const first = await (await server.fetch("/")).text();
-    const second = await (await server.fetch("/")).text();
-    expect(first).toBe(second);
-    expect(first).toContain('id="built-at"');
-  });
-
-  // THE POINT of this fixture: a fully-static build must be assets-only.
-  // This is the enablement target — the audit found the integration
-  // currently emits a full worker for `output: "static"`.
-  it("build output contains NO server modules (assets-only)", async ({ server }) => {
-    // The harness builds before serving live mode, so dist/build.json exists.
-    void server;
-    const raw = await readFile(new URL("../dist/build.json", import.meta.url), "utf8");
-    const build = JSON.parse(raw) as { serverModules?: Array<{ name: string }> | undefined };
-    expect(build.serverModules ?? []).toEqual([]);
-  });
-});

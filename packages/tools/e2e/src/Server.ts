@@ -48,6 +48,10 @@ export const BUILD_OUTPUT_FILE = "dist/build.json";
  * Run `Framework.build` and persist the returned `BuildOutput` to
  * {@link BUILD_OUTPUT_FILE} (framework-core's `writeBuildOutput`), so
  * `preview` can serve it without rebuilding.
+ *
+ * The fixture's `Options.root` (if any) is resolved against the harness cwd
+ * and threaded into `Framework.build` as `FrameworkBuildOptions.root`; the
+ * persisted `dist/build.json` stays anchored at the fixture root regardless.
  */
 export const buildAndPersist: Effect.Effect<
   BuildOutput,
@@ -57,7 +61,13 @@ export const buildAndPersist: Effect.Effect<
   const framework = yield* Framework;
   const path = yield* Path.Path;
   const cwd = yield* Cwd;
-  const output = yield* framework.build();
+  const options = yield* Options.load().pipe(
+    Effect.mapError(
+      (cause) => new FrameworkError({ message: "Failed to load e2e.config.ts", cause }),
+    ),
+  );
+  const root = yield* Options.resolveRoot(options);
+  const output = yield* framework.build(root !== undefined ? { root } : undefined);
   yield* writeBuildOutput(path.resolve(cwd, BUILD_OUTPUT_FILE), output).pipe(
     Effect.mapError(
       (cause) => new FrameworkError({ message: "Failed to write build.json", cause }),
@@ -93,6 +103,9 @@ export const layer = Layer.effect(
     // today; `Options.TargetOptions` is where another platform would be
     // selected.
     const target = makeCloudflareTarget(Options.resolveCloudflareOptions(options));
+    // The fixture's project root (Options.root resolved against the harness
+    // cwd) — threaded into Framework.dev; buildAndPersist resolves it itself.
+    const root = yield* Options.resolveRoot(options);
 
     const buildJsonPath = path.resolve(cwd, BUILD_OUTPUT_FILE);
     const persistedBuild = buildAndPersist.pipe(
@@ -117,7 +130,8 @@ export const layer = Layer.effect(
         ),
       );
 
-    const dev = () => framework.dev().pipe(Effect.map(toInstance));
+    const dev = () =>
+      framework.dev(root !== undefined ? { root } : undefined).pipe(Effect.map(toInstance));
 
     return Server.of({
       live,

@@ -55,6 +55,59 @@ describe("generateWorkerShim", () => {
   it("exposes the platform to server.respond", () => {
     expect(shim).toContain("platform: { env, ctx, caches, cf: req.cf }");
   });
+
+  describe("SPA not-found deferral", () => {
+    const spa = generateWorkerShim({
+      serverImport: "./../output/server/index.js",
+      manifestImport: "./../cloudflare-tmp/manifest.js",
+      assetsBinding: "ASSETS",
+      notFoundHandling: "single-page-application",
+    });
+
+    it("emits no deferral by default (upstream parity)", () => {
+      expect(shim).not.toContain("matches_kit_route");
+      expect(shim).not.toContain("res.status === 404");
+    });
+
+    it("emits no deferral for 404-page (upstream parity)", () => {
+      const fourOhFour = generateWorkerShim({
+        serverImport: "./server/index.js",
+        manifestImport: "./manifest.js",
+        assetsBinding: "ASSETS",
+        notFoundHandling: "404-page",
+      });
+      expect(fourOhFour).not.toContain("matches_kit_route");
+      expect(fourOhFour).not.toContain("res.status === 404");
+    });
+
+    it("defers router-level 404s to the assets binding for SPA builds", () => {
+      expect(spa).toContain("const matches_kit_route = (pathname)");
+      expect(spa).toContain("res.status === 404");
+      expect(spa).toContain("!matches_kit_route(pathname)");
+    });
+
+    it("only defers navigation-shaped requests (GET/HEAD accepting text/html)", () => {
+      expect(spa).toContain("(req.method === 'GET' || req.method === 'HEAD')");
+      expect(spa).toContain("(req.headers.get('accept') || '').includes('text/html')");
+    });
+
+    it("probes kit's route patterns with the base path stripped", () => {
+      expect(spa).toContain("path.slice(base_path.length) || '/'");
+      expect(spa).toContain("route.pattern.test(path)");
+      expect(spa).toContain("manifest._.routes");
+    });
+
+    it("defers through the configured assets binding", () => {
+      const custom = generateWorkerShim({
+        serverImport: "./server/index.js",
+        manifestImport: "./manifest.js",
+        assetsBinding: "STATIC",
+        notFoundHandling: "single-page-application",
+      });
+      expect(custom).toContain("res = await env.STATIC.fetch(req);");
+      expect(custom).not.toContain("env.ASSETS.fetch");
+    });
+  });
 });
 
 describe("appendHeaders", () => {

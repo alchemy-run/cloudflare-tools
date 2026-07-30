@@ -35,7 +35,9 @@ export interface SvelteKitAdapterOptions {
   /**
    * Fallback-page behavior for requests that match no asset or route:
    * `"404-page"` writes `404.html`, `"single-page-application"` writes
-   * `index.html`.
+   * `index.html` and additionally routes router-level not-founds on
+   * navigation-shaped requests through the fallback (the Cloudflare
+   * target's worker shim defers them to the assets layer).
    * @default "none"
    */
   readonly notFoundHandling?: "none" | "404-page" | "single-page-application" | undefined;

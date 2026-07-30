@@ -52,7 +52,9 @@ export interface CloudflareAdapterOptions {
   /**
    * Mirror of Workers static assets `not_found_handling`, driving fallback
    * page generation: `"404-page"` writes `404.html`,
-   * `"single-page-application"` writes `index.html`.
+   * `"single-page-application"` writes `index.html` AND makes the worker
+   * shim defer router-level not-founds on navigation-shaped requests to the
+   * assets layer so the fallback governs (see `WorkerShim.ts`).
    * @default "none"
    */
   readonly notFoundHandling?: "none" | "404-page" | "single-page-application" | undefined;
@@ -145,6 +147,7 @@ export const makeCloudflareAdapter = (
           serverImport: `./${posixify(NodePath.relative(dest, builder.getServerDirectory()))}/index.js`,
           manifestImport: `./${posixify(NodePath.relative(dest, tmp))}/manifest.js`,
           assetsBinding,
+          notFoundHandling: options.notFoundHandling,
         }),
       );
       if (

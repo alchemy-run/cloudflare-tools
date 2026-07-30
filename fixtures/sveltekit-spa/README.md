@@ -22,26 +22,39 @@ Where `fixtures/sveltekit` is SSR-first, this fixture is the inverse:
   including Svelte `preprocess`/`compilerOptions`, lives in the
   `sveltekit(...)` call.
 
-## Status: PENDING — gated until the user-config wave lands
+## Status: ENABLED
 
-This suite is written against the **intended** behavior of the "respect user
-config files" wave (plus the SPA fallback / `not_found_handling` wiring
-through our adapter) and cannot pass until that wave lands. To keep CI green,
-`bun run test` routes through `scripts/e2e.mjs`, which prints
+The user-config wave landed (the real `vite.config.ts` below loads natively)
+and the worker shim implements the SPA not-found deferral, so the suite runs
+ungated: `bun run test` calls `playwright test` directly (12 tests, `live` +
+`dev`).
 
-```
-sveltekit-spa: pending the user-config wave — see fixtures/sveltekit-spa/README.md
-```
+## How the SPA fallback reaches the worker (the deferral contract)
 
-and exits 0 unless `SVELTEKIT_SPA_ENABLE=1` is set. The enablement pass should
-run
+Upstream `@sveltejs/adapter-cloudflare`'s `worker.js` never defers a 404 to
+the assets layer — kit's `server.respond` renders its own 404 error page for
+unmatched routes, and the configured `assets.not_found_handling` only
+applies to requests the worker never sees. Our shim makes the configured
+`single-page-application` handling reachable (no new option — see
+`packages/sveltekit/src/WorkerShim.ts`): when the adapter is built with
+`notFoundHandling: "single-page-application"`, the shim defers to
+`env.ASSETS.fetch(req)` — where the asset worker applies
+`not_found_handling` and serves the generated `index.html` fallback — iff
 
-```sh
-SVELTEKIT_SPA_ENABLE=1 bun run test
-```
+- `server.respond` returned **404**, and
+- the request is **navigation-shaped**: `GET`/`HEAD` with `Accept`
+  containing `text/html`, and
+- **no kit route pattern matches** the pathname — the most conservative
+  available signal that the 404 is kit's router-level "no route" error
+  (upstream has no deferral semantics to mirror, and kit marks router 404s
+  with no header). Endpoints only exist on matched routes, so intentional
+  endpoint 404s are never deferred; a pattern match whose param matchers
+  fail keeps kit's own 404 page.
 
-and, once green, remove the gate (make `test` call `playwright test`
-directly, restoring a `pretest` chromium install).
+`notFoundHandling: "404-page"` and the default keep exact upstream behavior
+(no deferral). Observable here: a navigation-shaped request for an unknown
+path returns the `index.html` shell with **200** in live/preview, while a
+non-navigation request (no `Accept: text/html`) still gets kit's 404.
 
 ## What the app exercises
 
@@ -69,5 +82,5 @@ directly, restoring a `pretest` chromium install).
 bun run dev       # kit's Vite dev server via the harness (port 3108)
 bun run build     # kit build + in-memory adapt() + rolldown pass -> dist/build.json
 bun run preview   # miniflare over dist/build.json + .svelte-kit/cloudflare assets
-bun run test      # GATED: no-op unless SVELTEKIT_SPA_ENABLE=1 (see above)
+bun run test      # playwright e2e (live + dev)
 ```

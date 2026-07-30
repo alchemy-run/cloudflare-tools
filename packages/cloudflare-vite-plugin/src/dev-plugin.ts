@@ -4,10 +4,11 @@ import { resolvePluginApi } from "@distilled.cloud/cloudflare-rolldown-plugin/ut
 import type { RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
 import type * as Context from "effect/Context";
 import * as NodeHttp from "node:http";
-import * as vite from "vite";
-import { DistilledDevEnvironment } from "./dev-environment.js";
+import type * as vite from "vite";
+import { createDistilledDevEnvironment, isDistilledDevEnvironment } from "./dev-environment.js";
 import type { ServerHandle } from "./dev-server.js";
 import { resolveForwardedHost } from "./forwarded-host.js";
+import { resolveHostVite } from "./host-vite.js";
 import type { CloudflareVitePluginOptions } from "./plugin.js";
 import { handleWebSocket } from "./websockets.js";
 
@@ -33,15 +34,19 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
     config() {
       const environment: vite.EnvironmentOptions = {
         dev: {
-          createEnvironment(name, config) {
+          async createEnvironment(name, config) {
+            // Use the server's own vite instance (not this package's copy) so
+            // the environment and its deps optimizer agree with the resolved
+            // config's shape. See host-vite.ts.
+            const hostVite = await resolveHostVite(config.root);
             const hasConfigureServer = config.plugins.some(
               (plugin) =>
                 plugin.name === "distilled-cloudflare:dev" && plugin.configureServer !== undefined,
             );
             if (!hasConfigureServer) {
-              return vite.createRunnableDevEnvironment(name, config);
+              return hostVite.createRunnableDevEnvironment(name, config);
             }
-            return new DistilledDevEnvironment(name, config);
+            return createDistilledDevEnvironment(hostVite, name, config);
           },
         },
       };
@@ -92,7 +97,7 @@ export function dev(options: CloudflareVitePluginOptions): vite.Plugin {
       const address = handle.address;
       for (const environmentName of environmentNames) {
         const environment = server.environments[environmentName];
-        if (environment instanceof DistilledDevEnvironment) {
+        if (isDistilledDevEnvironment(environment)) {
           await environment.depsOptimizer?.init();
           await environment.connect(address);
         }

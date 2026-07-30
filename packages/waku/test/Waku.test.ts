@@ -4,11 +4,14 @@ import * as NodeFsPromises from "node:fs/promises";
 import * as NodePath from "node:path";
 import type * as ViteModule from "vite";
 import { describe, expect, it } from "vitest";
+import { mergeConfig } from "vite";
 import framework, {
   DEFAULT_TARGET_SPECIFIER,
   make,
   makeWakuConfigInput,
+  mergeUserWakuConfig,
   selectWakuTargetInput,
+  WAKU_CONFIG_FILES,
   WAKU_SERVER_ENTRY_MODULE,
   type WakuTarget,
 } from "../src/index.ts";
@@ -29,12 +32,12 @@ describe("makeWakuConfigInput", () => {
     expect(config.unstable_adapter).toBe(ADAPTER);
   });
 
-  it("keeps a user-provided unstable_adapter", () => {
+  it("pins unstable_adapter to the target's adapter module (the caller rejects user adapters)", () => {
     const config = makeWakuConfigInput({
       adapterPath: ADAPTER,
       userConfig: { unstable_adapter: "/custom/adapter.ts" },
     });
-    expect(config.unstable_adapter).toBe("/custom/adapter.ts");
+    expect(config.unstable_adapter).toBe(ADAPTER);
   });
 
   it("injects the target's vite plugins ahead of user plugins", () => {
@@ -89,6 +92,55 @@ describe("makeWakuConfigInput", () => {
     const environments = config.vite?.environments as Record<string, ViteModule.EnvironmentOptions>;
     expect(environments.rsc?.optimizeDeps?.include).toEqual(["hono/tiny", "extra-dep"]);
     expect(environments.custom?.optimizeDeps?.include).toEqual(["custom-dep"]);
+  });
+});
+
+describe("mergeUserWakuConfig", () => {
+  const merge = (
+    file: Parameters<typeof mergeUserWakuConfig>[0]["file"],
+    inline: Parameters<typeof mergeUserWakuConfig>[0]["inline"],
+  ) => mergeUserWakuConfig({ file, inline, mergeViteConfig: mergeConfig });
+
+  it("probes the same config files as waku's CLI, in the same order", () => {
+    expect(WAKU_CONFIG_FILES).toEqual(["waku.config.ts", "waku.config.js"]);
+  });
+
+  it("passes a lone file config or lone inline config through", () => {
+    expect(merge({ basePath: "/docs/" }, undefined)).toStrictEqual({ basePath: "/docs/" });
+    expect(merge(undefined, { srcDir: "app" })).toStrictEqual({ srcDir: "app" });
+  });
+
+  it("merges inline options over the file config per key", () => {
+    expect(merge({ basePath: "/docs/", srcDir: "app" }, { srcDir: "source" })).toEqual({
+      basePath: "/docs/",
+      srcDir: "source",
+    });
+  });
+
+  it("does not let explicit undefined inline keys clobber file values", () => {
+    expect(merge({ srcDir: "app" }, { srcDir: undefined, distDir: "out" })).toEqual({
+      srcDir: "app",
+      distDir: "out",
+    });
+  });
+
+  it("combines vite configs with vite's mergeConfig (file plugins first)", () => {
+    const filePlugin = { name: "file-plugin" };
+    const inlinePlugin = { name: "inline-plugin" };
+    const merged = merge(
+      { vite: { plugins: [filePlugin], base: "/docs/" } },
+      { vite: { plugins: [inlinePlugin] } },
+    );
+    expect(merged?.vite?.base).toBe("/docs/");
+    const names = flatten(merged?.vite?.plugins).map((plugin) => plugin.name);
+    expect(names.indexOf("file-plugin")).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf("inline-plugin")).toBeGreaterThan(names.indexOf("file-plugin"));
+  });
+
+  it("keeps the only vite config present", () => {
+    const vite = { base: "/docs/" };
+    expect(merge({ vite }, { srcDir: "app" })?.vite).toBe(vite);
+    expect(merge({ srcDir: "app" }, { vite })?.vite).toBe(vite);
   });
 });
 

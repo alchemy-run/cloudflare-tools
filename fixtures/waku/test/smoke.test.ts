@@ -106,6 +106,16 @@ for (const mode of Playwright.SERVER_METHODS) {
       await expect(page.getByTestId("ssg-env-message")).toHaveText("MESSAGE=hello-from-binding");
     });
 
+    it("honors waku.config.ts (user vite plugin's virtual module)", async ({ page, server }) => {
+      // The page imports `virtual:fixtures-waku/user-config-marker`, served
+      // by a USER vite plugin declared in waku.config.ts — it renders only
+      // when the integration loads the user's config file natively and
+      // merges its own plugins over it instead of replacing the file.
+      const response = await page.goto(new URL("/config-marker", server.url).toString());
+      expect(response?.status()).toBe(200);
+      await expect(page.getByTestId("config-marker")).toHaveText("hello-from-waku-config");
+    });
+
     it("keeps layout client state across client navigation", async ({ page, server }) => {
       await page.goto(server.url.toString());
       const counter = page.getByTestId("nav-counter");
@@ -136,9 +146,15 @@ test.describe("live ssg", () => {
     expect(await response.text()).toContain("ABOUT_STATIC_MARKER");
   });
 
-  it("serves the SSG RSC payload from assets", async ({ server }) => {
-    const response = await server.fetch("/RSC/R/about.txt");
+  it("serves the SSG RSC payload from assets under the user-configured rscBase", async ({
+    server,
+  }) => {
+    // waku.config.ts sets `rscBase: "custom-rsc"` (default: "RSC") — the
+    // payload only lives here when the user's config file is honored.
+    const response = await server.fetch("/custom-rsc/R/about.txt");
     expect(response.status).toBe(200);
+    const missing = await server.fetch("/RSC/R/about.txt");
+    expect(missing.status).toBe(404);
   });
 
   it("prerendered the cloudflare:workers page inside workerd with real bindings", async () => {

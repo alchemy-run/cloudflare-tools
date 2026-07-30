@@ -137,9 +137,11 @@ export interface WakuFrameworkOptions {
    */
   readonly vite?: unknown;
   /**
-   * Extra waku config merged into the in-memory `resolveConfig` input
-   * (`srcDir`, `distDir`, `vite`, ...). `unstable_adapter` defaults to the
-   * deploy target's adapter module.
+   * Extra waku config (`srcDir`, `distDir`, `vite`, ...) merged OVER the
+   * project's own `waku.config.ts`/`waku.config.js`, which is always loaded
+   * natively first (same semantics as waku's CLI — see
+   * {@link mergeUserWakuConfig}). `unstable_adapter` is owned by the deploy
+   * target and must not be set here or in the config file.
    */
   readonly waku?: WakuConfig | undefined;
   /** Project root. Defaults to the process working directory. */
@@ -152,6 +154,57 @@ export interface WakuFrameworkOptions {
    */
   readonly port?: number | undefined;
 }
+
+/**
+ * The config files waku's CLI probes for, in probe order (see waku's
+ * `lib/vite-rsc/loader.ts` `loadConfig`). Only the existence probe uses these
+ * names — the actual import goes through vite's resolver as `/waku.config`,
+ * exactly like upstream.
+ */
+export const WAKU_CONFIG_FILES = ["waku.config.ts", "waku.config.js"] as const;
+
+/** Strip `undefined`-valued keys so an inline options object with explicit
+ * `undefined` entries cannot clobber values from the user's config file. */
+const definedConfig = (config: WakuConfig | undefined): WakuConfig | undefined => {
+  if (config === undefined) {
+    return undefined;
+  }
+  const entries = Object.entries(config).filter(([, value]) => value !== undefined);
+  return entries.length === 0 ? undefined : (Object.fromEntries(entries) as WakuConfig);
+};
+
+/** Inputs for {@link mergeUserWakuConfig} (exported for testing). */
+export interface MergeUserWakuConfigInputs {
+  /** The natively loaded `waku.config.ts`/`waku.config.js` default export. */
+  readonly file: WakuConfig | undefined;
+  /** The integration's inline waku options ({@link WakuFrameworkOptions.waku}). */
+  readonly inline: WakuConfig | undefined;
+  /** vite's `mergeConfig` (from the project's vite installation). */
+  readonly mergeViteConfig: (
+    defaults: ViteModule.UserConfig,
+    overrides: ViteModule.UserConfig,
+  ) => ViteModule.UserConfig;
+}
+
+/**
+ * Merge the project's natively loaded waku config file with the integration's
+ * inline waku options: the file is the base, inline options win per key
+ * (mirroring vite's file-config-vs-inline-config precedence), and the `vite`
+ * fields are combined with vite's own `mergeConfig` (arrays like `plugins`
+ * concatenate — file plugins first, inline plugins after).
+ */
+export const mergeUserWakuConfig = (inputs: MergeUserWakuConfigInputs): WakuConfig | undefined => {
+  const file = definedConfig(inputs.file);
+  const inline = definedConfig(inputs.inline);
+  if (file === undefined || inline === undefined) {
+    return file ?? inline;
+  }
+  const vite =
+    file.vite !== undefined && inline.vite !== undefined
+      ? inputs.mergeViteConfig(file.vite, inline.vite)
+      : (inline.vite ?? file.vite);
+  return { ...file, ...inline, ...(vite !== undefined ? { vite } : undefined) };
+};
 
 const isDeployTargetInput = (value: unknown): value is DeployTargetInput<WakuTarget, unknown> =>
   typeof value === "string" || typeof value === "function" || FrameworkCore.isDeployTarget(value);
@@ -195,7 +248,14 @@ export interface WakuConfigInputs {
    * target's does) serves SSG through its own runtime.
    */
   readonly plugins?: ReadonlyArray<ViteModule.PluginOption> | undefined;
-  /** User waku config merged in (its `vite` config is preserved). */
+  /**
+   * The user's waku config — the natively loaded `waku.config.ts`/`.js`
+   * merged with the integration's inline waku options (see
+   * {@link mergeUserWakuConfig}). Its `vite` config is preserved; a user
+   * `unstable_adapter` is rejected by the caller before this point (the
+   * deploy target owns the adapter), so this function pins it
+   * unconditionally.
+   */
   readonly userConfig?: WakuConfig | undefined;
 }
 
@@ -218,13 +278,14 @@ const mergeWorkerEnvironment = (
 });
 
 /**
- * Build the in-memory waku `Config` (the input to waku's
- * `unstable_resolveConfig`) — the whole replacement for `waku.config.ts` and
- * any platform config file:
+ * Build the waku `Config` fed to waku's `unstable_resolveConfig`: the USER's
+ * config (their natively loaded `waku.config.*`, plus any inline waku
+ * options) with the deploy target's required fields merged over it:
  *
- * - `unstable_adapter` defaults to the deploy target's adapter module.
+ * - `unstable_adapter` is pinned to the deploy target's adapter module.
  *   Leaving it unset would silently select `waku/adapters/node` (no
- *   `CLOUDFLARE` env var), which cannot run on a non-Node target runtime.
+ *   `CLOUDFLARE` env var), which cannot run on a non-Node target runtime;
+ *   a user-set adapter is rejected upstream of this function.
  * - The target's vite plugins are injected INSIDE `vite.plugins` (waku's
  *   `extraPlugins` places user plugins first, ahead of waku's own
  *   environments plugin) — the position upstream documents for
@@ -244,7 +305,7 @@ export const makeWakuConfigInput = (inputs: WakuConfigInputs): WakuConfig => {
   >;
   return {
     ...user,
-    unstable_adapter: user?.unstable_adapter ?? inputs.adapterPath,
+    unstable_adapter: inputs.adapterPath,
     vite: {
       ...userVite,
       resolve: {
@@ -432,17 +493,84 @@ export const make = (
         return { vite, internals, vitePlugins, wakuDirectory };
       });
 
-      const makeConfig = (
+      /**
+       * Load the project's `waku.config.ts`/`waku.config.js` exactly the way
+       * waku's own CLI does. Waku's loader (`lib/vite-rsc/loader.ts`
+       * `loadConfig`) is NOT exported, so its semantics are replicated: an
+       * existence probe for {@link WAKU_CONFIG_FILES} at the project root
+       * (waku probes the cwd — its CLI always runs from the project),
+       * followed by `vite.runnerImport("/waku.config")` with the project's
+       * own vite. `runnerImport`'s inline config pins `root` so the
+       * root-relative id resolves identically when root !== cwd. `NODE_ENV`
+       * is set before this runs, matching waku's CLI ordering (vite#20299).
+       *
+       * Deliberate divergences from the CLI (host-process concerns):
+       * - no `loadDotEnv()` — the CLI mutates `process.env` from
+       *   `.env.local`/`.env`; here the host (alchemy/e2e) owns the process
+       *   environment and worker env comes from bindings.
+       * - no dev-server restart on config-file change — the dev handle is a
+       *   plain URL; edits to `waku.config.*` need a dev restart.
+       */
+      const loadUserConfigFile: (
         project: ProjectModules,
+        root: string,
+      ) => Effect.Effect<WakuConfig | undefined, FrameworkCore.FrameworkError> = Effect.fn(
+        function* (project: ProjectModules, root: string) {
+          const exists = yield* Effect.all(
+            WAKU_CONFIG_FILES.map((file) => fs.exists(path.join(root, file))),
+            { concurrency: "unbounded" },
+          ).pipe(Effect.mapError(fail("Failed to probe for the project's waku.config file")));
+          if (!exists.some(Boolean)) {
+            return undefined;
+          }
+          return yield* Effect.tryPromise({
+            try: async () => {
+              const imported = await project.vite.runnerImport<{ default: WakuConfig }>(
+                "/waku.config",
+                { root },
+              );
+              return imported.module.default;
+            },
+            catch: fail("Failed to load the project's waku.config file"),
+          });
+        },
+      );
+
+      const makeConfig: (
+        project: ProjectModules,
+        root: string,
         inputs: { adapterPath: string; plugins: ReadonlyArray<ViteModule.PluginOption> },
-      ): ResolvedWakuConfig =>
-        project.internals.unstable_resolveConfig(
+      ) => Effect.Effect<ResolvedWakuConfig, FrameworkCore.FrameworkError> = Effect.fn(function* (
+        project: ProjectModules,
+        root: string,
+        inputs: { adapterPath: string; plugins: ReadonlyArray<ViteModule.PluginOption> },
+      ) {
+        const fileConfig = yield* loadUserConfigFile(project, root);
+        const userConfig = mergeUserWakuConfig({
+          file: fileConfig,
+          inline: options?.waku,
+          mergeViteConfig: project.vite.mergeConfig,
+        });
+        if (userConfig?.unstable_adapter !== undefined) {
+          return yield* Effect.fail(
+            fail(
+              `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
+                "but the deploy target owns the server adapter " +
+                `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
+                "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
+                "integration's waku options); to change the deploy platform, pass a different " +
+                "deploy target to the integration instead.",
+            )(undefined),
+          );
+        }
+        return project.internals.unstable_resolveConfig(
           makeWakuConfigInput({
             adapterPath: inputs.adapterPath,
             plugins: inputs.plugins,
-            userConfig: options?.waku,
+            userConfig,
           }),
         );
+      });
 
       return FrameworkCore.Framework.of({
         build: Effect.fn(function* (buildOptions) {
@@ -469,7 +597,7 @@ export const make = (
           yield* Effect.sync(() => {
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
           });
-          const wakuConfig = makeConfig(project, hooks);
+          const wakuConfig = yield* makeConfig(project, root, hooks);
           const collector = yield* FrameworkCore.makeBuildOutputCollector({
             entryEnvironment: "rsc",
             selectEntry: (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
@@ -523,7 +651,7 @@ export const make = (
           yield* Effect.sync(() => {
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
           });
-          const wakuConfig = makeConfig(project, hooks);
+          const wakuConfig = yield* makeConfig(project, root, hooks);
           const port = devOptions?.port ?? options?.port;
           const server = yield* Effect.acquireRelease(
             Effect.tryPromise({

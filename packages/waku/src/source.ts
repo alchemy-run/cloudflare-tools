@@ -147,7 +147,12 @@ export interface WakuSourceOptions {
   readonly rootDir?: string | undefined;
   /** Waku `srcDir` (relative to the root). @default "src" */
   readonly srcDir?: string | undefined;
-  /** Waku `distDir` (relative to the root). @default "dist" */
+  /**
+   * Waku `distDir` (relative to the root). If `waku.config.ts` customizes
+   * `distDir`, mirror it here (or add it to `memo.exclude`) so the build
+   * output stays excluded from the rebuild-deciding input hash.
+   * @default "dist"
+   */
   readonly distDir?: string | undefined;
   /** Waku `basePath`. @default "/" */
   readonly basePath?: string | undefined;

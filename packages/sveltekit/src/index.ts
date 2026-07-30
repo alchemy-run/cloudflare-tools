@@ -37,6 +37,16 @@ export {
   type SvelteKitTargetInput,
 } from "./SvelteKit.ts";
 
+export {
+  CONFIG_PLUGIN_NAME,
+  DEFAULT_VITE_CONFIG_FILES,
+  flattenPluginOption,
+  makeSvelteKitConfigPlugin,
+  mergeKitOptions,
+  SVELTEKIT_SETUP_PLUGIN_NAME,
+  type SvelteKitConfigPluginOptions,
+} from "./UserConfig.ts";
+
 /**
  * The structural subset of the e2e harness's cloudflare worker options this
  * package reads (`CloudflareVitePluginOptions`). Typed structurally so the

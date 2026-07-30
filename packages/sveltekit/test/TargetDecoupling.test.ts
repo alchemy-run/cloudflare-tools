@@ -34,7 +34,7 @@ const FORBIDDEN = [
   /\.\/WorkerShim/,
 ];
 
-const FRAMEWORK_GENERIC_MODULES = ["SvelteKit.ts", "index.ts"];
+const FRAMEWORK_GENERIC_MODULES = ["SvelteKit.ts", "UserConfig.ts", "index.ts"];
 
 describe("target decoupling", () => {
   for (const file of FRAMEWORK_GENERIC_MODULES) {

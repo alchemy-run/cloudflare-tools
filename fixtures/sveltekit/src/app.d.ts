@@ -10,6 +10,11 @@ interface FixtureKvNamespace {
   delete(key: string): Promise<void>;
 }
 
+/** Virtual module served by the user Vite plugin in `vite.config.ts`. */
+declare module "virtual:fixture-marker" {
+  export const marker: string;
+}
+
 declare global {
   namespace App {
     interface Platform {

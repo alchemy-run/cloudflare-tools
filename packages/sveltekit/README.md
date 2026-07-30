@@ -23,9 +23,22 @@ Background on why the integration is shaped this way:
 - **SvelteKit is purely a Vite plugin.** There is no framework CLI for
   dev/build (`svelte-kit` only implements `sync`); `vite.createServer()` /
   `vite.createBuilder().buildApp()` are the whole programmatic API. Kit v3
-  takes its entire config in-memory via `sveltekit(config)` — a
-  `svelte.config.js` on disk is an upstream **error** — so the adapter
-  instance and all kit options are injected programmatically.
+  takes its entire config via `sveltekit(config)` — a `svelte.config.js` on
+  disk is an upstream **error** — so all kit options (adapter included) live
+  in the project's `vite.config.ts`.
+- **A project-owned `vite.config.ts` loads natively.** The build/dev config
+  leaves Vite's `configFile` discovery alone, so the user's Vite settings,
+  plugins, and `sveltekit(...)` call (aliases, preprocess, prerender entries,
+  …) all apply as written. The deploy target's adapter is injected into the
+  _user's_ `sveltekit()` instance — never a second one — by an inline
+  `enforce: "pre"` plugin (`src/UserConfig.ts`) that mutates the validated
+  config kit exposes as `api.options` on `vite-plugin-sveltekit-setup`
+  _before_ kit's own `config` hook processes it. A user-declared `adapter`
+  is replaced **with a warning** (the deploy target owns build packaging; a
+  foreign adapter's output would never be deployed — the user's file itself
+  is untouched, so plain `vite build` still uses it). Only when no config
+  file exists does the integration fall back to a fully-programmatic config
+  (`configFile: false` + `sveltekit({ ...options.kit, adapter })`).
 - **Build is one `buildApp()` pass** (Vite Environment API): server build →
   route analysis → client build → prerender → (service worker) → adapter
   `adapt()`. The adapter runs _inside_ the build as a kit callback.

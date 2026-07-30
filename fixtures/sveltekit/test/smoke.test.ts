@@ -52,6 +52,20 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(body.nodeUuid).toMatch(UUID_REGEX);
     });
 
+    it("honors the user vite.config.ts (kit alias, user plugin, adapter override)", async ({
+      server,
+    }) => {
+      // `$fixture` (a user kit alias) and `virtual:fixture-marker` (a user
+      // Vite plugin) both live in the fixture's own vite.config.ts — this
+      // endpoint only works when that file is loaded natively. The config
+      // also declares a user adapter that THROWS from `adapt()`, so live
+      // builds succeeding at all proves the deploy target's adapter replaced
+      // it.
+      const body = await server.fetchJson<{ marker: string; greeting: string }>("/api/user-config");
+      expect(body.marker).toBe("user-vite-plugin-active");
+      expect(body.greeting).toBe("greeting-via-user-alias");
+    });
+
     it("runs a form action via progressive enhancement (no reload)", async ({ page, server }) => {
       await page.goto(new URL("/form", server.url).toString());
       await expect(page.locator("#form-result")).toHaveText("result:none");

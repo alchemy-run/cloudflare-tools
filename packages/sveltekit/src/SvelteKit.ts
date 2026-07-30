@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { pathToFileURL } from "node:url";
 import type * as ViteModule from "vite";
+import { DEFAULT_VITE_CONFIG_FILES, makeSvelteKitConfigPlugin } from "./UserConfig.ts";
 
 /** The shape of the project's `@sveltejs/kit/vite` module. */
 interface KitViteModule {
@@ -166,9 +167,13 @@ export interface SvelteKitOptions {
    */
   readonly compatibilityFlags?: Array<string> | undefined;
   /**
-   * SvelteKit configuration passed to `sveltekit(config)` (kit v3 takes its
-   * config in-memory; a `svelte.config.js` on disk is an upstream error).
-   * The `adapter` field is injected by this package.
+   * SvelteKit configuration for `sveltekit(config)` (kit v3 takes its config
+   * via the Vite plugin; a `svelte.config.js` on disk is an upstream error).
+   * When the project has its own `vite.config.ts`, these options are merged
+   * over the ones passed to the user's `sveltekit(...)` call (integration
+   * options win); construction-time options (`preprocess`, `extensions`,
+   * `compilerOptions`, `vitePlugin`) can only be applied when no user config
+   * file exists. The `adapter` field is always injected by this package.
    */
   readonly kit?: Record<string, unknown> | undefined;
   /** Extra Vite inline config merged into the build/dev config. */
@@ -230,7 +235,10 @@ export const resolveExportTarget = (entry: unknown): string | undefined => {
  *   (`target.build`) or runs kit's production build via programmatic Vite
  *   (`createBuilder().buildApp()`) with the target-provided adapter and hands
  *   the adapter's on-disk worker entry to the target's `finish` pass, which
- *   produces the final `BuildOutput.serverModules`.
+ *   produces the final `BuildOutput.serverModules`. A project-owned
+ *   `vite.config.ts` loads natively (the user's `sveltekit(...)` call and
+ *   plugins apply; the target's adapter is injected into it — see
+ *   `UserConfig.ts`); without one, the config is fully programmatic.
  * - `dev` runs kit's own Vite dev server (Node SSR, full HMR) with the
  *   target-provided adapter supplying the `platform` emulation.
  *
@@ -318,14 +326,50 @@ export const make: (
       });
     });
 
-    const viteConfig = (
-      root: string,
-      plugins: ViteModule.PluginOption,
-    ): ViteModule.InlineConfig => ({
-      root,
-      configFile: false,
-      ...options?.vite,
-      plugins: [...(options?.vite?.plugins ?? []), plugins],
+    const findViteConfigFile = Effect.fnUntraced(function* (root: string) {
+      for (const name of DEFAULT_VITE_CONFIG_FILES) {
+        const exists = yield* fs
+          .exists(path.join(root, name))
+          .pipe(Effect.catchTag("PlatformError", () => Effect.succeed(false)));
+        if (exists) {
+          return name;
+        }
+      }
+      return undefined;
+    });
+
+    /**
+     * Assemble the Vite inline config for a build/dev invocation.
+     *
+     * - Project has its own Vite config file: the file loads natively
+     *   (`configFile` is left to Vite's discovery — the user's plugins,
+     *   including their `sveltekit(...)` call, all apply) and the inline
+     *   config only injects `makeSvelteKitConfigPlugin`, which installs the
+     *   deploy target's adapter (and `options.kit` overrides) into the
+     *   user's kit config before kit processes it.
+     * - No config file on disk: internal fallback — `configFile: false` with
+     *   the `sveltekit()` plugin constructed programmatically from
+     *   `options.kit` + the target's adapter.
+     */
+    const resolveViteConfig = Effect.fn(function* (root: string, adapter: Adapter) {
+      const userConfigFile = yield* findViteConfigFile(root);
+      if (userConfigFile === undefined) {
+        const plugins = yield* loadKitPlugins(root, adapter);
+        return {
+          root,
+          configFile: false,
+          ...options?.vite,
+          plugins: [...(options?.vite?.plugins ?? []), plugins],
+        } satisfies ViteModule.InlineConfig;
+      }
+      return {
+        root,
+        ...options?.vite,
+        plugins: [
+          ...(options?.vite?.plugins ?? []),
+          makeSvelteKitConfigPlugin({ adapter, kit: options?.kit }),
+        ],
+      } satisfies ViteModule.InlineConfig;
     });
 
     const build: Framework["Service"]["build"] = Effect.fn(function* (buildOptions) {
@@ -345,11 +389,11 @@ export const make: (
       yield* requireAdapterHook(target);
       const adapter = target.adapter({ root });
       const vite = yield* loadVite(root);
-      const plugins = yield* loadKitPlugins(root, adapter);
+      const config = yield* resolveViteConfig(root, adapter);
 
       yield* Effect.tryPromise({
         try: async () => {
-          const builder = await vite.createBuilder(viteConfig(root, plugins), null);
+          const builder = await vite.createBuilder(config, null);
           await builder.buildApp();
         },
         catch: (error) => fail("Failed to build", error),
@@ -403,13 +447,12 @@ export const make: (
         }),
       );
       const vite = yield* loadVite(root);
-      const plugins = yield* loadKitPlugins(root, adapter);
+      const config = yield* resolveViteConfig(root, adapter);
       const port = devOptions?.port ?? options?.dev?.port;
 
       const server = yield* Effect.acquireRelease(
         Effect.tryPromise({
           try: async () => {
-            const config = viteConfig(root, plugins);
             const server = await vite.createServer({
               ...config,
               server: {

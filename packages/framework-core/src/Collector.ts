@@ -84,6 +84,20 @@ export interface CollectorOptions {
   readonly selectEntry?: ((chunk: ServerEntryChunk) => boolean) | undefined;
 }
 
+/**
+ * Build a {@link CollectorOptions.selectEntry} predicate that pins the chunk
+ * whose facade module is the given entry file — tolerating synthetic wrapper
+ * ids that embed the resolved path (the `\0distilled:worker-entry:`-wrapped
+ * main). Pair with `resolveDeployTargetEntry`: when a deploy target carries a
+ * user entry ({@link DeployTargetEntry}), the chunk built from it must become
+ * `serverModules[0]` even if the framework normally pins its own entry module.
+ */
+export const selectEntryByFacade = (entryPath: string): ((chunk: ServerEntryChunk) => boolean) => {
+  const posixPath = NodePath.resolve(entryPath).replaceAll("\\", "/");
+  return (chunk) =>
+    chunk.facadeModuleId !== null && chunk.facadeModuleId.replaceAll("\\", "/").endsWith(posixPath);
+};
+
 export interface CollectOptions {
   /**
    * Re-read the server environments' outDirs from disk instead of using the

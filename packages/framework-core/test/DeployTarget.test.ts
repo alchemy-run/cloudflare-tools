@@ -1,10 +1,12 @@
 import * as Effect from "effect/Effect";
+import * as NodePath from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   applyDeployTargetFinish,
   isDeployTarget,
   makeDeployTarget,
   resolveDeployTarget,
+  resolveDeployTargetEntry,
   type BuildOutput,
   type DeployTarget,
 } from "../src/index.ts";
@@ -47,6 +49,30 @@ describe("makeDeployTarget", () => {
       config: { compatibilityDate: "2026-03-10" },
     });
     expect(target.config.compatibilityDate).toBe("2026-03-10");
+  });
+});
+
+describe("resolveDeployTargetEntry", () => {
+  it("returns undefined when there is no target or no entry", () => {
+    expect(resolveDeployTargetEntry(undefined, { root: "/project" })).toBeUndefined();
+    expect(resolveDeployTargetEntry(stubTarget, { root: "/project" })).toBeUndefined();
+  });
+
+  it("resolves a root-relative user entry against the project root", () => {
+    const target = makeDeployTarget({
+      platform: "cloudflare",
+      config: {},
+      entry: { main: "./src/worker-entry.ts" },
+    });
+    expect(resolveDeployTargetEntry(target, { root: "/project" })).toBe(
+      NodePath.resolve("/project", "src/worker-entry.ts"),
+    );
+  });
+
+  it("keeps an absolute user entry as-is", () => {
+    const main = NodePath.resolve("/elsewhere/entry.ts");
+    const target = makeDeployTarget({ platform: "cloudflare", config: {}, entry: { main } });
+    expect(resolveDeployTargetEntry(target, { root: "/project" })).toBe(main);
   });
 });
 

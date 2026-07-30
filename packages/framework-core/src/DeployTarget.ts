@@ -4,6 +4,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import type * as Scope from "effect/Scope";
+import * as NodePath from "node:path";
 import type { BuildOutput } from "./BuildOutput.ts";
 import { loadProjectModule } from "./Loader.ts";
 
@@ -41,6 +42,55 @@ export interface DeployTargetBundleOptions {
   /** `package.json` main fields, in resolution order (e.g. `["module", "main"]`). */
   readonly mainFields?: ReadonlyArray<string> | undefined;
 }
+
+/**
+ * The user's own server entry — the generic carriage for "a user worker/
+ * function entry that wraps the framework's emitted entry".
+ *
+ * Some apps need their own module to be the deployed entry point instead of
+ * the framework's: on Cloudflare Workers the canonical case is a worker entry
+ * that wraps the framework's fetch handler and additionally exports Durable
+ * Object / Workflow classes, which must live on the same worker for their
+ * bindings to resolve. The pattern is platform-generic (an AWS target could
+ * carry a handler module that wraps the framework handler with middleware),
+ * so the carriage lives on the {@link DeployTarget} contract:
+ *
+ * - The **target config** carries the raw user value in its own shape
+ *   (Cloudflare: the vite/rolldown plugin's `main` option). The target
+ *   surfaces it here so framework packages can consult it platform-neutrally
+ *   (config stays opaque to framework-core).
+ * - The **framework package** honors it in two places: the user entry becomes
+ *   the bundler entry the framework build/dev pipeline serves (instead of the
+ *   framework's own emitted entry), and the built chunk produced from it
+ *   becomes `serverModules[0]` (see `selectEntryByFacade` in the collector).
+ * - The **framework package** must also expose a stable importable specifier
+ *   for its emitted server handler so the user entry has something to wrap.
+ *   Convention: `virtual:{framework}/server-entry` (precedent: React Router's
+ *   `virtual:react-router/server-build`; waku ships
+ *   `virtual:waku/server-entry`).
+ */
+export interface DeployTargetEntry {
+  /**
+   * The user's entry module: an absolute path, or a path relative to the
+   * project root (resolve with {@link resolveDeployTargetEntry}).
+   */
+  readonly main: string;
+}
+
+/**
+ * Resolve a target's user-entry module ({@link DeployTargetEntry}) to an
+ * absolute path against the project root. Returns `undefined` when the target
+ * (or its entry) is absent — the framework's own entry should be used.
+ */
+export const resolveDeployTargetEntry = (
+  target: Pick<DeployTarget, "entry"> | undefined,
+  context: { readonly root: string },
+): string | undefined =>
+  target?.entry === undefined
+    ? undefined
+    : NodePath.isAbsolute(target.entry.main)
+      ? target.entry.main
+      : NodePath.resolve(context.root, target.entry.main);
 
 /** Common inputs every target hook receives. */
 export interface DeployTargetContext {
@@ -103,6 +153,10 @@ export interface DeployTargetServer {
  * - `config` — opaque target configuration carriage (Cloudflare: worker
  *   name/bindings/compatibility; AWS later: its own shape). Framework-core
  *   never inspects it.
+ * - `entry` — the user's own server entry, when the target's config carries
+ *   one: a module that wraps the framework's emitted entry (and, on
+ *   Cloudflare, re-exports Durable Object classes). See
+ *   {@link DeployTargetEntry}.
  *
  * The framework-*specific* halves of an integration (waku's adapter fork,
  * astro's integration fork, kit's in-memory adapter) are intentionally NOT
@@ -117,6 +171,8 @@ export interface DeployTarget<Config = unknown> {
   readonly platform: string;
   /** Opaque target configuration. Never inspected by framework-core. */
   readonly config: Config;
+  /** The user's own server entry wrapping the framework's emitted entry, when configured. */
+  readonly entry?: DeployTargetEntry | undefined;
   readonly bundle?: DeployTargetBundleOptions | undefined;
   readonly build?:
     | ((

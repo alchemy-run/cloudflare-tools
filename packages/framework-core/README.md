@@ -42,6 +42,11 @@ interface DeployTarget<Config = unknown> {
   /** Opaque target configuration — never inspected by framework-core.
    *  Cloudflare: worker name/bindings/compatibility; AWS later: its own shape. */
   readonly config: Config;
+  /** The USER's own server entry, when the target config carries one: a module
+   *  that wraps the framework's emitted entry (Cloudflare: a worker entry
+   *  re-exporting Durable Object classes). `{ main: string }`, relative to the
+   *  project root or absolute — resolve via `resolveDeployTargetEntry`. */
+  readonly entry?: DeployTargetEntry;
   /** Resolve/bundle settings for server code: conditions (e.g. ["workerd",
    *  "worker", "module", "browser"]), externals (e.g. ["cloudflare:"]), mainFields. */
   readonly bundle?: DeployTargetBundleOptions;
@@ -99,6 +104,39 @@ Helpers exported by framework-core:
   module's `default` — or named `target` — export is the value or factory).
 - `applyDeployTargetFinish(target, output, context)` — run the finishing pass
   if defined, else pass the build through.
+- `resolveDeployTargetEntry(target, { root })` — the user-entry seam's
+  accessor: the absolute path of `target.entry.main` (resolved against the
+  project root), or `undefined` when no user entry is configured.
+- `selectEntryByFacade(entryPath)` (collector) — a `selectEntry` predicate
+  pinning the chunk whose facade module is that entry file (tolerates the
+  `\0distilled:worker-entry:` wrapper id).
+
+### The user-entry seam (`target.entry`)
+
+Some apps need their **own module** to be the deployed entry instead of the
+framework's — on Cloudflare, a worker entry that wraps the framework's fetch
+handler and additionally exports Durable Object / Workflow classes (they must
+live on the same worker for their bindings to resolve). The seam is designed
+once, cross-framework:
+
+1. **Carriage.** The target's config carries the raw value in its own shape
+   (Cloudflare: the vite plugin's `main` option — so the built-in Vite path
+   honors it natively). The target surfaces it platform-neutrally as
+   `entry: { main }`; framework packages read it via
+   `resolveDeployTargetEntry(target, { root })`.
+2. **Bundler entry.** The framework package makes the user entry the entry
+   module its build/dev pipeline serves, instead of unconditionally pinning
+   the framework's own emitted entry (waku:
+   `makeWakuPluginOptions` honors the user main; dev's module runner serves
+   the wrapped entry, so DO classes exist in dev too).
+3. **Wrappable handler.** The framework package exposes a stable importable
+   specifier for its emitted server handler so the user entry has something
+   to wrap. Convention: `virtual:{framework}/server-entry` (precedent: React
+   Router's `virtual:react-router/server-build`; waku ships
+   `virtual:waku/server-entry`).
+4. **Entry selection.** The chunk built from the user entry becomes
+   `serverModules[0]` (`selectEntryByFacade`); the framework's own entry
+   remains an ordinary chunk the user entry imports.
 
 ### How a framework package consumes the target
 

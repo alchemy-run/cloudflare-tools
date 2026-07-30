@@ -21,11 +21,11 @@ declare module "cloudflare:workers" {
 }
 
 /**
- * The INTENDED import seam for wrapping waku's server handler from a custom
- * worker entry: resolved by the waku cloudflare target's vite plugins to
+ * The import seam for wrapping waku's server handler from a custom worker
+ * entry: resolved by `makeWakuServerEntryPlugin` (injected by the waku
+ * integration for every deploy target) to
  * `<wakuDirectory>/dist/lib/vite-entries/entry.server.js` (whose default
- * export is the adapter's ExportedHandler). Does not exist yet — part of the
- * missing integration surface this fixture specifies (see README).
+ * export is the adapter's ExportedHandler). See README.
  */
 declare module "virtual:waku/server-entry" {
   const handler: {

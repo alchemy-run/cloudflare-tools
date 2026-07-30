@@ -7,10 +7,10 @@
  * resolve. This mirrors alchemy's Website.Vite "Custom Worker Entry"
  * pattern (`main: "worker/index.ts"` re-exporting DO classes).
  *
- * `virtual:waku/server-entry` is the intended import seam for waku's server
- * handler (waku's real entry, `dist/lib/vite-entries/entry.server.js`, is
- * not on waku's exports map, so the integration must expose it — the same
- * way React Router exposes `virtual:react-router/server-build`).
+ * `virtual:waku/server-entry` is the import seam for waku's server handler
+ * (waku's real entry, `dist/lib/vite-entries/entry.server.js`, is not on
+ * waku's exports map, so the integration exposes it — the same way React
+ * Router exposes `virtual:react-router/server-build`).
  */
 import { DurableObject } from "cloudflare:workers";
 import wakuHandler from "virtual:waku/server-entry";

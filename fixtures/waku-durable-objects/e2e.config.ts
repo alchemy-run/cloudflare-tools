@@ -5,25 +5,21 @@ import wakuFramework from "@distilled.cloud/waku";
 export const FIXTURE_MESSAGE = "hello-from-waku-do-binding";
 
 /**
- * INTENDED-BEHAVIOR CONFIG (see README): a waku app plus the user's own
- * Durable Object hosted on the SAME worker. The user's `main` module
- * (src/worker-entry.ts) wraps waku's emitted fetch handler and additionally
- * exports `class Counter` (a SQLite DO).
- *
- * Today `@distilled.cloud/waku`'s cloudflare target unconditionally pins
- * `main` to waku's own rsc server entry (makeWakuPluginOptions in
- * packages/waku/src/cloudflare.ts), so the `main` below is silently ignored
- * and the DO class never reaches the deployed module graph. The e2e `test`
- * script is gated on WAKU_DO_ENABLE=1 until the seam lands.
+ * A waku app plus the user's own Durable Object hosted on the SAME worker.
+ * The user's `main` module (src/worker-entry.ts) wraps waku's emitted fetch
+ * handler (via `virtual:waku/server-entry`) and additionally exports
+ * `class Counter` (a SQLite DO). See README for how the user-entry seam
+ * threads through the waku cloudflare target.
  */
 export default Options.make({
   target: {
     cloudflare: {
       worker: {
-        // The custom-entry seam: precedence over waku's pinned rsc entry,
-        // mirroring Website.Vite's `main` ("Custom Worker Entry" JSDoc in
-        // packages/alchemy/src/Cloudflare/Website/Vite.ts). The module wraps
-        // waku's server entry and re-exports the Counter DO class.
+        // The user-entry seam: takes precedence over waku's pinned rsc
+        // entry, mirroring Website.Vite's `main` ("Custom Worker Entry"
+        // JSDoc in packages/alchemy/src/Cloudflare/Website/Vite.ts). The
+        // module wraps waku's server entry and re-exports the Counter DO
+        // class.
         main: "./src/worker-entry.ts",
         compatibilityDate: "2026-03-10",
         compatibilityFlags: ["nodejs_als"],

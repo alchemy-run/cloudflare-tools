@@ -145,6 +145,14 @@ export interface SourceProvider {
 export interface WakuSourceOptions {
   /** Project root. Defaults to the process working directory. */
   readonly rootDir?: string | undefined;
+  /**
+   * The user's own worker entry (the user-entry seam,
+   * `DeployTarget.entry`): a module that wraps waku's handler — imported
+   * from `virtual:waku/server-entry` — and re-exports extras (Durable
+   * Object classes, additional handlers). Relative paths resolve against
+   * the root. When unset, waku's own rsc server entry is deployed.
+   */
+  readonly main?: string | undefined;
   /** Waku `srcDir` (relative to the root). @default "src" */
   readonly srcDir?: string | undefined;
   /**
@@ -459,6 +467,8 @@ const hashWakuInput = Effect.fn(function* (params: {
     root,
     workspaces: workspaceHashes.sort(),
     options: {
+      // Build-affecting: a changed user entry must bust the memo.
+      main: params.options.main,
       srcDir: params.options.srcDir,
       distDir: params.options.distDir,
       basePath: params.options.basePath,
@@ -616,6 +626,10 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
         target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
+          // The user-entry seam: surfaced as `DeployTarget.entry` and made
+          // the vite plugin's `main` (resolved against the root by
+          // `makeWakuPluginOptions`).
+          ...(options.main !== undefined ? { main: options.main } : undefined),
         }),
       });
       const output = yield* withRootCwd(
@@ -703,6 +717,9 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
         target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
+          // Dev serves the wrapped user entry too, so DO classes exported
+          // from it exist in dev.
+          ...(options.main !== undefined ? { main: options.main } : undefined),
           worker: {
             name: ctx.worker.name,
             bindings: ctx.worker.bindings,

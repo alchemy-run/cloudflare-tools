@@ -1,0 +1,30 @@
+{
+  "name": "@fixtures/waku-durable-objects",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "e2e dev --port 3110",
+    "build": "e2e build",
+    "preview": "e2e preview",
+    "test": "node scripts/e2e.mjs",
+    "test:update-snapshots": "WAKU_DO_ENABLE=1 node scripts/e2e.mjs --update-snapshots"
+  },
+  "dependencies": {
+    "hono": "^4.12.14",
+    "react": "~19.2.6",
+    "react-dom": "~19.2.6",
+    "react-server-dom-webpack": "~19.2.6",
+    "waku": "1.0.0-beta.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/e2e": "workspace:*",
+    "@distilled.cloud/waku": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/node": "^24.12.0",
+    "@types/react": "~19.2.17",
+    "@types/react-dom": "~19.2.3",
+    "vite": "catalog:"
+  }
+}

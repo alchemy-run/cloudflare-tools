@@ -3,6 +3,7 @@ import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
+import type { OutputSink } from "./workerd/Workerd.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
@@ -37,7 +38,34 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * to the runtime-wide `Cf` reference (a static placeholder by default).
    */
   readonly cf?: Record<string, unknown>;
+  /**
+   * Controls how output from the underlying `workerd` process is surfaced.
+   *
+   * By default, workerd does not log uncaught exceptions thrown by the
+   * worker — they surface as bare `500 Internal Server Error` responses with
+   * no output anywhere. Set `verbose: true` to have workerd log them
+   * (message + stack) to stderr, and optionally `onOutput` to capture the
+   * process output instead of inheriting the parent process's stdio.
+   */
+  readonly logging?: WorkerdLogging;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
+}
+
+export interface WorkerdLogging {
+  /**
+   * Pass `--verbose` to workerd. Enables INFO-level logging, which includes
+   * uncaught exceptions thrown by the worker (message + stack, written to
+   * stderr) — without it, those exceptions surface as bare
+   * `500 Internal Server Error` responses with no log output anywhere.
+   */
+  readonly verbose?: boolean;
+  /**
+   * Capture the workerd process's stdout/stderr output instead of piping it
+   * to the parent process's stdio. Output produced before the process
+   * finishes starting is not captured; startup failures surface as typed
+   * errors instead.
+   */
+  readonly onOutput?: OutputSink;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;

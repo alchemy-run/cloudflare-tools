@@ -6,6 +6,37 @@ import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 
 export const MAX_PORT = 65535;
 
+/**
+ * Upper bound on how many candidate ports `find` scans past the requested
+ * starting port. An unbounded scan (up to `MAX_PORT`) multiplied by the
+ * per-port availability probes is a socket storm: on Windows CI, where an
+ * environmental failure (`ENOBUFS` ephemeral-port/buffer exhaustion) makes
+ * *every* probe fail, it would churn through hundreds of thousands of socket
+ * binds and amplify the very exhaustion that caused it.
+ */
+export const MAX_PORT_SEARCH_ATTEMPTS = 128;
+
+/** The bind failed because the address is genuinely taken (scanning to the next port can help). */
+const ADDRESS_IN_USE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EACCES"]);
+
+/**
+ * The bind failed because this host doesn't exist on this machine (e.g. `::`
+ * without IPv6). The host can't conflict with anything, so it must not veto
+ * the port — otherwise every port would appear "in use" and the search would
+ * scan the whole port space.
+ */
+const UNSUPPORTED_HOST_CODES: ReadonlySet<string> = new Set([
+  "EADDRNOTAVAIL",
+  "EAFNOSUPPORT",
+  "EINVAL",
+  "ENOTFOUND",
+]);
+
+const errorCode = (error: unknown): string | undefined =>
+  typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+
 export interface Ports {
   /**
    * Finds an available port starting from the given one.
@@ -76,8 +107,31 @@ export const make = (options: PortsOptions) =>
     const bind = (port: number, host?: string) =>
       Effect.callback<number, ConfigError>((resume) => {
         const server = NodeNet.createServer();
-        server.once("error", () => {
-          server.close(() => resume(Effect.fail(addressInUseError(port))));
+        server.once("error", (error) => {
+          server.close(() => {
+            const code = errorCode(error);
+            if (code !== undefined && UNSUPPORTED_HOST_CODES.has(code)) {
+              // The host isn't available on this machine, so it can't hold the
+              // port either — treat the probe as a success.
+              return resume(Effect.succeed(port));
+            }
+            if (code === undefined || ADDRESS_IN_USE_CODES.has(code)) {
+              return resume(Effect.fail(addressInUseError(port)));
+            }
+            // Any other failure (ENOBUFS, EMFILE, ...) is environmental:
+            // scanning to the next port cannot succeed and only multiplies
+            // socket churn, so stop the search outright.
+            return resume(
+              Effect.die(
+                new SystemError({
+                  subtag: "PortBindFailed",
+                  message: `Could not bind to port ${port} (${code}).`,
+                  hint: "The system is out of socket resources (or the network stack rejected the bind). Free up resources and retry.",
+                  detail: { port, host, code, cause: error },
+                }),
+              ),
+            );
+          });
         });
         server.listen({ port, host, exclusive: true }, () => {
           const { port } = server.address() as NodeNet.AddressInfo;
@@ -113,7 +167,8 @@ export const make = (options: PortsOptions) =>
     const searchLock = globalSearchLock;
     const search = Effect.fn(function* (start: number) {
       let port = start;
-      while (port <= MAX_PORT) {
+      const limit = Math.min(MAX_PORT, start + MAX_PORT_SEARCH_ATTEMPTS - 1);
+      while (port <= limit) {
         const available = !isReserved(port) && (yield* Cache.get(cache, port));
         if (available) {
           yield* reserve(port);
@@ -126,9 +181,9 @@ export const make = (options: PortsOptions) =>
       return yield* Effect.die(
         new SystemError({
           subtag: "PortExhausted",
-          message: `No available port found starting from ${start}.`,
+          message: `No available port found in the range ${start}-${limit}.`,
           hint: "Free up a port in this range or pick a different starting port.",
-          detail: { start },
+          detail: { start, limit },
         }),
       );
     }, searchLock.withPermits(1));

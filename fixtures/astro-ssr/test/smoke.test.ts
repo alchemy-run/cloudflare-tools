@@ -3,10 +3,8 @@ import { expect, test } from "@playwright/test";
 
 const FIXTURE_VALUE = "hello-from-astro-ssr-binding";
 
-// NOTE: this suite is written against the INTENDED behavior of the
-// user-config wave (fixtures/astro-ssr/astro.config.mjs honored by the
-// integration). It is gated behind ASTRO_SSR_ENABLE=1 until that wave
-// lands — see scripts/e2e.mjs and README.md.
+// This suite exercises the user-config wave's behavior
+// (fixtures/astro-ssr/astro.config.mjs honored by the integration).
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
     const it = Playwright.make(mode);

@@ -22,15 +22,19 @@
  *   over the project tree (gitignore-aware by default, narrowable via
  *   `memo.include`/`memo.exclude`), the discovered external workspaces, the
  *   lockfile, this package's version, and the build-affecting options.
- * - `dev()` is not implemented yet — it fails with a `SourceProviderError`
- *   until the dev-transport phase lands (Nuxt SSR in a Node worker thread
- *   with `event.context.cloudflare` served wrangler-free).
+ * - `dev()` starts Nuxt's own dev server (nitro dev, SSR in a Node worker
+ *   THREAD, full HMR) with the Worker's bindings served on
+ *   `event.context.cloudflare` through cloudflare-runtime's platform proxy
+ *   (wrangler-free), and returns the server-mode dev handle. Literal env
+ *   values are laid over the proxied bindings; resource bindings round-trip
+ *   to the proxy's workerd instance, so dev state is live and shared.
  */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import fg from "fast-glob";
 import * as NodeCrypto from "node:crypto";
@@ -476,9 +480,30 @@ const assetsConfig = (assets: SourceContext["assets"]): Record<string, unknown> 
   return Object.keys(config).length > 0 ? config : undefined;
 };
 
+/**
+ * Resolve the Worker's literal env values as dev env overrides: strings
+ * pass through, `Redacted<string>`s are unwrapped, everything else
+ * (Effects, resource bindings) is skipped — those are delivered as real
+ * bindings through the platform proxy via `ctx.worker.bindings`. A
+ * same-named literal wins over the proxied value.
+ */
+const resolveDevEnvOverrides = (
+  env: Record<string, unknown> | undefined,
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(env ?? {})) {
+    if (typeof value === "string") {
+      out[key] = value;
+    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
+      out[key] = Redacted.value(value);
+    }
+  }
+  return out;
+};
+
 export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   const rootDir = NodePath.resolve(options.rootDir ?? process.cwd());
-  const frameworkOptions = (ctx: SourceContext): NuxtOptions => ({
+  const frameworkOptions = (ctx: SourceContext, dev?: NuxtOptions["dev"]): NuxtOptions => ({
     root: rootDir,
     // This module is Cloudflare-specific by contract (it implements alchemy's
     // Cloudflare Worker source), so it passes the target factory directly
@@ -489,6 +514,7 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
     compatibilityFlags: ctx.compatibility.flags,
     main: options.main,
     nuxt: options.nuxt,
+    dev,
   });
   return {
     ownsAssets: true,
@@ -550,16 +576,21 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
       );
       return { input: hash, additionalWorkspaces: workspaces };
     }),
-    dev: (_ctx: SourceDevContext) =>
-      Effect.fail(
-        new SourceProviderError({
-          provider: PROVIDER,
-          message:
-            "Nuxt dev is not implemented yet — it lands in the next phase (SSR in a Node " +
-            "worker thread with `event.context.cloudflare` served wrangler-free). Deploy " +
-            "with the production build in the meantime.",
+    dev: Effect.fnUntraced(function* (ctx: SourceDevContext) {
+      const framework = yield* makeNuxt(
+        frameworkOptions(ctx, {
+          env: resolveDevEnvOverrides(ctx.env),
+          bindings: ctx.worker.bindings,
         }),
-      ),
+      );
+      const server = yield* framework
+        .dev({ root: rootDir, port: 0 })
+        .pipe(Effect.mapError(wrapFrameworkError));
+      return {
+        mode: "server",
+        url: new URL(server.url),
+      } satisfies SourceDevHandle;
+    }),
   };
 };
 

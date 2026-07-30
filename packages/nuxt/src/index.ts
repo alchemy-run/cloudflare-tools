@@ -29,6 +29,9 @@ export {
   readNitroOutput,
   SERVER_ENTRY_NAME,
   type NitroOutputDirs,
+  type NuxtDevListener,
+  type NuxtDevPlatform,
+  type NuxtDevPlatformContext,
   type NuxtInstance,
   type NuxtKitModule,
   type NuxtNitroContext,
@@ -61,6 +64,17 @@ export interface HarnessWorkerOptions {
   readonly compatibilityFlags?: Array<string> | undefined;
   /** The USER's worker entry (the custom-entry carriage). */
   readonly main?: string | undefined;
+  readonly worker?:
+    | {
+        /**
+         * The worker's declared binding hooks — passed through to the
+         * deploy target's dev platform wholesale (the Cloudflare target
+         * serves them on `event.context.cloudflare.env` via
+         * cloudflare-runtime's platform proxy).
+         */
+        readonly bindings?: ReadonlyArray<unknown> | undefined;
+      }
+    | undefined;
 }
 
 /**
@@ -94,6 +108,9 @@ export const fromHarnessOptions = (options: HarnessOptions): NuxtOptions => {
     compatibilityDate: worker?.compatibilityDate,
     compatibilityFlags: worker?.compatibilityFlags,
     main: worker?.main,
+    dev: {
+      bindings: worker?.worker?.bindings,
+    },
   };
 };
 

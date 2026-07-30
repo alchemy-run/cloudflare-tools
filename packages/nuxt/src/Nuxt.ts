@@ -3,12 +3,15 @@ import {
   Framework,
   FrameworkError,
   type DeployTarget,
+  type DeployTargetError,
   type DeployTargetInput,
 } from "@distilled.cloud/framework-core";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import type * as Scope from "effect/Scope";
 import {
   enforceNitroConfig,
   findPresetConflict,
@@ -42,6 +45,22 @@ export interface NuxtInstance {
   readonly hook: (name: string, fn: (...args: Array<never>) => unknown) => unknown;
   readonly ready: () => Promise<void>;
   readonly close: () => Promise<void>;
+  /**
+   * The dev middleware server (nitro's dev server; present after `ready()`
+   * when loaded with `dev: true`). `listen` is listhen-backed: it binds a
+   * real HTTP listener serving the dev app.
+   */
+  readonly server?:
+    | {
+        readonly listen: (port: number) => Promise<NuxtDevListener>;
+      }
+    | undefined;
+}
+
+/** The structural slice of the listhen listener `nuxt.server.listen` returns. */
+export interface NuxtDevListener {
+  readonly url?: string | undefined;
+  readonly close?: (() => Promise<void>) | undefined;
 }
 
 /** The structural slice of a Nitro instance (`nitro:init` hook payload). */
@@ -95,10 +114,41 @@ export interface NuxtTargetConfig {
   readonly nodeCompat?: boolean | undefined;
 }
 
+/** Inputs the framework passes when asking the target for its dev platform. */
+export interface NuxtDevPlatformContext {
+  /** Absolute project root. */
+  readonly root: string;
+  /**
+   * Literal env overrides for the dev platform — a same-named literal wins
+   * over any platform-served value.
+   */
+  readonly env?: Record<string, unknown> | undefined;
+  /**
+   * Target-specific binding specs the dev platform should serve (opaque to
+   * the framework half — the Cloudflare target takes `cloudflare-runtime`
+   * binding hooks and serves them through its platform proxy).
+   */
+  readonly bindings?: ReadonlyArray<unknown> | undefined;
+}
+
 /**
- * A deploy target for Nuxt: the generic `DeployTarget` seams plus the two
- * framework-specific hooks nitro-driven builds need — the nitro deployment
- * preset to build with, and a last-word pass over the resolved nitro config.
+ * What a target's dev platform contributes to the dev server: extra nitro
+ * plugins and `runtimeConfig` to inject through the `loadNuxt` overrides
+ * (the Cloudflare target injects its `event.context.cloudflare` bridge
+ * plugin plus the platform-proxy connect info).
+ */
+export interface NuxtDevPlatform {
+  /** Absolute paths of nitro plugins to inject into the dev server. */
+  readonly nitroPlugins?: ReadonlyArray<string> | undefined;
+  /** `runtimeConfig` injected over the integration overrides. */
+  readonly runtimeConfig?: Record<string, unknown> | undefined;
+}
+
+/**
+ * A deploy target for Nuxt: the generic `DeployTarget` seams plus the
+ * framework-specific hooks nitro-driven builds and dev servers need — the
+ * nitro deployment preset to build with, a last-word pass over the resolved
+ * nitro config, and the dev-platform seam.
  */
 export interface NuxtTarget extends DeployTarget<NuxtTargetConfig> {
   /** The nitro deployment preset this target builds with (e.g. `"cloudflare_module"`). */
@@ -111,6 +161,18 @@ export interface NuxtTarget extends DeployTarget<NuxtTargetConfig> {
    */
   readonly configureNitro?:
     | ((nitroConfig: NitroConfigSlice, context: NuxtNitroContext) => void)
+    | undefined;
+  /**
+   * The target's dev-platform story: acquire whatever serves the platform
+   * environment in dev (scoped — closing the Scope tears it down AFTER the
+   * dev server closes) and return the injection the dev server needs. When
+   * absent, `dev` runs the plain framework dev server with no platform
+   * bridge.
+   */
+  readonly devPlatform?:
+    | ((
+        context: NuxtDevPlatformContext,
+      ) => Effect.Effect<NuxtDevPlatform, DeployTargetError, Scope.Scope>)
     | undefined;
 }
 
@@ -165,6 +227,21 @@ export interface NuxtOptions {
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
         readonly port?: number | undefined;
+        /**
+         * Literal values exposed on the dev platform env
+         * (`event.context.cloudflare.env` on the Cloudflare target).
+         * Applied on top of the values served for {@link bindings} — a
+         * same-named literal always wins.
+         */
+        readonly env?: Record<string, unknown> | undefined;
+        /**
+         * Target-specific binding specs the dev platform should serve.
+         * Opaque to the framework half; the Cloudflare target accepts
+         * `cloudflare-runtime` binding hooks (`Text.local`,
+         * `KvNamespace.local`, …) and serves them into nitro's dev SSR
+         * worker thread through a workerd-backed platform proxy.
+         */
+        readonly bindings?: ReadonlyArray<unknown> | undefined;
       }
     | undefined;
 }
@@ -195,9 +272,14 @@ export const NUXT_KIT_SPECIFIER = "nuxt/kit";
  *   `.output`: `serverModules` entry-first from `.output/server`,
  *   `clientDirectory` = `.output/public`, both taken from the resolved
  *   nitro output options (`nitro:init`).
- * - `dev` is not implemented yet — it fails with a descriptive
- *   `FrameworkError` until the dev-transport phase lands (SSR in a Node
- *   worker thread with `event.context.cloudflare` served wrangler-free).
+ * - `dev` runs Nuxt's own dev server programmatically (`loadNuxt({ dev:
+ *   true, ready: false })` → hooks → `ready()` → `nuxt.server.listen` →
+ *   `buildNuxt`, the same flow `nuxi dev` drives), scoped — closing the
+ *   Scope closes the listener, the Nuxt instance, and then the target's
+ *   dev platform. The target's `devPlatform` seam contributes nitro
+ *   plugins + `runtimeConfig` (the Cloudflare target injects its
+ *   `event.context.cloudflare` bridge served through cloudflare-runtime's
+ *   platform proxy — SSR runs in nitro's Node worker THREAD, wrangler-free).
  *
  * This module is target-agnostic: everything Cloudflare-specific lives in
  * `@distilled.cloud/nuxt/cloudflare`.
@@ -351,14 +433,120 @@ export const make: (
       );
     });
 
-    const dev: Framework["Service"]["dev"] = Effect.fn(function* (_devOptions) {
-      return yield* Effect.fail(
-        fail(
-          "Nuxt dev is not implemented yet — it lands in the next phase (SSR in a Node " +
-            "worker thread with `event.context.cloudflare` served wrangler-free). Use the " +
-            "production build + preview flow in the meantime.",
-        ),
+    const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+      const root = devOptions?.root ?? baseRoot;
+      const target = yield* resolveTarget(root);
+      // Resolve the project's kit before anything expensive: a root without
+      // a Nuxt install fails fast, without spawning the dev platform.
+      const kit = yield* loadNuxtKit(root);
+
+      // The dev platform is acquired BEFORE the server so its finalizer
+      // runs LAST (finalizers are LIFO): the platform (e.g. the Cloudflare
+      // target's platform-proxy workerd instance) outlives the last
+      // in-flight request of the closing dev server.
+      const platform =
+        target.devPlatform !== undefined
+          ? yield* target
+              .devPlatform({
+                root,
+                env: options?.dev?.env,
+                bindings: options?.dev?.bindings,
+              })
+              .pipe(Effect.mapError((error) => fail(error.message, error.cause)))
+          : undefined;
+
+      // The user's nuxt.config.ts loads natively; the dev injection rides
+      // the overrides layer. No nitro preset here — nitro's dev flow runs
+      // its own Node dev preset (the SSR worker thread); the deploy preset
+      // only matters for `build`. Telemetry/devtools are disabled: this
+      // dev server runs headless under alchemy / the e2e harness.
+      //
+      // Injected plugins live under node_modules (this package's dist), so
+      // their directories must be forced into `nitro.externals.inline`:
+      // nitro's externals pass would otherwise keep the plugin external and
+      // node would resolve its `nitropack/runtime` import against the raw
+      // package, whose `#nitro-internal-virtual/*` imports only exist
+      // inside the dev bundle.
+      const nitroPlugins = platform?.nitroPlugins;
+      const nuxt = yield* Effect.tryPromise({
+        try: async () =>
+          await kit.loadNuxt({
+            cwd: root,
+            dev: true,
+            ready: false,
+            overrides: makeNuxtOverrides({
+              nuxtConfig: {
+                telemetry: false,
+                devtools: { enabled: false },
+                ...options?.nuxt,
+              },
+              nitroPlugins,
+              nitroExternalsInline: nitroPlugins?.map((plugin) => path.dirname(plugin)),
+              runtimeConfig: platform?.runtimeConfig,
+            }),
+          }),
+        catch: (error) => fail("Failed to load the Nuxt project", error),
+      });
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          try {
+            await nuxt.close();
+          } catch {
+            // teardown is best-effort
+          }
+        }),
       );
+
+      yield* Effect.tryPromise({
+        try: () => nuxt.ready(),
+        catch: (error) => fail("Failed to initialize the Nuxt dev server", error),
+      });
+
+      const server = nuxt.server;
+      if (server === undefined || typeof server.listen !== "function") {
+        return yield* Effect.fail(
+          fail("The loaded Nuxt instance exposes no dev server (`nuxt.server.listen`)"),
+        );
+      }
+      const port = devOptions?.port ?? options?.dev?.port ?? 0;
+      const listener = yield* Effect.acquireRelease(
+        Effect.tryPromise({
+          try: () => server.listen(port),
+          catch: (error) => fail("Failed to start the dev server listener", error),
+        }),
+        (listener) =>
+          Effect.promise(async () => {
+            try {
+              await listener.close?.();
+            } catch {
+              // teardown is best-effort
+            }
+          }),
+      );
+      const url = listener.url;
+      if (url === undefined) {
+        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+      }
+
+      // The initial dev build — same flow as `nuxi dev` (which awaits
+      // buildNuxt after wiring its listener); the promise resolves once
+      // the dev bundles are ready, watchers keep running in background.
+      yield* Effect.tryPromise({
+        try: () => kit.buildNuxt(nuxt),
+        catch: (error) => fail("Failed to build the dev server", error),
+      });
+
+      // Bounded readiness probe: any HTTP response counts (vite serves
+      // lazily; we only need the listener to answer).
+      yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(url, { redirect: "manual" });
+          await response.arrayBuffer().catch(() => {});
+        },
+        catch: (error) => fail("The dev server did not become reachable", error),
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+
+      return { url };
     });
 
     return Framework.of({ build, dev });

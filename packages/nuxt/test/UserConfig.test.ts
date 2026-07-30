@@ -55,6 +55,32 @@ describe("makeNuxtOverrides", () => {
     ]);
   });
 
+  it("omits the preset for dev-shaped overrides (no nitroPreset) while still appending plugins", () => {
+    const overrides = makeNuxtOverrides({
+      nuxtConfig: { telemetry: false },
+      nitroPlugins: ["/abs/dev-bridge.ts"],
+    });
+    expect(overrides["telemetry"]).toBe(false);
+    expect(overrides["nitro"]).toEqual({ plugins: ["/abs/dev-bridge.ts"] });
+  });
+
+  it("merges injected runtimeConfig over the integration overrides' runtimeConfig", () => {
+    const overrides = makeNuxtOverrides({
+      nuxtConfig: { runtimeConfig: { keep: "user", clobbered: "user" } },
+      runtimeConfig: { clobbered: "platform", injected: { url: "http://127.0.0.1:1", token: "t" } },
+    });
+    expect(overrides["runtimeConfig"]).toEqual({
+      keep: "user",
+      clobbered: "platform",
+      injected: { url: "http://127.0.0.1:1", token: "t" },
+    });
+  });
+
+  it("adds no runtimeConfig key when none is injected", () => {
+    const overrides = makeNuxtOverrides({ nitroPreset: "cloudflare_module" });
+    expect("runtimeConfig" in overrides).toBe(false);
+  });
+
   it("adds no plugins key when none are given", () => {
     const overrides = makeNuxtOverrides({ nitroPreset: "cloudflare_module" });
     expect("plugins" in (overrides["nitro"] as Record<string, unknown>)).toBe(false);

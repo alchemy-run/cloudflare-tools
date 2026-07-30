@@ -64,7 +64,9 @@ describe("readNitroOutput", () => {
 });
 
 describe("make", () => {
-  it("dev fails with a descriptive not-implemented FrameworkError", async () => {
+  it("dev fails with a descriptive FrameworkError outside a Nuxt project", async () => {
+    // /tmp has no nuxt install: resolving the project's kit is the first
+    // step of `dev` and must surface a FrameworkError (not a raw throw).
     const result = await runWithNode(
       Effect.gen(function* () {
         const framework = yield* make({ root: "/tmp/does-not-matter" });
@@ -74,7 +76,6 @@ describe("make", () => {
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") {
       expect(result.failure._tag).toBe("FrameworkError");
-      expect(result.failure.message).toContain("next phase");
     }
   });
 });

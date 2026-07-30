@@ -62,20 +62,34 @@ export interface NuxtOverridesInput {
   /**
    * The deploy target's nitro preset (e.g. `"cloudflare_module"`), injected
    * as the highest-priority config layer AND re-enforced by
-   * {@link enforceNitroConfig} after modules run.
+   * {@link enforceNitroConfig} after modules run. Omitted for the dev
+   * server: nitro's dev flow runs its own Node dev preset — the deploy
+   * preset only matters for `build`.
    */
-  readonly nitroPreset: string;
+  readonly nitroPreset?: string | undefined;
   /**
    * Integration-level Nuxt config overrides (`NuxtOptions.nuxtConfig`),
    * merged over the user's `nuxt.config.ts` (integration wins; c12/defu
    * performs the deep merge).
    */
   readonly nuxtConfig?: Record<string, unknown> | undefined;
-  /**
-   * Absolute paths of nitro plugins to append (the dev-mode platform bridge
-   * lands here in the next phase).
-   */
+  /** Absolute paths of nitro plugins to append (the dev-mode platform bridge). */
   readonly nitroPlugins?: ReadonlyArray<string> | undefined;
+  /**
+   * Paths nitro's bundler must INLINE (`nitro.externals.inline`). Injected
+   * plugins that live under `node_modules` need this: nitro's externals
+   * pass would otherwise keep them external, and an externalized plugin
+   * resolves `nitropack/runtime` against the raw package — whose
+   * `#nitro-internal-virtual/*` imports only exist inside the bundle.
+   */
+  readonly nitroExternalsInline?: ReadonlyArray<string> | undefined;
+  /**
+   * `runtimeConfig` injected over the integration overrides (the dev
+   * platform's connect info rides here). Merged over any `runtimeConfig`
+   * in `nuxtConfig`; c12 deep-merges the result with the user's own
+   * `nuxt.config.ts` runtime config.
+   */
+  readonly runtimeConfig?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -88,11 +102,18 @@ export const makeNuxtOverrides = (input: NuxtOverridesInput): Record<string, unk
     input.nuxtConfig !== undefined && isPlainObject(input.nuxtConfig["nitro"])
       ? (input.nuxtConfig["nitro"] as Record<string, unknown>)
       : undefined;
+  const userRuntimeConfig =
+    input.nuxtConfig !== undefined && isPlainObject(input.nuxtConfig["runtimeConfig"])
+      ? (input.nuxtConfig["runtimeConfig"] as Record<string, unknown>)
+      : undefined;
+  const userExternals = isPlainObject(userNitro?.["externals"])
+    ? (userNitro["externals"] as Record<string, unknown>)
+    : undefined;
   return {
     ...input.nuxtConfig,
     nitro: {
       ...userNitro,
-      preset: input.nitroPreset,
+      ...(input.nitroPreset !== undefined ? { preset: input.nitroPreset } : undefined),
       ...(input.nitroPlugins !== undefined && input.nitroPlugins.length > 0
         ? {
             plugins: [
@@ -103,7 +124,23 @@ export const makeNuxtOverrides = (input: NuxtOverridesInput): Record<string, unk
             ],
           }
         : undefined),
+      ...(input.nitroExternalsInline !== undefined && input.nitroExternalsInline.length > 0
+        ? {
+            externals: {
+              ...userExternals,
+              inline: [
+                ...(Array.isArray(userExternals?.["inline"])
+                  ? (userExternals["inline"] as Array<unknown>)
+                  : []),
+                ...input.nitroExternalsInline,
+              ],
+            },
+          }
+        : undefined),
     },
+    ...(input.runtimeConfig !== undefined
+      ? { runtimeConfig: { ...userRuntimeConfig, ...input.runtimeConfig } }
+      : undefined),
   };
 };
 

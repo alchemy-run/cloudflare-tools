@@ -24,8 +24,15 @@
  *   worker.
  * - **`bundle`** — workerd resolve conditions and the `cloudflare:`
  *   externals, for callers that post-process server code.
+ * - **`devPlatform`** — the wrangler-free dev bridge: opens
+ *   cloudflare-runtime's platform proxy (a local workerd instance hosting
+ *   the configured binding hooks) and injects a nitro plugin that serves
+ *   `event.context.cf` / `event.context.waitUntil` /
+ *   `event.context.cloudflare = { request, env, context }` inside nitro's
+ *   dev SSR worker thread (see `./dev/host.ts`).
  */
 import { makeDeployTarget } from "@distilled.cloud/framework-core";
+import { makeCloudflareDevPlatform } from "./dev/host.ts";
 import type { NuxtTarget, NuxtTargetConfig } from "./Nuxt.ts";
 
 /** The nitro deployment preset this target builds with. */
@@ -81,6 +88,16 @@ export const makeCloudflareTarget = (config: NuxtTargetConfig = {}): NuxtTarget 
       // clone (it copies `options._config`) and a workerd-flavored entry
       // (importing `cloudflare:` modules) cannot load there.
     },
+    // Dev: `event.context.cloudflare` served through cloudflare-runtime's
+    // platform proxy (workerd hosting the binding hooks), bridged into
+    // nitro's dev SSR worker thread by the shipped nitro plugin. Note the
+    // proxy cannot host user worker-entry classes (Durable Objects declared
+    // via the entry/exports seam only exist in the production build), so
+    // DO namespace bindings are not servable in dev yet.
+    devPlatform: makeCloudflareDevPlatform({
+      compatibilityDate: config.compatibilityDate,
+      compatibilityFlags: config.compatibilityFlags,
+    }),
   });
 
 /**

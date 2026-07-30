@@ -1,4 +1,8 @@
-import { DurableObjectNamespace, Text } from "@distilled.cloud/cloudflare-runtime/bindings";
+import {
+  DurableObjectNamespace,
+  KvNamespace,
+  Text,
+} from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as Options from "@distilled.cloud/e2e/Options";
 import * as Nuxt from "@distilled.cloud/nuxt";
 
@@ -17,7 +21,22 @@ export default Options.make({
   // The deploy target defaults to `@distilled.cloud/nuxt/cloudflare`.
   framework: (options) => {
     const base = Nuxt.fromHarnessOptions(options as Nuxt.HarnessOptions);
-    return Nuxt.layer({ ...base, dev: { port: 3111 } });
+    return Nuxt.layer({
+      ...base,
+      dev: {
+        ...base.dev,
+        port: 3111,
+        // Dev serves an explicit binding set instead of the worker's
+        // declared hooks: the dev platform proxy cannot host the Counter DO
+        // class (the entry/exports seam only exists in the production
+        // build), so the DO spec is live-only while Text + KV round-trip
+        // through the proxy.
+        bindings: [
+          Text.local("FIXTURE_SECRET", SECRET),
+          KvNamespace.local({ binding: "FIXTURE_KV" }),
+        ],
+      },
+    });
   },
   target: {
     cloudflare: {
@@ -31,6 +50,7 @@ export default Options.make({
           name: "fixtures-nuxt",
           bindings: [
             Text.local("FIXTURE_SECRET", SECRET),
+            KvNamespace.local({ binding: "FIXTURE_KV" }),
             // Bind the namespace for a DO class exported by THIS worker.
             DurableObjectNamespace.local({ binding: "COUNTER", className: "Counter" }),
           ],
@@ -46,6 +66,7 @@ export default Options.make({
         compatibilityDate: "2026-03-10",
         compatibilityFlags: ["nodejs_compat"],
         bindings: { FIXTURE_SECRET: SECRET },
+        kvNamespaces: ["FIXTURE_KV"],
         // Miniflare's DO declaration for the preview server: binding name ->
         // class exported by the built worker bundle.
         durableObjects: { COUNTER: { className: "Counter", useSQLite: true } },

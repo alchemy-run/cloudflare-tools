@@ -64,12 +64,14 @@
     "prepublishOnly": "bun run clean && bun run build"
   },
   "dependencies": {
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
     "@distilled.cloud/framework-core": "workspace:*",
     "fast-glob": "^3.3.2"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
+    "nitropack": "2.13.4",
     "vitest": "catalog:"
   },
   "peerDependencies": {

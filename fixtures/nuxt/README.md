@@ -22,8 +22,23 @@ What it exercises:
   exports; `/api/counter` drives the DO through the `COUNTER` namespace
   binding.
 
-Modes: the **live** suite (miniflare over `dist/build.json`) always runs. The
-**dev** suite is written but pending until the Nuxt dev transport lands
-(`NUXT_DEV_ENABLE=1` opts in; see `scripts/e2e.mjs`).
+- **KV round-trip** — `/api/kv` puts/gets through
+  `event.context.cloudflare.env.FIXTURE_KV` (live: miniflare KV; dev: the
+  platform-proxy bridge).
+
+Modes: both the **live** suite (miniflare over `dist/build.json`) and the
+**dev** suite run. Dev drives Nuxt's own dev server programmatically
+(`loadNuxt({ dev: true })`); SSR runs in nitro's Node worker THREAD, where
+the injected nitro plugin serves `event.context.cf` /
+`event.context.waitUntil` / `event.context.cloudflare = { request, env,
+context }` from cloudflare-runtime's platform proxy over HTTP (`{ url,
+token }` via `runtimeConfig`) — wrangler-free, binding state shared with the
+host workerd instance and preserved across dev rebuilds. The dev suite also
+edits `server/api/hmr.ts` in place (restored in a `finally`) to prove a
+rebuild + bridge reconnect.
+
+Dev-mode limitation: the Counter DO spec is live-only — the dev platform
+proxy cannot host classes from the worker entry (the entry/exports seam only
+exists in the production build), so dev serves Text + KV bindings.
 
 Dev port: 3111.

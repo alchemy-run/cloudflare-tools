@@ -1,0 +1,25 @@
+{
+  "name": "@fixtures/astro-ssr",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "e2e dev --port 3106",
+    "build": "e2e build",
+    "preview": "e2e preview",
+    "test": "node scripts/e2e.mjs",
+    "test:update-snapshots": "ASTRO_SSR_ENABLE=1 node scripts/e2e.mjs --update-snapshots"
+  },
+  "dependencies": {
+    "astro": "7.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/astro": "workspace:*",
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/e2e": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@playwright/test": "catalog:",
+    "effect": "catalog:effect",
+    "vite": "catalog:"
+  }
+}

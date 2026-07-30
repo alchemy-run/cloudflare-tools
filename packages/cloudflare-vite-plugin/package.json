@@ -40,7 +40,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "bun run build:clean",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*"

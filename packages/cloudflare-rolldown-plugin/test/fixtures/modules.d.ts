@@ -32,3 +32,7 @@ declare module "*.bin" {
   const value: ArrayBuffer;
   export default value;
 }
+
+declare module "distilled:export-types" {
+  export function getExportTypes(module: unknown): Record<string, string>;
+}

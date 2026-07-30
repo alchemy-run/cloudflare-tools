@@ -40,6 +40,10 @@
       "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins/index.js"
     },
+    "./export-types": {
+      "types": "./dist/export-types.d.ts",
+      "import": "./dist/export-types.js"
+    },
     "./options": {
       "types": "./dist/options.d.ts",
       "import": "./dist/options.js"
@@ -58,7 +62,7 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b",
     "prepublishOnly": "bun run clean && bun run build"
   },
   "dependencies": {

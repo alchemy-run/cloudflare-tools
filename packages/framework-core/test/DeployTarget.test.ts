@@ -18,7 +18,7 @@ const emptyBuild: BuildOutput = {
   externalWorkspaces: new Set(),
 };
 
-const stubTarget = makeDeployTarget({
+const stubTarget: DeployTarget = makeDeployTarget({
   platform: "cloudflare",
   config: { worker: { name: "test" } },
   bundle: { conditions: ["workerd", "worker"] },

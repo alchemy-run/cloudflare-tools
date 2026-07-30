@@ -277,6 +277,10 @@ async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<
       `import { createWorkerEntrypointWrapper, createDurableObjectWrapper, createWorkflowEntrypointWrapper } from "./module-runner/wrapper.worker.mjs";`,
       'export { ModuleRunnerDO } from "./module-runner/module-runner.worker.mjs";',
       'export default createWorkerEntrypointWrapper("default");',
+      // `@cloudflare/containers` outbound interception requires `ContainerProxy`
+      // on `ctx.exports`. User `main` re-exports it, but workerd loads these
+      // wrappers — not the user entry's export table — so expose it here too.
+      'export const ContainerProxy = createWorkerEntrypointWrapper("ContainerProxy");',
       ...(options.worker?.durableObjectNamespaces ?? []).map(
         (namespace) =>
           `export const ${namespace.className} = createDurableObjectWrapper("${namespace.className}");`,

@@ -1,0 +1,24 @@
+{
+  "name": "@fixtures/sveltekit-spa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "e2e dev --port 3108",
+    "build": "e2e build",
+    "preview": "e2e preview",
+    "test": "node scripts/e2e.mjs",
+    "test:update-snapshots": "SVELTEKIT_SPA_ENABLE=1 node scripts/e2e.mjs --update-snapshots"
+  },
+  "devDependencies": {
+    "@distilled.cloud/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/e2e": "workspace:*",
+    "@distilled.cloud/sveltekit": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@sveltejs/kit": "3.0.0-next.9",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@types/node": "^24.12.0",
+    "effect": "catalog:effect",
+    "svelte": "^5.56.6",
+    "vite": "catalog:"
+  }
+}

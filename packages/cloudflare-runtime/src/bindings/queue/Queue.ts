@@ -112,18 +112,18 @@ export const QueueLive = Layer.effect(
         // subscriber list) not to emit the proxy service — the DLQ binding
         // would then reference `cloudflare-runtime:registry-proxy` without it
         // being defined and workerd would fail to start.
-        const dlqServices = new Map<string, WorkerdConfig.ServiceDesignator>();
-        for (const consumer of consumers) {
-          if (
-            consumer.deadLetterQueue !== undefined &&
-            !dlqServices.has(consumer.deadLetterQueue)
-          ) {
-            dlqServices.set(
-              consumer.deadLetterQueue,
-              yield* queueConsumerServiceDesignator(consumer.deadLetterQueue),
-            );
-          }
-        }
+        const dlqNames = new Set(consumers.flatMap((consumer) => consumer.deadLetterQueue ?? []));
+        const dlqServices = new Map(
+          yield* Effect.all(
+            Array.from(dlqNames, (queueName) =>
+              Effect.map(
+                queueConsumerServiceDesignator(queueName),
+                (service) => [queueName, service] as const,
+              ),
+            ),
+            { concurrency: "unbounded" },
+          ),
+        );
 
         /**
          * Build the workerd service for a single consumed queue. A single service both

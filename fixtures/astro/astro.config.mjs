@@ -25,6 +25,11 @@ const userIntegration = () => ({
 });
 
 export default defineConfig({
+  // On-demand rendering with per-page `export const prerender = true`
+  // opt-ins. The toolchain no longer defaults `output` (astro's own default
+  // is `"static"`), so the SSR-first intent is declared here — and honoring
+  // it is itself part of the user-config proof.
+  output: "server",
   integrations: [userIntegration()],
   vite: {
     define: {

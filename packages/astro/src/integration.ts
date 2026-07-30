@@ -101,6 +101,15 @@ export interface DistilledCloudflareOptions {
    * @internal
    */
   readonly onOriginalClientDir?: ((dir: string) => void) | undefined;
+  /**
+   * Reports the resolved build output mode (`astro:config:done`'s
+   * `buildOutput`): `"static"` when every route is prerendered, `"server"`
+   * when any route renders on demand. The cloudflare target's `finish` pass
+   * uses it to strip `serverModules` from a fully-static build so the deploy
+   * is assets-only (no worker).
+   * @internal
+   */
+  readonly onBuildOutput?: ((buildOutput: "static" | "server") => void) | undefined;
 }
 
 /**
@@ -450,6 +459,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
         }
         _config = config;
         _buildOutput = buildOutput;
+        options.onBuildOutput?.(buildOutput);
         _originalClientDir = new URL(config.build.client.href);
         if (config.base !== "/") {
           // Nest the client build under the base so the assets directory can

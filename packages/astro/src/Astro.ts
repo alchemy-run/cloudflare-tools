@@ -44,9 +44,11 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
    * (`site`, `base`, `integrations`, `devToolbar`, `vite`, ...). The
    * project's own `astro.config.*` file loads natively; this inline config
    * is merged OVER it by astro (arrays like `integrations`/`vite.plugins`
-   * concatenate, scalars override). `root` is pinned; `output` defaults to
-   * `"server"`. Do not pass `adapter` — the deploy target provides it, and
-   * a user-declared adapter fails the build with an actionable error.
+   * concatenate, scalars override). `root` is pinned; `output` is only set
+   * when passed here (so a config file's `output` — or astro's `"static"`
+   * default — is honored). Do not pass `adapter` — the deploy target
+   * provides it, and a user-declared adapter fails the build with an
+   * actionable error.
    */
   readonly astro?: AstroInlineConfig | undefined;
   /** Project root. Defaults to the process working directory. */
@@ -86,7 +88,11 @@ export interface AstroConfigInputs {
  * - The deploy target's integration is appended to `integrations` (it
  *   registers itself as the adapter at `astro:config:done` and fails the
  *   build if the user config already declares an `adapter`).
- * - `output` defaults to `"server"` (overridable via the user config).
+ * - `output` is NOT set unless the caller passes it explicitly: the inline
+ *   config merges OVER the project's `astro.config.*`, so a default here
+ *   would clobber the file's `output` (e.g. an explicit `"static"`). With
+ *   neither source setting it, astro's own default (`"static"`, with
+ *   per-route `prerender = false` opt-outs enabled by the adapter) applies.
  * - User `vite.plugins` are preserved ahead of the collector.
  */
 export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineConfig => {
@@ -99,7 +105,6 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
         ? (options) => ({ ...(user.server as (options: unknown) => object)(options), port })
         : { ...user?.server, port };
   return {
-    output: "server",
     logLevel: "warn",
     ...user,
     root: inputs.root,

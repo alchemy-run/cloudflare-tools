@@ -90,12 +90,13 @@ const makeConfigDoneContext = (root: string, base = "/"): ConfigDoneContext => (
 const runConfigDone = (
   integration: ReturnType<typeof distilledCloudflare>,
   ctx: ConfigDoneContext,
+  buildOutput: "static" | "server" = "server",
 ) => {
   const hook = integration.hooks["astro:config:done"];
   if (!hook) throw new Error("astro:config:done hook missing");
   void hook({
     config: ctx.config,
-    buildOutput: "server",
+    buildOutput,
     setAdapter: () => {},
     injectTypes: (injectedType: { filename: string; content: string }) => {
       ctx.injected.push(injectedType);
@@ -358,6 +359,25 @@ describe("astro:build:done", () => {
     const headers = await NodeFsPromises.readFile(NodePath.join(clientDir, "_headers"), "utf-8");
     expect(headers).toContain("/docs/_astro/*");
   });
+
+  it("with base !== '/', 404.html survives the client-dir nesting (stays under the base)", async () => {
+    const root = await makeTempRoot();
+    const clientDir = NodePath.join(root, "dist/client");
+    const nestedDir = NodePath.join(clientDir, "docs");
+    await NodeFsPromises.mkdir(nestedDir, { recursive: true });
+    // Astro writes the prerendered 404 page into the (remapped) client dir.
+    await NodeFsPromises.writeFile(NodePath.join(nestedDir, "404.html"), "<h1>not found</h1>");
+    const integration = distilledCloudflare();
+    const ctx = makeConfigDoneContext(root, "/docs");
+    runConfigDone(integration, ctx, "static");
+    await runBuildDone(integration, ctx, [], root);
+
+    // Only the asset-server special files move up; the 404 page stays nested
+    // under the base, where Cloudflare's `not_found_handling: "404-page"`
+    // nearest-parent lookup finds it for every in-base URL.
+    const nested404 = await NodeFsPromises.readFile(NodePath.join(nestedDir, "404.html"), "utf-8");
+    expect(nested404).toContain("not found");
+  });
 });
 
 describe("cloudflare target finish (base !== '/')", () => {
@@ -399,6 +419,52 @@ describe("cloudflare target finish (base !== '/')", () => {
       }>,
     );
     expect(finished.clientDirectory).toBe(clientDirectory);
+  });
+
+  it("strips serverModules when the resolved buildOutput is static (assets-only)", async () => {
+    const root = await makeTempRoot();
+    const target = cloudflareTarget({});
+    const integration = target.integration();
+    const ctx = makeConfigDoneContext(root, "/");
+    runConfigDone(integration, ctx, "static");
+    const clientDirectory = NodePath.join(root, "dist/client");
+    const output = {
+      clientDirectory,
+      // Astro bundles an SSR entry even for a fully-static build (it drives
+      // prerendering); the finish pass must drop it from the deploy.
+      serverModules: [{ name: "entry.mjs", content: "export default {}" }],
+      externalWorkspaces: new Set<string>(),
+    };
+    const finished = await Effect.runPromise(
+      target.finish!(output as never, { root, framework: "astro" }) as unknown as Effect.Effect<{
+        clientDirectory: string | undefined;
+        serverModules: unknown;
+      }>,
+    );
+    expect(finished.serverModules).toBeUndefined();
+    expect(finished.clientDirectory).toBe(clientDirectory);
+  });
+
+  it("static + base !== '/': assets-only AND clientDirectory back at the original dir", async () => {
+    const root = await makeTempRoot();
+    const target = cloudflareTarget({});
+    const integration = target.integration();
+    const ctx = makeConfigDoneContext(root, "/docs");
+    runConfigDone(integration, ctx, "static");
+    const nested = NodePath.join(root, "dist/client/docs");
+    const output = {
+      clientDirectory: nested,
+      serverModules: [{ name: "entry.mjs", content: "export default {}" }],
+      externalWorkspaces: new Set<string>(),
+    };
+    const finished = await Effect.runPromise(
+      target.finish!(output as never, { root, framework: "astro" }) as unknown as Effect.Effect<{
+        clientDirectory: string | undefined;
+        serverModules: unknown;
+      }>,
+    );
+    expect(finished.serverModules).toBeUndefined();
+    expect(finished.clientDirectory).toBe(NodePath.join(root, "dist/client"));
   });
 });
 

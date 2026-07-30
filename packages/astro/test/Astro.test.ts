@@ -144,14 +144,17 @@ describe("makeIntegrationPluginOptions", () => {
 });
 
 describe("makeAstroInlineConfig", () => {
-  it("pins root, leaves configFile undiscovered-default, injects the target integration; defaults output to server", () => {
+  it("pins root, leaves configFile undiscovered-default, injects the target integration; leaves output unset", () => {
     const config = makeAstroInlineConfig({ root: ROOT, integration: TEST_ADAPTER });
     expect(config.root).toBe(ROOT);
     // The user's astro.config.* must load natively: configFile stays
     // undefined so astro's own discovery runs (and degrades gracefully to
     // no file — the internal programmatic fallback).
     expect(config.configFile).toBeUndefined();
-    expect(config.output).toBe("server");
+    // The inline config merges OVER the config file, so a default `output`
+    // here would clobber the file's (e.g. an explicit "static"). It must
+    // only appear when passed explicitly via the user overrides.
+    expect("output" in config).toBe(false);
     // The target integration rides in `integrations` (it self-registers as
     // the adapter at astro:config:done), never in `adapter` — an inline
     // `adapter` would deep-merge with a user-file adapter object.

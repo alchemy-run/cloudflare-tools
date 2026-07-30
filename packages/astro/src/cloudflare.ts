@@ -82,6 +82,9 @@ export const target = (config: AstroCloudflareConfig = {}): AstroCloudflareTarge
   // Written by the integration's `astro:config:done` (the client directory
   // before the `base !== "/"` remap nests it); read by `finish` below.
   let originalClientDir: string | undefined;
+  // The resolved build output mode from `astro:config:done`: `"static"`
+  // means every route is prerendered, so the deploy must be assets-only.
+  let buildOutput: "static" | "server" | undefined;
   return makeDeployTarget({
     platform: "cloudflare",
     config,
@@ -101,20 +104,36 @@ export const target = (config: AstroCloudflareConfig = {}): AstroCloudflareTarge
           // comparison with the collector's `resolve`d path is exact.
           originalClientDir = NodePath.resolve(dir);
         },
+        onBuildOutput: (mode) => {
+          buildOutput = mode;
+        },
       }),
-    // With `base !== "/"` the client build is nested under the base
-    // (`dist/client/<base>/`), so the collector captures the nested
-    // directory. The directory that must be served at the URL root is the
-    // original one — the in-memory equivalent of upstream's emitted
-    // wrangler.json `assets.directory` patch.
-    finish: (output) =>
-      Effect.succeed(
+    // Two in-memory equivalents of upstream's emitted-wrangler.json patches:
+    //
+    // - With `base !== "/"` the client build is nested under the base
+    //   (`dist/client/<base>/`), so the collector captures the nested
+    //   directory. The directory that must be served at the URL root is the
+    //   original one (upstream: the wrangler.json `assets.directory` patch).
+    // - A fully-static build (`buildOutput === "static"` at
+    //   `astro:config:done`: every route prerendered) deploys ASSETS-ONLY:
+    //   the SSR entry astro bundled for prerendering is dropped from the
+    //   output (`serverModules: undefined`) and the client directory carries
+    //   all prerendered HTML, `404.html` included.
+    finish: (output) => {
+      const clientDirectory =
         originalClientDir !== undefined &&
-          output.clientDirectory !== undefined &&
-          output.clientDirectory !== originalClientDir
-          ? { ...output, clientDirectory: originalClientDir }
-          : output,
-      ),
+        output.clientDirectory !== undefined &&
+        output.clientDirectory !== originalClientDir
+          ? originalClientDir
+          : output.clientDirectory;
+      return Effect.succeed(
+        buildOutput === "static"
+          ? { ...output, clientDirectory, serverModules: undefined }
+          : clientDirectory !== output.clientDirectory
+            ? { ...output, clientDirectory }
+            : output,
+      );
+    },
   });
 };
 

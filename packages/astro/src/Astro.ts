@@ -41,9 +41,12 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
   readonly targetConfig?: TargetConfig | undefined;
   /**
    * Extra Astro config merged into the in-memory `AstroInlineConfig`
-   * (`site`, `base`, `integrations`, `devToolbar`, `vite`, ...). `root`,
-   * `configFile: false`, and `adapter` are pinned by the integration and
-   * cannot be overridden; `output` defaults to `"server"`.
+   * (`site`, `base`, `integrations`, `devToolbar`, `vite`, ...). The
+   * project's own `astro.config.*` file loads natively; this inline config
+   * is merged OVER it by astro (arrays like `integrations`/`vite.plugins`
+   * concatenate, scalars override). `root` is pinned; `output` defaults to
+   * `"server"`. Do not pass `adapter` — the deploy target provides it, and
+   * a user-declared adapter fails the build with an actionable error.
    */
   readonly astro?: AstroInlineConfig | undefined;
   /** Project root. Defaults to the process working directory. */
@@ -54,8 +57,13 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
 export interface AstroConfigInputs {
   /** Absolute project root. */
   readonly root: string;
-  /** The adapter integration supplied by the deploy target. */
-  readonly adapter: AstroIntegration;
+  /**
+   * The deploy target's integration. Injected via `integrations` (after the
+   * user's) rather than `adapter`: it registers itself as the adapter at
+   * `astro:config:done`, where it also rejects a user-declared adapter with
+   * an actionable error.
+   */
+  readonly integration: AstroIntegration;
   /** User Astro config merged in (its `vite.plugins` are preserved). */
   readonly userConfig?: AstroInlineConfig | undefined;
   /** Dev-server port (merged into `server.port`). */
@@ -68,11 +76,16 @@ export interface AstroConfigInputs {
 }
 
 /**
- * Build the in-memory `AstroInlineConfig` — the whole replacement for
- * `astro.config.*` (and, with the Cloudflare target, `wrangler.json`):
+ * Build the in-memory `AstroInlineConfig` — the overlay astro merges OVER
+ * the project's own `astro.config.*` (which loads natively; `configFile`
+ * is left undiscovered-default, so a project without a config file falls
+ * back to a purely programmatic config). Astro's `resolveConfig` merge
+ * gives this inline config precedence: arrays (`integrations`,
+ * `vite.plugins`) concatenate after the file's, scalars override.
  *
- * - `configFile: false` so the config is fully programmatic.
- * - `adapter` is pinned to the deploy target's integration.
+ * - The deploy target's integration is appended to `integrations` (it
+ *   registers itself as the adapter at `astro:config:done` and fails the
+ *   build if the user config already declares an `adapter`).
  * - `output` defaults to `"server"` (overridable via the user config).
  * - User `vite.plugins` are preserved ahead of the collector.
  */
@@ -90,8 +103,7 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
     logLevel: "warn",
     ...user,
     root: inputs.root,
-    configFile: false,
-    adapter: inputs.adapter,
+    integrations: [...(user?.integrations ?? []), inputs.integration],
     server,
     vite: {
       ...user?.vite,
@@ -179,7 +191,7 @@ export const make = <TargetConfig = unknown>(
       ): AstroInlineConfig =>
         makeAstroInlineConfig({
           root,
-          adapter: target.integration(),
+          integration: target.integration(),
           userConfig: options?.astro,
           ...overrides,
         });

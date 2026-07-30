@@ -58,6 +58,17 @@ for (const mode of Playwright.SERVER_METHODS) {
       expect(json).toMatchObject({ value: FIXTURE_VALUE, hasAssetsBinding: true });
     });
 
+    it("honors astro.config.mjs: user integration route + user vite define", async ({ server }) => {
+      // The /user-integration route only exists because the user's own
+      // astro.config.mjs was loaded natively: a user integration injects it,
+      // and the page renders a value produced by the file's `vite.define`.
+      const response = await server.fetch("/user-integration");
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain("injected-by-user-integration");
+      expect(html).toContain("hello-from-user-vite-define");
+    });
+
     it("runs middleware: locals + response-header mutation", async ({ server }) => {
       const response = await server.fetch("/locals");
       expect(response.status).toBe(200);

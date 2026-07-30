@@ -241,6 +241,14 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
   let _buildOutput: "static" | "server";
   let _originalClientDir: URL;
   let _routes: Array<IntegrationResolvedRoute> = [];
+  // Whether WE satisfied `config.adapter`. The user's astro.config.* loads
+  // natively and this integration is injected via `integrations`, but
+  // astro's build refuses server output unless `config.adapter` is set — so
+  // `astro:config:setup` injects a hookless marker when the config declares
+  // no adapter (the real adapter registration is `setAdapter` at
+  // `astro:config:done`). When the flag is still false at
+  // `astro:config:done`, the user declared their own adapter — a conflict.
+  let _injectedAdapterMarker = false;
   return {
     name: "@distilled.cloud/astro",
     hooks: {
@@ -284,6 +292,16 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
           for (const plugin of cloudflarePlugins) {
             plugin.configureServer = undefined;
           }
+        }
+
+        if (config.adapter === undefined) {
+          // Satisfy astro's `config.adapter` existence check (the build
+          // refuses server output without it). Hookless on purpose: the
+          // marker is inert even if a later `runHookConfigSetup` pass
+          // unshifts it into `integrations`; the real adapter is registered
+          // via `setAdapter` at `astro:config:done`.
+          _injectedAdapterMarker = true;
+          updateConfig({ adapter: { name: "@distilled.cloud/astro", hooks: {} } });
         }
 
         updateConfig({
@@ -417,6 +435,19 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
         _routes = routes;
       },
       "astro:config:done": ({ setAdapter, config, injectTypes, buildOutput }) => {
+        // The user's astro.config.* loads natively and this integration is
+        // merged over it, so a user-declared adapter (e.g. upstream
+        // @astrojs/cloudflare) would collide with the one the deploy target
+        // provides. Fail with an actionable error instead of letting the two
+        // adapters race.
+        if (config.adapter !== undefined && !_injectedAdapterMarker) {
+          throw new Error(
+            `@distilled.cloud/astro: the Astro config declares the adapter "${config.adapter.name}", ` +
+              "but the deploy target already provides the Cloudflare adapter. " +
+              "Remove `adapter` from your astro.config file — user integrations " +
+              "(react, mdx, tailwind, ...) are honored, and the adapter is injected by the toolchain.",
+          );
+        }
         _config = config;
         _buildOutput = buildOutput;
         _originalClientDir = new URL(config.build.client.href);

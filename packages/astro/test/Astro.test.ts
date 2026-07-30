@@ -144,24 +144,33 @@ describe("makeIntegrationPluginOptions", () => {
 });
 
 describe("makeAstroInlineConfig", () => {
-  it("pins root, configFile: false, and the target's adapter; defaults output to server", () => {
-    const config = makeAstroInlineConfig({ root: ROOT, adapter: TEST_ADAPTER });
+  it("pins root, leaves configFile undiscovered-default, injects the target integration; defaults output to server", () => {
+    const config = makeAstroInlineConfig({ root: ROOT, integration: TEST_ADAPTER });
     expect(config.root).toBe(ROOT);
-    expect(config.configFile).toBe(false);
+    // The user's astro.config.* must load natively: configFile stays
+    // undefined so astro's own discovery runs (and degrades gracefully to
+    // no file — the internal programmatic fallback).
+    expect(config.configFile).toBeUndefined();
     expect(config.output).toBe("server");
-    expect((config.adapter as AstroIntegration).name).toBe("test-adapter");
+    // The target integration rides in `integrations` (it self-registers as
+    // the adapter at astro:config:done), never in `adapter` — an inline
+    // `adapter` would deep-merge with a user-file adapter object.
+    expect(config.adapter).toBeUndefined();
+    expect((config.integrations as Array<AstroIntegration>).map((i) => i.name)).toEqual([
+      "test-adapter",
+    ]);
   });
 
-  it("merges user config but keeps the pinned fields", () => {
+  it("merges user config, appends the target integration after the user's", () => {
+    const userIntegration: AstroIntegration = { name: "user-integration", hooks: {} };
     const config = makeAstroInlineConfig({
       root: ROOT,
-      adapter: TEST_ADAPTER,
+      integration: TEST_ADAPTER,
       userConfig: {
         site: "https://example.com",
         output: "static",
         root: "/elsewhere",
-        configFile: "/elsewhere/astro.config.ts",
-        adapter: { name: "user-adapter", hooks: {} },
+        integrations: [userIntegration],
         devToolbar: { enabled: false },
       },
     });
@@ -169,14 +178,26 @@ describe("makeAstroInlineConfig", () => {
     expect(config.output).toBe("static");
     expect(config.devToolbar).toEqual({ enabled: false });
     expect(config.root).toBe(ROOT);
-    expect(config.configFile).toBe(false);
-    expect((config.adapter as AstroIntegration).name).toBe("test-adapter");
+    expect(config.configFile).toBeUndefined();
+    expect((config.integrations as Array<AstroIntegration>).map((i) => i.name)).toEqual([
+      "user-integration",
+      "test-adapter",
+    ]);
+  });
+
+  it("lets a user-supplied adapter flow through so astro:config:done rejects it with the actionable error", () => {
+    const config = makeAstroInlineConfig({
+      root: ROOT,
+      integration: TEST_ADAPTER,
+      userConfig: { adapter: { name: "user-adapter", hooks: {} } },
+    });
+    expect((config.adapter as AstroIntegration).name).toBe("user-adapter");
   });
 
   it("merges the dev port into server options", () => {
     const config = makeAstroInlineConfig({
       root: ROOT,
-      adapter: TEST_ADAPTER,
+      integration: TEST_ADAPTER,
       userConfig: { server: { host: "127.0.0.1" } },
       port: 3102,
     });
@@ -188,7 +209,7 @@ describe("makeAstroInlineConfig", () => {
     const collectorPlugin: ViteModule.Plugin = { name: "alchemy:build-output" };
     const config = makeAstroInlineConfig({
       root: ROOT,
-      adapter: TEST_ADAPTER,
+      integration: TEST_ADAPTER,
       userConfig: { vite: { plugins: [userPlugin] } },
       extraVitePlugins: [collectorPlugin],
     });
@@ -313,6 +334,77 @@ describe("distilledCloudflare astro:config:done", () => {
       preserveBuildClientDir: true,
       preserveBuildServerDir: true,
     });
+  });
+
+  it("injects a hookless adapter marker at astro:config:setup when the config declares none", () => {
+    // Astro's build refuses server output unless `config.adapter` is set;
+    // the integration (injected via `integrations`) satisfies the check
+    // with an inert marker while `setAdapter` registers the real adapter.
+    const integration = distilledCloudflare();
+    const updates: Array<Record<string, unknown>> = [];
+    const hook = integration.hooks["astro:config:setup"];
+    if (!hook) throw new Error("astro:config:setup hook missing");
+    void hook({
+      command: "build",
+      config: { vite: {}, image: {} },
+      updateConfig: (update: unknown) => {
+        updates.push(update as Record<string, unknown>);
+        return {} as never;
+      },
+      logger: noopLogger,
+    } as never);
+    const marker = updates.find((update) => update.adapter !== undefined)?.adapter as
+      | { name: string; hooks: Record<string, unknown> }
+      | undefined;
+    expect(marker).toEqual({ name: "@distilled.cloud/astro", hooks: {} });
+    // With the marker injected, astro:config:done registers the adapter.
+    const done = integration.hooks["astro:config:done"];
+    if (!done) throw new Error("astro:config:done hook missing");
+    let adapter: Record<string, unknown> | undefined;
+    void done({
+      buildOutput: "server",
+      config: {
+        base: "/",
+        adapter: marker,
+        build: { client: new URL("file:///project/dist/client/") },
+      },
+      injectTypes: () => new URL("file:///dev/null"),
+      setAdapter: (value: unknown) => {
+        adapter = value as Record<string, unknown>;
+      },
+    } as never);
+    expect(adapter?.name).toBe("@distilled.cloud/astro");
+  });
+
+  it("does not inject the marker when the config declares an adapter, and fails at astro:config:done", () => {
+    const integration = distilledCloudflare();
+    const updates: Array<Record<string, unknown>> = [];
+    const setup = integration.hooks["astro:config:setup"];
+    if (!setup) throw new Error("astro:config:setup hook missing");
+    void setup({
+      command: "build",
+      config: { vite: {}, image: {}, adapter: { name: "@astrojs/cloudflare", hooks: {} } },
+      updateConfig: (update: unknown) => {
+        updates.push(update as Record<string, unknown>);
+        return {} as never;
+      },
+      logger: noopLogger,
+    } as never);
+    expect(updates.every((update) => update.adapter === undefined)).toBe(true);
+    const done = integration.hooks["astro:config:done"];
+    if (!done) throw new Error("astro:config:done hook missing");
+    expect(() =>
+      done({
+        buildOutput: "server",
+        config: {
+          base: "/",
+          adapter: { name: "@astrojs/cloudflare", hooks: {} },
+          build: { client: new URL("file:///project/dist/client/") },
+        },
+        injectTypes: () => new URL("file:///dev/null"),
+        setAdapter: () => {},
+      } as never),
+    ).toThrow(/declares the adapter "@astrojs\/cloudflare"[\s\S]*Remove `adapter`/);
   });
 });
 

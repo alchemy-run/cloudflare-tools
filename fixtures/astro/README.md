@@ -1,8 +1,9 @@
 # @fixtures/astro
 
 E2e fixture for `@distilled.cloud/astro` — a wrangler-free Astro app on
-Cloudflare Workers, driven entirely through the e2e harness's `Framework`
-service (no `astro.config.*`, no `wrangler.json`).
+Cloudflare Workers, driven through the e2e harness's `Framework` service
+(no `wrangler.json`). The project's own `astro.config.mjs` loads natively;
+the toolchain's config is an inline overlay astro merges over it.
 
 `e2e.config.ts` uses the target-scoped config carriage (`target.cloudflare`)
 and passes the Cloudflare deploy target as a typed _value_
@@ -11,6 +12,9 @@ and passes the Cloudflare deploy target as a typed _value_
 
 The app exercises:
 
+- a real user `astro.config.mjs` honored natively: a user integration
+  injects the on-demand `/user-integration` route, and a user `vite.define`
+  setting is rendered into its HTML — both asserted e2e in dev and live
 - an on-demand SSR page (`/`) reading a `Text.local` binding via
   `cloudflare:workers`, with a client-interactive counter script
 - middleware (`src/middleware.ts`): writes `Astro.locals` (rendered by

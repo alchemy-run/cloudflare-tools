@@ -213,9 +213,11 @@ export interface AstroSourceOptions {
   readonly sessionDevKV?: boolean;
   /**
    * JSON-serializable subset of Astro config merged into the in-memory
-   * `AstroInlineConfig`. The project's `astro.config.*` file is NOT
-   * read (the integration is fully programmatic); use these fields for
-   * the common serializable knobs.
+   * `AstroInlineConfig`. The project's `astro.config.*` file loads
+   * natively; astro merges this inline overlay OVER it (scalars here
+   * override the file). The file itself participates in the `input`
+   * memo hash like any other project file, so these options stay
+   * JSON-serializable while the config file stays fully expressive.
    */
   readonly astro?: {
     readonly site?: string;

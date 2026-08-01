@@ -57,6 +57,11 @@ export async function handle(
   env: Env,
   context: ExecutionContext,
 ): Promise<CfResponse> {
+  // Sessions must be wired before the prerender branch below — prerender
+  // requests return from `handlePrerenderRequest` without falling through,
+  // and session-touching pages render inside it.
+  injectSessionBinding(app.manifest, env);
+
   // Handle prerender endpoints (only active during build prerender phase)
   if (isPrerender) {
     if (compileImageConfig) {
@@ -74,8 +79,6 @@ export async function handle(
       return handleStaticImagesRequest() as unknown as CfResponse;
     }
   }
-
-  injectSessionBinding(app.manifest, env);
 
   // NOTE this ASSETS binding path is needed for users who are using `run_worker_first` routing
   const staticAsset = matchStaticAsset(app.manifest, request.url, env);

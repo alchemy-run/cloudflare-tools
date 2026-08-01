@@ -204,10 +204,12 @@ export interface AstroSourceOptions {
    */
   readonly sessions?: boolean;
   /**
-   * In dev, auto-inject an in-memory local KV namespace for the session
-   * binding. Disable once the Worker's own bindings deliver a KV binding
-   * with that name (e.g. when alchemy provisions the session namespace and
-   * passes it through the dev bindings).
+   * Auto-inject an in-memory local KV namespace for the session binding: in
+   * dev on the dev worker, at build time on the workerd prerender worker
+   * (so session-touching pages can prerender before the Worker's real
+   * namespace exists). Disable once the Worker's own bindings deliver a KV
+   * binding with that name (e.g. when alchemy provisions the session
+   * namespace and passes it through the dev bindings).
    * @default true
    */
   readonly sessionDevKV?: boolean;

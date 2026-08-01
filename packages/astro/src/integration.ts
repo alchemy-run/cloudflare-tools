@@ -83,12 +83,17 @@ export interface DistilledCloudflareOptions {
    */
   readonly sessions?: boolean | undefined;
   /**
-   * In dev, automatically add an in-memory local KV namespace
-   * (`KvNamespace.local({ binding: sessionKVBindingName })`) to the worker bindings so
-   * zero-config sessions work without any setup. Disable when the dev
-   * bindings already carry a KV binding with that name (binding names must
-   * be unique) — e.g. when an outer toolchain provisions the session
-   * namespace itself and passes it through `vite.worker.bindings`.
+   * Automatically add an in-memory local KV namespace
+   * (`KvNamespace.local({ binding: sessionKVBindingName })`) so zero-config
+   * sessions work without any setup: in dev it is appended to the dev worker
+   * bindings; at build time (workerd prerendering) it is appended to the
+   * prerender environment worker's bindings so session-touching pages can
+   * prerender (the deployed Worker still uses its real KV binding — the
+   * prerender KV is ephemeral, matching upstream's local preview bindings).
+   * Disable when the bindings already carry a KV binding with that name
+   * (binding names must be unique) — e.g. when an outer toolchain provisions
+   * the session namespace itself and passes it through
+   * `vite.worker.bindings`.
    * @default true
    */
   readonly sessionDevKV?: boolean | undefined;
@@ -199,6 +204,29 @@ export const withDevSessionKv = (
 });
 
 /**
+ * The workerd prerenderer's vite-plugin options (exported for testing): when
+ * zero-config sessions resolved to the Cloudflare KV driver, the same
+ * in-memory local KV namespace that dev injects is appended to the prerender
+ * worker's bindings — session-touching pages can then prerender without the
+ * deployed Worker's real KV namespace existing at build time (upstream's
+ * prerender worker receives the local preview bindings the same way). The
+ * KV is ephemeral: session state written during prerendering is discarded
+ * with the prerender worker. `sessionDevKV: false` opts out (e.g. when the
+ * caller's own `vite.worker.bindings` already carry the session binding).
+ */
+export const withPrerenderSessionKv = (
+  viteOptions: CloudflareVitePluginOptions | undefined,
+  options: {
+    readonly needsSessionKVBinding: boolean;
+    readonly sessionDevKV: boolean;
+    readonly binding: string;
+  },
+): CloudflareVitePluginOptions | undefined =>
+  options.needsSessionKVBinding && options.sessionDevKV
+    ? withDevSessionKv(viteOptions, options.binding)
+    : viteOptions;
+
+/**
  * The `@distilled.cloud/cloudflare-vite-plugin` options for an Astro project:
  * user options with `main` pinned to the vendored server entrypoint, the
  * worker pinned to Astro's `ssr` environment, and Astro's node-side
@@ -250,6 +278,11 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
   let _buildOutput: "static" | "server";
   let _originalClientDir: URL;
   let _routes: Array<IntegrationResolvedRoute> = [];
+  // Whether the (possibly zero-config-defaulted) session config resolved to
+  // the Cloudflare KV driver — set at `astro:config:setup`, read at
+  // `astro:build:start` to give the workerd prerender worker a local
+  // session KV.
+  let _needsSessionKVBinding = false;
   // Whether WE satisfied `config.adapter`. The user's astro.config.* loads
   // natively and this integration is injected via `integrations`, but
   // astro's build refuses server output unless `config.adapter` is set — so
@@ -280,6 +313,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
           } as typeof config.session;
         }
         const needsSessionKVBinding = sessions && usesCloudflareKVSessionDriver(session);
+        _needsSessionKVBinding = needsSessionKVBinding;
 
         // In dev, satisfy the session KV binding with an in-memory local KV
         // namespace so zero-config sessions work without any setup.
@@ -509,7 +543,14 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
             // directory too.
             clientDir: _originalClientDir,
             trailingSlash: _config.trailingSlash,
-            vite: options.vite,
+            // Zero-config sessions: the prerender worker gets an ephemeral
+            // in-memory SESSION KV (the deployed Worker's real namespace
+            // need not exist at build time). See `withPrerenderSessionKv`.
+            vite: withPrerenderSessionKv(options.vite, {
+              needsSessionKVBinding: _needsSessionKVBinding,
+              sessionDevKV,
+              binding: sessionKVBindingName,
+            }),
           }),
         );
       },

@@ -58,9 +58,11 @@ export interface AstroCloudflareConfig {
    */
   readonly sessions?: boolean | undefined;
   /**
-   * In dev, auto-inject an in-memory local KV namespace for the session
-   * binding. Disable when the dev worker bindings already carry a KV binding
-   * with that name.
+   * Auto-inject an in-memory local KV namespace for the session binding: in
+   * dev on the dev worker, at build time on the workerd prerender worker
+   * (session-touching pages can prerender without the real namespace).
+   * Disable when the worker bindings already carry a KV binding with that
+   * name.
    * @default true
    */
   readonly sessionDevKV?: boolean | undefined;
@@ -146,5 +148,6 @@ export {
   SERVER_ENTRYPOINT,
   usesCloudflareKVSessionDriver,
   withDevSessionKv,
+  withPrerenderSessionKv,
   type DistilledCloudflareOptions,
 } from "./integration.ts";

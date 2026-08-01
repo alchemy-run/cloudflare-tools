@@ -15,6 +15,7 @@ import cloudflareTarget, {
   distilledCloudflare,
   usesCloudflareKVSessionDriver,
   withDevSessionKv,
+  withPrerenderSessionKv,
   type DistilledCloudflareOptions,
 } from "../src/cloudflare.ts";
 import { buildAssetsHeadersContent, headersFileHasCacheControlForPath } from "../src/headers.ts";
@@ -191,6 +192,28 @@ describe("zero-config sessions", () => {
 
     const fromScratch = withDevSessionKv(undefined, "SESSION");
     expect(fromScratch.worker?.bindings).toHaveLength(1);
+  });
+
+  it("withPrerenderSessionKv injects the local KV only when sessions need it", () => {
+    const injected = withPrerenderSessionKv(undefined, {
+      needsSessionKVBinding: true,
+      sessionDevKV: true,
+      binding: "SESSION",
+    });
+    expect(injected?.worker?.bindings).toHaveLength(1);
+
+    const optedOut = withPrerenderSessionKv(undefined, {
+      needsSessionKVBinding: true,
+      sessionDevKV: false,
+      binding: "SESSION",
+    });
+    expect(optedOut).toBeUndefined();
+
+    const noSessions = withPrerenderSessionKv(
+      { worker: { name: "w" } as never },
+      { needsSessionKVBinding: false, sessionDevKV: true, binding: "SESSION" },
+    );
+    expect(noSessions?.worker?.bindings).toBeUndefined();
   });
 });
 

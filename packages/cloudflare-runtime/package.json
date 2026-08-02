@@ -37,7 +37,9 @@
     "./bindings/analytics-engine/AnalyticsEngine": "./dist/node/bindings/analytics-engine/AnalyticsEngine.mjs",
     "./bindings/Artifacts": "./dist/node/bindings/Artifacts.mjs",
     "./bindings/assets/Assets": "./dist/node/bindings/assets/Assets.mjs",
-    "./bindings/Browser": "./dist/node/bindings/Browser.mjs",
+    "./bindings/browser": "./dist/node/bindings/browser/index.mjs",
+    "./bindings/browser/Browser": "./dist/node/bindings/browser/Browser.mjs",
+    "./bindings/browser/BrowserOptions": "./dist/node/bindings/browser/BrowserOptions.shared.mjs",
     "./bindings/cache": "./dist/node/bindings/cache/index.mjs",
     "./bindings/cache/Cache": "./dist/node/bindings/cache/Cache.mjs",
     "./bindings/cache/CacheOptions": "./dist/node/bindings/cache/CacheOptions.shared.mjs",
@@ -137,6 +139,7 @@
   },
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
+    "@puppeteer/browsers": "^2.10.6",
     "workerd": "catalog:workers"
   },
   "devDependencies": {

@@ -21,6 +21,7 @@ export * as Pipelines from "./Pipelines.ts";
 export * as Queue from "./queue/index.ts";
 export * as R2Bucket from "./r2-bucket/index.ts";
 export * as RateLimit from "./rate-limit/index.ts";
+export * as SecretKey from "./SecretKey.ts";
 export * as SendEmail from "./send-email/index.ts";
 export * as Service from "./Service.ts";
 export * as Text from "./Text.ts";

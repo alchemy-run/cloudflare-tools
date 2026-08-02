@@ -2,6 +2,7 @@ import type { ExportedHandler, Fetcher } from "@cloudflare/workers-types/experim
 import { makeErrorResponse } from "../internal/response.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import { HEADER_CF_BLOB } from "./CfOptions.shared.ts";
+import { PATH_SCHEDULED, PATH_SCHEDULED_LEGACY } from "./ScheduledOptions.shared.ts";
 
 interface Env {
   USER_WORKER: Fetcher;
@@ -34,6 +35,34 @@ export default <ExportedHandler<Env>>{
           new SystemError({
             subtag: "UserQueueHandler",
             message: `User worker's queue handler threw: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+            cause: error,
+          }),
+        );
+      }
+    }
+    // Trigger the user worker's `scheduled()` handler, mirroring Miniflare's
+    // `/cdn-cgi/handler/scheduled` route (`workers/core/scheduled.ts`).
+    // Like the queue route above, this is always on: the entry socket only
+    // binds 127.0.0.1 during local development, so there is no equivalent of
+    // Miniflare's `unsafeTriggerHandlers` gate.
+    if (url.pathname === PATH_SCHEDULED || url.pathname === PATH_SCHEDULED_LEGACY) {
+      try {
+        const time = url.searchParams.get("time");
+        const result = await env.USER_WORKER.scheduled({
+          scheduledTime: time ? new Date(parseInt(time)) : undefined,
+          cron: url.searchParams.get("cron") ?? undefined,
+        });
+        if (url.searchParams.get("format") === "json") {
+          return Response.json(result, { status: result.outcome === "ok" ? 200 : 500 });
+        }
+        return new Response(result.outcome, { status: result.outcome === "ok" ? 200 : 500 });
+      } catch (error) {
+        return makeErrorResponse(
+          new SystemError({
+            subtag: "UserScheduledHandler",
+            message: `User worker's scheduled handler threw: ${
               error instanceof Error ? error.message : String(error)
             }`,
             cause: error,

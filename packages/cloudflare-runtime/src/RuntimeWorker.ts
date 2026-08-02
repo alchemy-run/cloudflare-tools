@@ -26,6 +26,14 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
   /**
+   * Cron expressions (UTC) that trigger this worker's `scheduled()` handler.
+   * Each expression gets a Node-side timer that hits the entry socket's
+   * `/cdn-cgi/handler/scheduled` route at every match, so crons actually
+   * fire during local development. The route is also reachable manually
+   * (Miniflare-compatible: `?cron=<expr>&time=<epoch-millis>`).
+   */
+  readonly crons?: ReadonlyArray<string>;
+  /**
    * Whether the Cache API (`caches.default` / `caches.open()`) stores
    * responses. Defaults to `true`; when `false` every cache operation is a
    * no-op (matching production behaviour on `workers.dev` subdomains).

@@ -1,14 +1,54 @@
+import * as Cause from "effect/Cause";
+import * as Cron from "effect/Cron";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as EntryWorker from "worker:./entry.worker.ts";
+import { SOCKET_USER_ENTRY } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
+import { ConfigError } from "../RuntimeError.shared.ts";
 import * as Cf from "./Cf.ts";
 import * as Internet from "./Internet.ts";
+import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
 
 export class Globals extends Plugin.Service<Globals>()("cloudflare-runtime/plugin/Globals") {}
+
+/**
+ * Fire one cron expression against the entry socket's scheduled route.
+ *
+ * Driven by `Schedule.cron`: each iteration sleeps until the expression's
+ * next match, then triggers the route — no polling, no manual clock math.
+ * Trigger failures are logged and the loop continues. The loop runs on the
+ * worker's start `Scope`, so it dies with the worker.
+ */
+const cronLoop = (workerName: string, expression: string, cron: Cron.Cron, port: number) => {
+  const fire = Effect.gen(function* () {
+    const time = yield* Effect.sync(() => Date.now());
+    const url =
+      `http://127.0.0.1:${port}${PATH_SCHEDULED}` +
+      `?cron=${encodeURIComponent(expression)}&time=${time}`;
+    const response = yield* Effect.tryPromise(() => fetch(url, { method: "POST" }));
+    const body = yield* Effect.tryPromise(() => response.text());
+    if (response.ok) {
+      yield* Effect.logInfo(`[cron:${workerName}] "${expression}" triggered scheduled(): ${body}`);
+    } else {
+      yield* Effect.logWarning(
+        `[cron:${workerName}] "${expression}" scheduled() handler failed: ${body}`,
+      );
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(`[cron:${workerName}] "${expression}" trigger failed`, Cause.squash(cause)),
+    ),
+  );
+  // `Schedule.cron` over a pre-parsed `Cron` cannot fail to parse, so the
+  // loop's error channel is `never`.
+  return fire.pipe(Effect.schedule(Schedule.cron(cron)), Effect.asVoid);
+};
 
 export const GlobalsLive = Layer.effect(
   Globals,
@@ -23,6 +63,23 @@ export const GlobalsLive = Layer.effect(
         // Per-worker `request.cf` override; falls back to the runtime-wide
         // `Cf` reference (Miniflare's static placeholder by default).
         const blob = worker.cf ?? cf;
+        // Validate cron expressions up front so a typo is a `ConfigError` at
+        // plan/config time rather than a dead timer at runtime. Cloudflare
+        // evaluates crons in UTC; pin the parse to UTC so `Cron.next`
+        // matches production timing.
+        const crons = yield* Effect.forEach(worker.crons ?? [], (expression) => {
+          const parsed = Cron.parse(expression, "UTC");
+          return Result.isSuccess(parsed)
+            ? Effect.succeed({ expression, cron: parsed.success })
+            : Effect.fail(
+                new ConfigError({
+                  subtag: "InvalidCron",
+                  message: `Invalid cron expression "${expression}": ${parsed.failure.message}`,
+                  hint: 'Use a standard cron expression, e.g. "*/5 * * * *".',
+                  detail: { workerName: worker.name, expression },
+                }),
+              );
+        });
         return {
           middlewares: [
             {
@@ -41,6 +98,20 @@ export const GlobalsLive = Layer.effect(
             },
           ],
           services: [internet, storage],
+          start:
+            crons.length === 0
+              ? undefined
+              : (ports) =>
+                  Effect.gen(function* () {
+                    const port = ports[SOCKET_USER_ENTRY];
+                    if (port === undefined) return;
+                    yield* Effect.forEach(
+                      crons,
+                      ({ expression, cron }) =>
+                        Effect.forkScoped(cronLoop(worker.name, expression, cron, port)),
+                      { discard: true },
+                    );
+                  }),
         };
       }),
     );

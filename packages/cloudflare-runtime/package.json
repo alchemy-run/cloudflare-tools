@@ -92,6 +92,7 @@
     "./globals/Internet": "./dist/node/globals/Internet.mjs",
     "./globals/Loopback": "./dist/node/globals/Loopback.mjs",
     "./globals/LoopbackServer": "./dist/node/globals/LoopbackServer.mjs",
+    "./globals/ScheduledOptions": "./dist/node/globals/ScheduledOptions.shared.mjs",
     "./globals/Storage": "./dist/node/globals/Storage.mjs",
     "./platform-proxy": "./dist/node/platform-proxy/index.mjs",
     "./platform-proxy/getPlatformProxy": "./dist/node/platform-proxy/getPlatformProxy.mjs",

@@ -11,6 +11,7 @@ import {
   Queue,
   R2Bucket,
   RateLimit,
+  SecretsStore,
   SendEmail,
   Workflows,
 } from "./bindings/index.ts";
@@ -62,6 +63,7 @@ export const layerLocalBindings = () =>
     Queue.QueueLive,
     R2Bucket.R2BucketLive,
     RateLimit.RateLimitLive,
+    SecretsStore.SecretsStoreLive,
     SendEmail.SendEmailLive,
     Workflows.WorkflowsLive,
   );
@@ -80,6 +82,7 @@ export type BindingServices =
   | RateLimit.RateLimit
   | RemoteBindings.RemoteBindings
   | RegistryProxy.RegistryProxy
+  | SecretsStore.SecretsStore
   | SendEmail.SendEmail
   | Workflows.Workflows;
 

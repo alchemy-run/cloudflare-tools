@@ -559,7 +559,18 @@ const startBrowserTestWorker = (name: string) =>
   });
 
 layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering binding", (it) => {
-  it.effect(
+  // Real Chrome destabilizes the Windows CI runner: after this suite ran,
+  // every subsequent vitest fork worker failed its 60s start handshake
+  // ("[vitest-pool]: Failed to start forks worker ... Timeout waiting for
+  // worker to respond"), cascading into a 45+ minute all-red run (CI run
+  // 30741543083, windows-latest: the six largest files ran, this suite passed
+  // in 51s, then all 38 remaining files failed to start). Orphaned Chrome
+  // process trees surviving per-test teardown on the 4-core runner are the
+  // most likely cause. Keep the suite on Linux/macOS CI and on Windows dev
+  // machines; gate only the Windows CI runner.
+  const test = it.effect.skipIf(process.platform === "win32" && !!process.env.CI);
+
+  test(
     "it creates a browser session",
     () =>
       Effect.gen(function* () {
@@ -571,7 +582,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 120_000 },
   );
 
-  it.effect(
+  test(
     "two browser bindings can coexist",
     () =>
       Effect.gen(function* () {
@@ -587,7 +598,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "it closes a browser session",
     () =>
       Effect.gen(function* () {
@@ -597,7 +608,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "it reuses a browser session",
     () =>
       Effect.gen(function* () {
@@ -607,7 +618,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "it reconnects and sends CDP commands after disconnect",
     () =>
       Effect.gen(function* () {
@@ -617,7 +628,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "fails if browser session already in use",
     () =>
       Effect.gen(function* () {
@@ -630,7 +641,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "gets sessions while acquiring and closing session",
     () =>
       Effect.gen(function* () {
@@ -656,7 +667,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "gets sessions while connecting and disconnecting session",
     () =>
       Effect.gen(function* () {
@@ -685,7 +696,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect("returns limits", () =>
+  test("returns limits", () =>
     Effect.gen(function* () {
       const worker = yield* startBrowserTestWorker("browser-limits");
       const res = yield* worker.fetch("/limits");
@@ -698,19 +709,17 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
       expect(typeof body.maxConcurrentSessions).toBe("number");
       expect(typeof body.allowedBrowserAcquisitions).toBe("number");
       expect(typeof body.timeUntilNextAllowedBrowserAcquisition).toBe("number");
-    }),
-  );
+    }));
 
-  it.effect("returns empty history", () =>
+  test("returns empty history", () =>
     Effect.gen(function* () {
       const worker = yield* startBrowserTestWorker("browser-history");
       const res = yield* worker.fetch("/history");
       expect(res.status).toBe(200);
       expect(yield* Effect.promise(() => res.json())).toEqual([]);
-    }),
-  );
+    }));
 
-  it.effect(
+  test(
     "devtools session list and detail endpoints",
     () =>
       Effect.gen(function* () {
@@ -730,7 +739,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "devtools json/version, json/list, json endpoints",
     () =>
       Effect.gen(function* () {
@@ -753,7 +762,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "DELETE /v1/devtools/browser/:session_id closes browser",
     () =>
       Effect.gen(function* () {
@@ -772,7 +781,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "POST /v1/devtools/browser acquires session, GET /v1/devtools/browser/:id connects and returns cf-browser-session-id",
     () =>
       Effect.gen(function* () {
@@ -795,7 +804,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "GET /v1/devtools/browser acquires and connects",
     () =>
       Effect.gen(function* () {
@@ -813,7 +822,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "devtools json/protocol endpoint",
     () =>
       Effect.gen(function* () {
@@ -824,7 +833,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "devtools json/new, json/activate, json/close endpoints",
     () =>
       Effect.gen(function* () {
@@ -841,7 +850,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "devtools page/:target_id WebSocket endpoint",
     () =>
       Effect.gen(function* () {
@@ -852,7 +861,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "DELETE without prior WebSocket connection",
     () =>
       Effect.gen(function* () {
@@ -869,7 +878,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "DELETE closes all WebSocket connections (browser + page)",
     () =>
       Effect.gen(function* () {
@@ -889,7 +898,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
     { timeout: 60_000 },
   );
 
-  it.effect(
+  test(
     "multiple concurrent raw WebSocket connections to same session",
     () =>
       Effect.gen(function* () {

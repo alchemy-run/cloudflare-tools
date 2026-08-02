@@ -37,18 +37,22 @@
       "import": "./dist/plugin.js"
     },
     "./plugins": {
+      "bun": "./src/plugins/index.ts",
       "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins/index.js"
     },
     "./export-types": {
+      "bun": "./src/export-types.ts",
       "types": "./dist/export-types.d.ts",
       "import": "./dist/export-types.js"
     },
     "./options": {
+      "bun": "./src/options.ts",
       "types": "./dist/options.d.ts",
       "import": "./dist/options.js"
     },
     "./utils": {
+      "bun": "./src/utils.ts",
       "types": "./dist/utils.d.ts",
       "import": "./dist/utils.js"
     }

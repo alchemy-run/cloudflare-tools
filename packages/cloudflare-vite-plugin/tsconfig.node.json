@@ -8,5 +8,9 @@
     // would be published by the `files` entry.
     "outDir": ".cache/node",
     "rootDir": "src"
-  }
+  },
+  "references": [
+    { "path": "../cloudflare-rolldown-plugin" },
+    { "path": "../cloudflare-runtime/tsconfig.node.json" }
+  ]
 }

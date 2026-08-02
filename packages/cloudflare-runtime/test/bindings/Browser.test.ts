@@ -16,7 +16,7 @@
  * The first Chrome launch may download the pinned build (~150 MB) into the
  * shared wrangler cache; the first test gets a generous timeout to cover it.
  */
-import { expect, layer } from "@effect/vitest";
+import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Browser from "../../src/bindings/browser/index.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
@@ -559,16 +559,16 @@ const startBrowserTestWorker = (name: string) =>
   });
 
 layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering binding", (it) => {
-  // Real Chrome destabilizes the Windows CI runner: after this suite ran,
-  // every subsequent vitest fork worker failed its 60s start handshake
-  // ("[vitest-pool]: Failed to start forks worker ... Timeout waiting for
-  // worker to respond"), cascading into a 45+ minute all-red run (CI run
-  // 30741543083, windows-latest: the six largest files ran, this suite passed
-  // in 51s, then all 38 remaining files failed to start). Orphaned Chrome
-  // process trees surviving per-test teardown on the 4-core runner are the
-  // most likely cause. Keep the suite on Linux/macOS CI and on Windows dev
-  // machines; gate only the Windows CI runner.
-  const test = it.effect.skipIf(process.platform === "win32" && !!process.env.CI);
+  // This suite previously destabilized the Windows CI runner (run
+  // 30741543083): orphaned Chrome process trees survived per-test teardown
+  // and starved the 4-core runner until every subsequent vitest fork failed
+  // its 60s start handshake. Root cause: puppeteer's `Process.close()` falls
+  // back to a single-pid `ChildProcess.kill()` when its `taskkill /T` throws
+  // (leaving Chrome's child processes orphaned on Windows), and failed
+  // launches (`waitForLineOutput`/readiness-probe errors) never killed the
+  // spawned Chrome at all. `closeBrowserProcess` in `Browser.ts` now
+  // tree-kills on every teardown path, so the suite runs on Windows CI again.
+  const test = it.effect;
 
   test(
     "it creates a browser session",
@@ -913,5 +913,63 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Browser Rendering bindi
         expect(product2).toContain("Chrome");
       }),
     { timeout: 60_000 },
+  );
+});
+
+// -----------------------------------------------------------------------------
+// No-orphan invariant: closing a launched Chrome must kill the tracked pid
+// (and, on POSIX, its whole process group — Chrome's renderer/GPU/utility
+// helpers share the detached group, so a dead group proves no orphans).
+// This pins the `closeBrowserProcess` teardown path directly, node-side,
+// without workerd in the loop.
+// -----------------------------------------------------------------------------
+
+/** Is `pid` (or, negative, its process group) still alive? */
+function isAlive(pid: number): boolean {
+  try {
+    return process.kill(pid, 0);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ESRCH") {
+      return false;
+    }
+    // EPERM etc. — the process exists but we can't signal it.
+    return true;
+  }
+}
+
+async function waitUntilDead(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isAlive(pid)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return !isAlive(pid);
+}
+
+describe("Chrome process teardown", () => {
+  it(
+    "closeBrowserProcess kills the whole Chrome process tree and is idempotent",
+    { timeout: 240_000 }, // first launch may download Chrome into the shared cache
+    async () => {
+      const { browserProcess } = await Browser.launchBrowser({ headful: false });
+      const pid = browserProcess.nodeProcess.pid;
+      expect(typeof pid).toBe("number");
+      expect(isAlive(pid!)).toBe(true);
+
+      await Browser.closeBrowserProcess(browserProcess);
+
+      // close() resolving means the root process exited.
+      expect(await waitUntilDead(pid!, 10_000)).toBe(true);
+      if (process.platform !== "win32") {
+        // Chrome is spawned detached as its own process-group leader; the
+        // group being gone proves every child in the tree died too.
+        expect(await waitUntilDead(-pid!, 10_000)).toBe(true);
+      }
+
+      // Idempotent: closing an already-dead process resolves without throwing.
+      await Browser.closeBrowserProcess(browserProcess);
+    },
   );
 });

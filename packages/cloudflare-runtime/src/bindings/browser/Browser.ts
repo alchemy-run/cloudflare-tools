@@ -9,6 +9,7 @@ import {
 } from "@puppeteer/browsers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFs from "node:fs";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
@@ -65,7 +66,7 @@ export const BrowserLive = Layer.effect(
       Effect.promise(async () => {
         const processes = [...browserProcesses.values()];
         browserProcesses.clear();
-        await Promise.all(processes.map((process) => process.close().catch(() => {})));
+        await Promise.all(processes.map((process) => closeBrowserProcess(process)));
       }),
     );
 
@@ -118,7 +119,7 @@ export const BrowserLive = Layer.effect(
           }
           browserProcesses.delete(sessionId);
           // The process might already be dead; that's fine.
-          await browserProcess.close().catch(() => {});
+          await closeBrowserProcess(browserProcess);
           return respond(200);
         }
         case "/browser/sessionIds": {
@@ -306,20 +307,71 @@ export async function launchBrowser({ headful }: { headful?: boolean }): Promise
       await removeDir(tempUserData).catch(() => {});
     },
   });
-  const wsEndpoint = await browserProcess.waitForLineOutput(
-    CDP_WEBSOCKET_ENDPOINT_REGEX,
-    // Explicit timeout so the promise rejects instead of hanging forever when
-    // Chrome fails to start or crashes before printing the DevTools URL. Five
-    // minutes covers on-demand browser downloads on slow connections.
-    5 * 60 * 1_000,
-  );
-  // Chrome may print the DevTools URL slightly before its listening socket is
-  // fully ready to accept connections (particularly on Windows). Probe the
-  // HTTP /json/version endpoint before declaring the browser ready so
-  // subsequent fetches from workerd don't race the OS.
-  await waitForBrowserReady(wsEndpoint);
+  let wsEndpoint: string;
+  try {
+    wsEndpoint = await browserProcess.waitForLineOutput(
+      CDP_WEBSOCKET_ENDPOINT_REGEX,
+      // Explicit timeout so the promise rejects instead of hanging forever when
+      // Chrome fails to start or crashes before printing the DevTools URL. Five
+      // minutes covers on-demand browser downloads on slow connections.
+      5 * 60 * 1_000,
+    );
+    // Chrome may print the DevTools URL slightly before its listening socket is
+    // fully ready to accept connections (particularly on Windows). Probe the
+    // HTTP /json/version endpoint before declaring the browser ready so
+    // subsequent fetches from workerd don't race the OS.
+    await waitForBrowserReady(wsEndpoint);
+  } catch (error) {
+    // Chrome may be alive but unready (hung startup, or the CDP socket never
+    // became reachable). The process was never registered in
+    // `browserProcesses`, so nothing else will ever kill it — without this it
+    // outlives the runtime as an orphaned process tree.
+    await closeBrowserProcess(browserProcess);
+    throw error;
+  }
   const startTime = Date.now();
   return { sessionId, browserProcess, startTime, wsEndpoint };
+}
+
+/**
+ * Close a launched Chrome, ensuring the ENTIRE process tree dies. Idempotent:
+ * calling it on an already-exited process is a no-op that still resolves.
+ *
+ * `Process.close()` from `@puppeteer/browsers` does tree-kill on its happy
+ * path (win32: `execSync("taskkill /pid <pid> /T /F")`; POSIX: SIGKILL to the
+ * detached process group). But on Windows that `execSync` throws whenever
+ * taskkill exits non-zero — which happens under CI load (a child in the tree
+ * exiting mid-kill, or Access Denied) — and puppeteer then falls back to
+ * `ChildProcess.kill()`, which on Windows terminates ONLY the root pid:
+ * Chrome's renderer/GPU/utility children survive as orphans. Orphaned Chrome
+ * trees accumulating across tests starved the 4-core Windows CI runner until
+ * every subsequent vitest fork failed its 60s start handshake (CI run
+ * 30741543083).
+ *
+ * So on Windows we run our own `taskkill /T /F` FIRST, while the tree root is
+ * still alive (once the root pid is gone, `taskkill /T` can no longer
+ * discover the children), ignoring failures, and then run puppeteer's
+ * `close()` as the second kill pass + wait-for-exit. A side benefit of
+ * killing before `close()`: the `onExit` profile-dir cleanup inside `close()`
+ * runs after Chrome released its file locks, so the temp profile actually
+ * gets deleted on Windows.
+ */
+export async function closeBrowserProcess(browserProcess: Process): Promise<void> {
+  const nodeProcess = browserProcess.nodeProcess;
+  const pid = nodeProcess.pid;
+  // Guard on "our child has not exited yet" (not just pid liveness) so a
+  // recycled pid can never make us taskkill an innocent process tree.
+  const alive =
+    pid !== undefined && nodeProcess.exitCode === null && nodeProcess.signalCode === null;
+  if (process.platform === "win32" && alive) {
+    await new Promise<void>((resolve) => {
+      NodeChildProcess.execFile("taskkill", ["/pid", String(pid), "/T", "/F"], () => resolve());
+    });
+  }
+  // Runs the onExit hook (profile cleanup), kills if still alive (second pass
+  // on Windows; the only pass on POSIX, where the process-group SIGKILL
+  // reliably takes the whole tree), and resolves once the process has exited.
+  await browserProcess.close().catch(() => {});
 }
 
 /**

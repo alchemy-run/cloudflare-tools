@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.14.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.14.0) (2026-07-29)
+
+### Features
+
+- **cloudflare-runtime**: platform proxy (getPlatformProxy) - by sam in [#88](https://github.com/alchemy-run/cloudflare-tools/pull/88) [(477cd97)](https://github.com/alchemy-run/cloudflare-tools/commit/477cd9772a3f4b90213baccccd5197afc7489741)
+- **cloudflare-runtime**: local bindings - by John Royal in [#85](https://github.com/alchemy-run/cloudflare-tools/pull/85) [(7ca4dee)](https://github.com/alchemy-run/cloudflare-tools/commit/7ca4deec28d560357af11f6499a2e35e0698e2c2)
+
+### Bug Fixes
+
+- **runtime**: refresh stale remote-binding preview sessions - by sam in [#87](https://github.com/alchemy-run/cloudflare-tools/pull/87) [(b193951)](https://github.com/alchemy-run/cloudflare-tools/commit/b1939513d9319385da8848c157dd56df473ad893)
+- **vite-plugin**: preserve base path in worker requests - by @WaryaWayne in [#86](https://github.com/alchemy-run/cloudflare-tools/pull/86) [(e64d5cc)](https://github.com/alchemy-run/cloudflare-tools/commit/e64d5cc8127b8bd86f0b5da569a31d9d51d513eb)
+
 ## [v0.13.10](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.13.10) (2026-07-24)
 
 ### Features

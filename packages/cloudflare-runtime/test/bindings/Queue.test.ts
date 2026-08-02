@@ -612,6 +612,48 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding", (it) =
     }),
   );
 
+  it.effect("starts a consumer whose dead letter queue has no consumer anywhere", () =>
+    Effect.gen(function* () {
+      // Regression test for alchemy-run/alchemy#988: a DLQ that this worker
+      // does not itself consume resolves to the registry proxy. The subscribe
+      // used to happen inside this plugin's `defer`, racing the RegistryProxy
+      // defer that decides whether to emit the proxy service at all — workerd
+      // then failed to start with a binding referencing the undefined service
+      // `cloudflare-runtime:registry-proxy`.
+      const worker = yield* startTestWorker({
+        name: "queues-orphan-dlq",
+        compatibilityDate: "2024-11-20",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+        bindings: [Queue.local({ binding: "QUEUE", queueName: "orphan-dlq-src" })],
+        queueConsumers: [
+          {
+            queueName: "orphan-dlq-src",
+            maxBatchTimeout: 0,
+            maxRetries: 0,
+            deadLetterQueue: "orphan-dlq",
+          },
+        ],
+      });
+
+      // Exhaust retries: the dead-lettered message routes to the proxy, which
+      // accepts and drops it because no consumer of "orphan-dlq" is running.
+      yield* worker.fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 99 } }),
+      });
+      yield* pollMessages(worker, (r) => r.length >= 1);
+
+      // The worker stays functional after the drop.
+      yield* worker.fetch("/send", {
+        method: "POST",
+        body: JSON.stringify({ binding: "QUEUE", body: "still-alive" }),
+      });
+      const received = yield* pollMessages(worker, (r) => r.some((m) => m.body === "still-alive"));
+      expect(received.every((message) => message.queue === "orphan-dlq-src")).toBe(true);
+    }),
+  );
+
   it.effect("allows a cyclic dead letter queue path across multiple queues", () =>
     Effect.gen(function* () {
       const worker = yield* startTestWorker({
@@ -1027,6 +1069,54 @@ layer(localRuntimeLayer, {
         expect(received.length).toBeGreaterThanOrEqual(1);
         expect(received[0]?.queue).toBe("cross-queue");
         expect(received[0]?.body).toEqual({ hello: "from-producer" });
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "dead-letters messages to a consumer in a different instance",
+    () =>
+      Effect.gen(function* () {
+        // DLQ consumer instance: owns the broker for "cross-dlq".
+        const dlqConsumer = yield* startTestWorker({
+          name: "cross-dlq-consumer",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+          bindings: [Queue.local({ binding: "QUEUE", queueName: "cross-dlq" })],
+          queueConsumers: [{ queueName: "cross-dlq", maxBatchTimeout: 0 }],
+        });
+
+        // Source instance: consumes its own queue but dead-letters to a queue
+        // consumed by the other instance, so the DLQ binding routes through
+        // the registry proxy.
+        const source = yield* startTestWorker({
+          name: "cross-dlq-source",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: QUEUE_SCRIPT }],
+          bindings: [Queue.local({ binding: "QUEUE", queueName: "cross-dlq-src" })],
+          queueConsumers: [
+            {
+              queueName: "cross-dlq-src",
+              maxBatchTimeout: 0,
+              maxRetries: 0,
+              deadLetterQueue: "cross-dlq",
+            },
+          ],
+        });
+
+        yield* waitForRegistryEntry({ kind: "queue-consumer", queueName: "cross-dlq" });
+        yield* source.fetch("/send", {
+          method: "POST",
+          body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 99 } }),
+        });
+
+        const received = yield* pollMessages(dlqConsumer, (r) =>
+          r.some((m) => m.queue === "cross-dlq"),
+        );
+        const deadLettered = received.find((m) => m.queue === "cross-dlq");
+        expect(deadLettered?.body).toEqual({ failUntil: 99 });
       }),
     { timeout: 60_000 },
   );

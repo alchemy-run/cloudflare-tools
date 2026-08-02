@@ -25,6 +25,7 @@ export * as SecretKey from "./SecretKey.ts";
 export * as SecretsStore from "./secrets-store/index.ts";
 export * as SendEmail from "./send-email/index.ts";
 export * as Service from "./Service.ts";
+export * as Stream from "./stream/index.ts";
 export * as Text from "./Text.ts";
 export * as UnsafeEval from "./UnsafeEval.ts";
 export * as Vectorize from "./Vectorize.ts";

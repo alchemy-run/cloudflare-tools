@@ -15,6 +15,7 @@ import {
   RateLimit,
   SecretsStore,
   SendEmail,
+  Stream,
   Workflows,
 } from "./bindings/index.ts";
 import * as Docker from "./Docker.ts";
@@ -69,6 +70,7 @@ export const layerLocalBindings = () =>
     RateLimit.RateLimitLive,
     SecretsStore.SecretsStoreLive,
     SendEmail.SendEmailLive,
+    Stream.StreamLive,
     Workflows.WorkflowsLive,
   );
 
@@ -90,6 +92,7 @@ export type BindingServices =
   | RegistryProxy.RegistryProxy
   | SecretsStore.SecretsStore
   | SendEmail.SendEmail
+  | Stream.Stream
   | Workflows.Workflows;
 
 export type RuntimeServices = Runtime.Runtime | BindingServices;

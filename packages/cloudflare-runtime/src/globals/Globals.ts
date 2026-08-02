@@ -7,7 +7,7 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as EntryWorker from "worker:./entry.worker.ts";
-import { SOCKET_USER_ENTRY } from "../internal/constants.ts";
+import { SERVICE_USER_WORKER, SOCKET_USER_ENTRY } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
@@ -19,6 +19,7 @@ import {
   BINDING_EMAIL_DISK,
   SERVICE_EMAIL_STORAGE,
 } from "./EmailOptions.shared.ts";
+import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
 import * as Internet from "./Internet.ts";
 import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
@@ -137,6 +138,15 @@ export const GlobalsLive = Layer.effect(
                 modules,
                 bindings: [
                   { name: "CF_BLOB", json: JSON.stringify(blob) },
+                  // Non-fetch dispatch (queue/scheduled/email JSRPC) goes
+                  // straight to the raw user worker: the `USER_WORKER`
+                  // upstream binding points at the next middleware in the
+                  // chain, and middlewares are fetch-only HTTP interceptors
+                  // (see EntryOptions.shared.ts).
+                  {
+                    name: BINDING_USER_WORKER_DIRECT,
+                    service: { name: SERVICE_USER_WORKER },
+                  },
                   ...(email === undefined
                     ? []
                     : [

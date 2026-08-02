@@ -14,10 +14,22 @@ import {
   PATH_EMAIL,
   PATH_HANDLER_PREFIX,
 } from "./EmailOptions.shared.ts";
+import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
 import { PATH_SCHEDULED, PATH_SCHEDULED_LEGACY } from "./ScheduledOptions.shared.ts";
 
 interface Env {
+  /**
+   * Head of the fetch middleware chain (the next middleware after the entry,
+   * or the raw user worker when no downstream middleware exists). Fetch-only.
+   */
   USER_WORKER: Fetcher;
+  /**
+   * The raw user worker, bypassing downstream fetch middlewares. All
+   * non-fetch JSRPC dispatch (`queue()`, `scheduled()`, `email()`) goes
+   * through this binding — middlewares are fetch-only HTTP interceptors and
+   * do not implement those methods (see EntryOptions.shared.ts).
+   */
+  [BINDING_USER_WORKER_DIRECT]: Fetcher;
   CF_BLOB: Record<string, unknown>;
   // Omitted when the runtime storage isn't disk-backed (never the case with
   // the built-in storage layers) — replies then fail with a clear error.
@@ -357,9 +369,9 @@ async function handleEmail(
   // `email` is not on the `Fetcher` type, but service bindings expose the
   // user worker's `email()` handler as a valid JSRPC call (Miniflare relies
   // on the same mechanism).
-  await (env.USER_WORKER as unknown as { email: (message: unknown) => Promise<void> }).email(
-    message,
-  );
+  await (
+    env[BINDING_USER_WORKER_DIRECT] as unknown as { email: (message: unknown) => Promise<void> }
+  ).email(message);
 
   if (maybeClientError !== undefined) {
     return new Response(`Worker rejected email with the following reason: ${maybeClientError}`, {
@@ -376,7 +388,7 @@ export default <ExportedHandler<Env>>{
     if (url.pathname === "/cdn-cgi/handler/queue") {
       try {
         const json = await request.json<EntryQueuePayload>();
-        const result = await env.USER_WORKER.queue(
+        const result = await env[BINDING_USER_WORKER_DIRECT].queue(
           json.queue,
           json.messages.map((message) => ({
             ...message,
@@ -405,7 +417,7 @@ export default <ExportedHandler<Env>>{
     if (url.pathname === PATH_SCHEDULED || url.pathname === PATH_SCHEDULED_LEGACY) {
       try {
         const time = url.searchParams.get("time");
-        const result = await env.USER_WORKER.scheduled({
+        const result = await env[BINDING_USER_WORKER_DIRECT].scheduled({
           scheduledTime: time ? new Date(parseInt(time)) : undefined,
           cron: url.searchParams.get("cron") ?? undefined,
         });

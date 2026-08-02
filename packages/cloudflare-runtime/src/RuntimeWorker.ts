@@ -34,6 +34,17 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly crons?: ReadonlyArray<string>;
   /**
+   * Names of tail consumer workers (the deployed `tail_consumers` setting).
+   * workerd delivers this worker's trace events to each consumer's `tail()`
+   * handler. Consumers are resolved through the on-disk dev registry — the
+   * same path service bindings to other local workers take — so a consumer
+   * may run in a separate `cloudflare-runtime` or `wrangler dev` process and
+   * may (re)start at any time. Events produced while a consumer is not
+   * running are dropped with a warning, matching dev-registry semantics.
+   * `streaming_tail_consumers` (`streamingTails`) are not supported yet.
+   */
+  readonly tails?: ReadonlyArray<string>;
+  /**
    * Whether the Cache API (`caches.default` / `caches.open()`) stores
    * responses. Defaults to `true`; when `false` every cache operation is a
    * no-op (matching production behaviour on `workers.dev` subdomains).

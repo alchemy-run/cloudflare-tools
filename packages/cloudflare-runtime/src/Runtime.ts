@@ -14,6 +14,7 @@ import {
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
+import * as RegistryProxy from "./registry/RegistryProxy.ts";
 import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
 import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
 import * as Workerd from "./workerd/Workerd.ts";
@@ -40,10 +41,39 @@ export const RuntimeLive = Layer.effect(
 
     const preparePlugins = Effect.fnUntraced(function* (worker: RuntimeWorker) {
       const context = yield* PluginContext.make(worker as RuntimeWorker, plugins);
-      const bindings = yield* Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
-        concurrency: "unbounded",
-      }).pipe(Effect.provideService(PluginContext.PluginContext, context));
-      return { config: yield* context.config, context, bindings };
+      const [bindings, tails] = yield* Effect.all(
+        [
+          Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
+            concurrency: "unbounded",
+          }).pipe(Effect.provideService(PluginContext.PluginContext, context)),
+          prepareTails(worker, context),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return { config: yield* context.config, context, bindings, tails };
+    });
+
+    /**
+     * Resolve each tail consumer name to a `ServiceDesignator` through the
+     * dev registry proxy — the same path service bindings to other local
+     * workers take (`Service.local`). The registry proxy's `ExternalService`
+     * entrypoint forwards `tail()` events to the consumer's process via the
+     * workerd debug port, so consumers may live in other dev processes and
+     * may (re)start at any time. Subscriptions must be registered before
+     * `context.config` is computed, which is why this runs alongside the
+     * binding hooks in `preparePlugins`.
+     */
+    const prepareTails = Effect.fnUntraced(function* (
+      worker: RuntimeWorker,
+      context: PluginContext.PluginContext["Service"],
+    ) {
+      if (!worker.tails?.length) {
+        return undefined;
+      }
+      const proxy = yield* context.get(RegistryProxy.RegistryProxy);
+      return yield* Effect.forEach([...new Set(worker.tails)], (scriptName) =>
+        proxy.api.subscribe({ kind: "worker", scriptName }),
+      );
     });
 
     const prepareContainers = Effect.fnUntraced(function* (worker: RuntimeWorker) {
@@ -121,10 +151,10 @@ export const RuntimeLive = Layer.effect(
 
     return Runtime.of({
       start: Effect.fn(function* (worker) {
-        const [{ config, context, bindings }, { containerEngine, imageNames }] = yield* Effect.all(
-          [preparePlugins(worker), prepareContainers(worker)],
-          { concurrency: "unbounded" },
-        );
+        const [{ config, context, bindings, tails }, { containerEngine, imageNames }] =
+          yield* Effect.all([preparePlugins(worker), prepareContainers(worker)], {
+            concurrency: "unbounded",
+          });
         const ports = yield* workerd.serve(
           {
             sockets: [
@@ -159,6 +189,7 @@ export const RuntimeLive = Layer.effect(
                     localDisk: storage.name,
                   },
                   containerEngine,
+                  tails,
                   ...config.userWorker,
                   ...worker.unsafe,
                 },

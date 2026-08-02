@@ -11,7 +11,7 @@ export * as DispatchNamespace from "./dispatch-namespace/index.ts";
 export * as DurableObjectNamespace from "./DurableObjectNamespace.ts";
 export * as Flagship from "./Flagship.ts";
 export * as Hyperdrive from "./hyperdrive/index.ts";
-export * as Images from "./Images.ts";
+export * as Images from "./images/index.ts";
 export * as Json from "./Json.ts";
 export * as KvNamespace from "./kv-namespace/index.ts";
 export * as Loopback from "./Loopback.ts";

@@ -8,6 +8,7 @@ import {
   D1,
   DispatchNamespace,
   Hyperdrive,
+  Images,
   KvNamespace,
   Queue,
   R2Bucket,
@@ -61,6 +62,7 @@ export const layerLocalBindings = () =>
     D1.D1Live,
     DispatchNamespace.DispatchNamespaceLive,
     Hyperdrive.HyperdriveLive,
+    Images.ImagesLive,
     KvNamespace.KvNamespaceLive,
     Queue.QueueLive,
     R2Bucket.R2BucketLive,
@@ -78,6 +80,7 @@ export type BindingServices =
   | D1.D1
   | DispatchNamespace.DispatchNamespace
   | Hyperdrive.Hyperdrive
+  | Images.Images
   | KvNamespace.KvNamespace
   | Loopback.Loopback
   | Queue.Queue

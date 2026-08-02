@@ -55,7 +55,9 @@
     "./bindings/hyperdrive": "./dist/node/bindings/hyperdrive/index.mjs",
     "./bindings/hyperdrive/Hyperdrive": "./dist/node/bindings/hyperdrive/Hyperdrive.mjs",
     "./bindings/hyperdrive/HyperdriveOrigin": "./dist/node/bindings/hyperdrive/HyperdriveOrigin.shared.mjs",
-    "./bindings/Images": "./dist/node/bindings/Images.mjs",
+    "./bindings/images": "./dist/node/bindings/images/index.mjs",
+    "./bindings/images/Images": "./dist/node/bindings/images/Images.mjs",
+    "./bindings/images/ImagesOptions": "./dist/node/bindings/images/ImagesOptions.shared.mjs",
     "./bindings/Json": "./dist/node/bindings/Json.mjs",
     "./bindings/kv-namespace": "./dist/node/bindings/kv-namespace/index.mjs",
     "./bindings/kv-namespace/KvNamespace": "./dist/node/bindings/kv-namespace/KvNamespace.mjs",
@@ -140,6 +142,7 @@
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
     "@puppeteer/browsers": "^2.10.6",
+    "sharp": "^0.34.5",
     "workerd": "catalog:workers"
   },
   "devDependencies": {

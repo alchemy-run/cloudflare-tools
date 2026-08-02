@@ -139,6 +139,7 @@
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@puppeteer/browsers": "^2.10.6",
+        "sharp": "^0.34.5",
         "workerd": "catalog:workers",
       },
       "devDependencies": {

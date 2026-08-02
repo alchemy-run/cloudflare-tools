@@ -6,6 +6,10 @@
  * instances and pass them to `env.SEND_EMAIL.send(...)`.
  */
 
+// Keep this constant inline (duplicated from `SendEmailOptions.shared.ts`):
+// extensions must bundle to exactly one module (`formatExtensionModule`
+// asserts this), and importing a module shared with the send-email service
+// worker could split it into a shared chunk.
 const RAW_EMAIL = "EmailMessage::raw";
 
 class EmailMessage {

@@ -713,7 +713,9 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding", (it) =
       const afterImmediate = yield* pollMessages(worker, (r) => r.length >= 1, 500);
       expect(afterImmediate.map((message) => message.body)).toEqual(["immediate"]);
 
-      const all = yield* pollMessages(worker, (r) => r.length >= 2, 5_000);
+      // Generous deadline: delayed delivery is timer-driven and the Windows CI
+      // runner can lag several seconds behind wall-clock under load.
+      const all = yield* pollMessages(worker, (r) => r.length >= 2, 15_000);
       expect(all.map((message) => message.body).sort()).toEqual(["delayed", "immediate"]);
     }),
   );
@@ -744,7 +746,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding", (it) =
       const early = yield* pollMessages(worker, (r) => r.length >= 1, 500).pipe(Effect.flip);
       expect(early).toBeInstanceOf(PredicateFailed);
 
-      const all = yield* pollMessages(worker, (r) => r.length >= 2, 5_000);
+      const all = yield* pollMessages(worker, (r) => r.length >= 2, 15_000);
       expect(all.map((message) => message.body).sort()).toEqual(["via-batch", "via-send"]);
     }),
   );
@@ -772,7 +774,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Queues binding", (it) =
       const early = yield* pollMessages(worker, (r) => r.length >= 1, 500).pipe(Effect.flip);
       expect(early).toBeInstanceOf(PredicateFailed);
 
-      const all = yield* pollMessages(worker, (r) => r.length >= 2, 5_000);
+      const all = yield* pollMessages(worker, (r) => r.length >= 2, 15_000);
       expect(all.map((message) => message.body).sort()).toEqual(["a", "b"]);
     }),
   );

@@ -267,6 +267,63 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
     return await fetcher.tail(serializedEvents);
   }
 
+  /**
+   * Forwards a streaming tail session to the remote worker via RPC.
+   *
+   * workerd invokes `tailStream()` with the invocation's `onset` event and
+   * expects back a handler that receives every subsequent event of the
+   * session. We call the remote worker's `tailStream()` over the debug port;
+   * the handler it returns comes back as an RPC stub (a callable function
+   * stub, or an object whose per-event-type members are stubs), which stays
+   * alive for the duration of this invocation — exactly the lifetime of the
+   * streaming session. Each event is round-tripped through JSON (preserving
+   * Dates/BigInts) because `TailEvent`s are host objects that cannot be
+   * serialized over RPC directly.
+   *
+   * Unlike `tail()` above there is no recursion filter: a streaming `onset`
+   * for a JS RPC invocation carries no method name (`info` is just
+   * `{ type: "jsrpc" }`), so the remote `tailStream()` call cannot be told
+   * apart from any other RPC invocation. Mutually-tailing workers should use
+   * plain `tails` if they need the recursion guard.
+   */
+  async tailStream(
+    event: TailStream.TailEvent<TailStream.Onset>,
+  ): Promise<TailStream.TailEventHandler> {
+    // workerd requires a handler back (returning nothing is a config error on
+    // the consumer), so drop the rest of the session with a no-op when the
+    // remote worker is missing or declines the session.
+    const drop: TailStream.TailEventHandler = () => {};
+    const fetcher = this.fetchTarget.resolve();
+    if (!fetcher) {
+      console.warn(
+        `[registry] Failed to forward streaming tail session to "${this.ctx.props.scriptName}": worker not found`,
+      );
+      return drop;
+    }
+    const serialize = (tailEvent: unknown) =>
+      JSON.parse(
+        JSON.stringify(tailEvent, ExternalService.tailEventsReplacer),
+        ExternalService.tailEventsReviver,
+      );
+    // @ts-expect-error tailStream() is not in the `Fetcher` type but it's a valid RPC call
+    const remote: TailStream.TailEventHandlerType | undefined = await fetcher.tailStream(
+      serialize(event),
+    );
+    if (!remote) {
+      return drop;
+    }
+    return async (tailEvent) => {
+      const serialized = serialize(tailEvent);
+      if (typeof remote === "function") {
+        return remote(serialized);
+      }
+      const handler = (remote as Record<string, unknown>)[tailEvent.event.type];
+      if (typeof handler === "function") {
+        return handler(serialized);
+      }
+    };
+  }
+
   private notFoundMessage() {
     return `Worker "${this.ctx.props.scriptName}" not found. Make sure the worker is running locally.`;
   }

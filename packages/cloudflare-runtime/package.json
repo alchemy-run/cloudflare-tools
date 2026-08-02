@@ -74,6 +74,7 @@
     "./bindings/SecretKey": "./dist/node/bindings/SecretKey.mjs",
     "./bindings/send-email": "./dist/node/bindings/send-email/index.mjs",
     "./bindings/send-email/SendEmail": "./dist/node/bindings/send-email/SendEmail.mjs",
+    "./bindings/send-email/SendEmailOptions": "./dist/node/bindings/send-email/SendEmailOptions.shared.mjs",
     "./bindings/Service": "./dist/node/bindings/Service.mjs",
     "./bindings/Text": "./dist/node/bindings/Text.mjs",
     "./bindings/UnsafeEval": "./dist/node/bindings/UnsafeEval.mjs",
@@ -148,6 +149,7 @@
     "capnp-es": "^0.0.14",
     "capnweb": "^0.8.0",
     "http-cache-semantics": "^4.2.0",
+    "postal-mime": "^2.4.3",
     "rolldown": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"
@@ -176,6 +178,7 @@
     "http-cache-semantics": "4.2.0",
     "itty-time": "2.0.2",
     "mime": "4.1.0",
+    "postal-mime": "2.7.5",
     "toucan-js": "4.0.0"
   }
 }

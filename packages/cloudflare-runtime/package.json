@@ -95,6 +95,7 @@
     "./globals": "./dist/node/globals/index.mjs",
     "./globals/Cf": "./dist/node/globals/Cf.mjs",
     "./globals/CfOptions": "./dist/node/globals/CfOptions.shared.mjs",
+    "./globals/EmailOptions": "./dist/node/globals/EmailOptions.shared.mjs",
     "./globals/Globals": "./dist/node/globals/Globals.mjs",
     "./globals/Internet": "./dist/node/globals/Internet.mjs",
     "./globals/Loopback": "./dist/node/globals/Loopback.mjs",

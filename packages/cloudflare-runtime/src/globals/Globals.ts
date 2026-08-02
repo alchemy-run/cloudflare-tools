@@ -1,7 +1,9 @@
 import * as Cause from "effect/Cause";
 import * as Cron from "effect/Cron";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as EntryWorker from "worker:./entry.worker.ts";
@@ -10,7 +12,13 @@ import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
+import type * as WorkerdConfig from "../workerd/Config.ts";
 import * as Cf from "./Cf.ts";
+import {
+  BINDING_EMAIL_DIRECTORY,
+  BINDING_EMAIL_DISK,
+  SERVICE_EMAIL_STORAGE,
+} from "./EmailOptions.shared.ts";
 import * as Internet from "./Internet.ts";
 import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
@@ -53,10 +61,45 @@ const cronLoop = (workerName: string, expression: string, cron: Cron.Cron, port:
 export const GlobalsLive = Layer.effect(
   Globals,
   Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const internet = yield* Internet.Internet;
     const storage = yield* Storage.Storage;
     const cf = yield* Cf.Cf;
     const modules = formatInternalWorkerModules(yield* Effect.promise(EntryWorker.worker));
+
+    // Inbound email replies (`message.reply(...)` from the user worker's
+    // `email()` handler) are persisted under `{storage}/email` — the same
+    // directory the send-email simulator writes to. The entry middleware
+    // gets a disk service binding plus the node-side absolute path so its
+    // logged file paths point at real files. Miniflare persists replies via
+    // its loopback `store-temp-file` endpoint instead.
+    const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
+    const email =
+      storageDiskPath === undefined
+        ? undefined
+        : yield* Effect.gen(function* () {
+            const persistPath = path.join(storageDiskPath, "email");
+            yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ConfigError({
+                    subtag: "Globals",
+                    message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
+                    hint: "Ensure the storage directory is writable.",
+                    detail: { persistPath },
+                    cause,
+                  }),
+              ),
+            );
+            return {
+              persistPath,
+              service: {
+                name: SERVICE_EMAIL_STORAGE,
+                disk: { path: persistPath, writable: true },
+              } satisfies WorkerdConfig.Service,
+            };
+          });
     return Globals.of(
       Effect.gen(function* () {
         const { worker } = yield* PluginContext;
@@ -92,12 +135,26 @@ export const GlobalsLive = Layer.effect(
                   "service_binding_extra_handlers",
                 ],
                 modules,
-                bindings: [{ name: "CF_BLOB", json: JSON.stringify(blob) }],
+                bindings: [
+                  { name: "CF_BLOB", json: JSON.stringify(blob) },
+                  ...(email === undefined
+                    ? []
+                    : [
+                        {
+                          name: BINDING_EMAIL_DISK,
+                          service: { name: SERVICE_EMAIL_STORAGE },
+                        },
+                        {
+                          name: BINDING_EMAIL_DIRECTORY,
+                          json: JSON.stringify(email.persistPath),
+                        },
+                      ]),
+                ],
               },
               upstreamBindingName: "USER_WORKER",
             },
           ],
-          services: [internet, storage],
+          services: [internet, storage, ...(email === undefined ? [] : [email.service])],
           start:
             crons.length === 0
               ? undefined

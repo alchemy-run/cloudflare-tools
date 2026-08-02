@@ -12,10 +12,10 @@
  * `attachment/` (Miniflare uses `email/`, `email-text/`, `email-html/`,
  * `email-attachment/` under a temp dir).
  *
- * Upstream tests intentionally not ported:
+ * Upstream tests intentionally not ported here:
  * - All `reply validation` / `reply:` cases: they exercise the incoming
- *   email handler (`/cdn-cgi/handler/email` + `message.reply(...)`), which
- *   this runtime does not implement — only the `send_email` binding.
+ *   email handler (`/cdn-cgi/handler/email` + `message.reply(...)`), covered
+ *   by `test/globals/Email.test.ts`.
  * - "send_email binding is available from getBindings": Miniflare's Node
  *   magic-proxy API has no equivalent here.
  * - Log-format snapshot cases ("MessageBuilder log output format snapshot",

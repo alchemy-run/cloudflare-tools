@@ -10,10 +10,11 @@ export default defineConfig({
     pool: "forks",
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    // Binding sims are timing-sensitive (real Chrome launches, rate-limit
-    // windows, queue delivery delays) and the small CI runners run the whole
-    // 460+-test suite under load — absorb runner starvation the same way the
-    // fixture playwright configs do (`retries: CI ? 2 : 0`).
+    // Some binding sims are timing-sensitive (real Chrome launches, queue
+    // delivery delays) and the small CI runners run the whole 460+-test suite
+    // under load — absorb runner starvation the same way the fixture
+    // playwright configs do (`retries: CI ? 2 : 0`). Tests that must be
+    // deterministic (e.g. RateLimit) opt out with a per-test `{ retry: 0 }`.
     retry: process.env.CI ? 2 : 0,
     // The Windows CI runner is resource-constrained; running test files in
     // parallel starves the event loop while many `workerd` processes spawn at

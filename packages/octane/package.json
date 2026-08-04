@@ -1,0 +1,85 @@
+{
+  "name": "@distilled.cloud/octane",
+  "version": "0.13.7",
+  "description": "OctaneJS integration for Cloudflare Workers: the project's own `vite build` driven programmatically (Octane's plugin builds client + server and its Cloudflare adapter emits the Worker entry), wrangler-free.",
+  "keywords": [
+    "cloudflare",
+    "octane",
+    "tsrx",
+    "vite",
+    "workers"
+  ],
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/octane#readme",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "John Royal",
+    "email": "john@alchemy.run",
+    "url": "https://distilled.cloud"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
+    "directory": "packages/octane"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./cloudflare": {
+      "bun": "./src/cloudflare.ts",
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js",
+      "default": "./dist/cloudflare.js"
+    },
+    "./source": {
+      "bun": "./src/source.ts",
+      "types": "./dist/source.d.ts",
+      "import": "./dist/source.js",
+      "default": "./dist/source.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist .cache",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "dependencies": {
+    "@distilled.cloud/framework-core": "workspace:*",
+    "fast-glob": "^3.3.2"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@octanejs/vite-plugin": ">=0.1.22",
+    "effect": "catalog:effect"
+  },
+  "peerDependenciesMeta": {
+    "@octanejs/vite-plugin": {
+      "optional": true
+    }
+  }
+}

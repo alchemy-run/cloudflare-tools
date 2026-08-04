@@ -30,6 +30,7 @@ import type { BindingHooks } from "@distilled.cloud/cloudflare-runtime";
 import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
+import { pathToFileURL } from "node:url";
 import { generateWorkerShim } from "./WorkerShim.ts";
 
 export interface CloudflareAdapterResult {
@@ -91,6 +92,62 @@ export interface CloudflareAdapter extends Adapter {
   readonly dispose: () => Promise<void>;
 }
 
+/**
+ * Render kit's fallback page (the SPA / 404 app shell) in-process.
+ *
+ * `builder.generateFallback` delegates to a `worker_threads` fork whose
+ * ready/args handshake matches messages on the module's `import.meta.url`
+ * string. Under bun on Windows the parent and child spell that URL
+ * differently, the handshake never completes, and no fallback is written —
+ * the deployed site then 404s every client route (the assets layer has no
+ * shell to fall back to). These are kit's own `core/postbuild/fallback.js`
+ * steps, minus the fork; the build process is short-lived in every context
+ * that runs `adapt` (harness build, alchemy source build), so the fork's
+ * dangling-handle isolation buys nothing here.
+ */
+const generateFallbackInProcess = async (builder: Builder, dest: string): Promise<void> => {
+  const kit = builder.config.kit;
+  const serverRoot = NodePath.join(kit.outDir, "output", "server");
+  const load = async (file: string): Promise<Record<string, any>> =>
+    await import(/* @vite-ignore */ pathToFileURL(NodePath.join(serverRoot, file)).href);
+  const { set_building } = await load("internal.js");
+  const { Server } = await load("index.js");
+  const { manifest } = await load("manifest-full.js");
+
+  // kit's builder loads .env files through vite's `loadEnv`; the adapter
+  // only runs inside a build, where vite is importable. Fall back to the
+  // process env when it isn't (the shell render rarely reads env at all).
+  const env: Record<string, string> = await import("vite").then(
+    (vite) => vite.loadEnv("production", kit.env.dir, ""),
+    () =>
+      Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      ),
+  );
+
+  set_building();
+  const server = new Server(manifest);
+  await server.init({ env });
+  const origin = kit.paths.origin || "http://sveltekit-prerender";
+  const response: Response = await server.respond(new Request(`${origin}/[fallback]`), {
+    getClientAddress: () => {
+      throw new Error("Cannot read clientAddress during prerendering");
+    },
+    prerendering: {
+      fallback: true,
+      dependencies: new Map(),
+      remote_responses: new Map(),
+    },
+    read: (file: string) => NodeFs.readFileSync(NodePath.join(kit.files.assets, file)),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not create a fallback page — failed with status ${response.status}`);
+  }
+  NodeFs.writeFileSync(dest, await response.text());
+};
+
 export const makeCloudflareAdapter = (
   options: CloudflareAdapterOptions = {},
 ): CloudflareAdapter => {
@@ -118,7 +175,7 @@ export const makeCloudflareAdapter = (
         // prerendering if the user defined such a page
         const fallback = NodePath.join(assetsDest, "404.html");
         if (options.fallback === "spa") {
-          await builder.generateFallback(fallback);
+          await generateFallbackInProcess(builder, fallback);
         } else {
           NodeFs.writeFileSync(fallback, "Not Found");
         }
@@ -126,7 +183,7 @@ export const makeCloudflareAdapter = (
       builder.writeClient(assetsDest);
       builder.writePrerendered(assetsDest);
       if (options.notFoundHandling === "single-page-application") {
-        await builder.generateFallback(NodePath.join(assetsDest, "index.html"));
+        await generateFallbackInProcess(builder, NodePath.join(assetsDest, "index.html"));
       }
 
       // manifest module

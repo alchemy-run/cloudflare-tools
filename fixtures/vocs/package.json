@@ -6,9 +6,8 @@
     "dev": "e2e dev --port 3105",
     "build": "e2e build",
     "preview": "e2e preview",
-    "test": "node scripts/e2e.mjs",
-    "pretest": "playwright install chromium",
-    "test:e2e": "playwright test"
+    "test": "playwright test",
+    "pretest": "playwright install chromium && bun run build"
   },
   "dependencies": {
     "hono": "^4.12.14",

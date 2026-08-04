@@ -1,0 +1,20 @@
+diff --git a/dist/internal/mdx.js b/dist/internal/mdx.js
+index 7d6a5173590ff3a3eb3e61c1a3bc996771b90271..fe27c7a8dc0f683c60ab2159963df1e7923bee3a 100644
+--- a/dist/internal/mdx.js
++++ b/dist/internal/mdx.js
+@@ -390,7 +390,14 @@ export function recmaMdxLayout(config) {
+         if (defaultExportIndex === -1)
+             return;
+         function getMdxLayoutImport(dir) {
+-            if (dir === path.dirname(pagesDirPath))
++            // Normalize both sides before comparing: `vfile.dirname` and
++            // `pagesDirPath` can differ in separator spelling on Windows
++            // (`D:/...` vs `D:\...`), so a raw `===` never matches and the
++            // walk recurses past the intended stop. The `dirname(dir) === dir`
++            // guard also terminates at filesystem roots, where `dirname` is a
++            // fixed point.
++            if (path.resolve(dir) === path.resolve(path.dirname(pagesDirPath)) ||
++                path.dirname(dir) === dir)
+                 return `import { Layout as _Layout } from 'vocs';`;
+             if (layoutPaths.has(dir))
+                 return `import _Layout from '${layoutPaths.get(dir)}';`;

@@ -7,15 +7,6 @@ const SHELL_MARKER = "sveltekit-spa-shell";
 
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
-    // kit v3-next's `generateFallback` writes no SPA-shell `index.html` on
-    // Windows runners, so every live route (which relies on the
-    // single-page-application fallback) 404s with an empty body. Dev mode is
-    // unaffected and stays covered on Windows. Upstream kit issue — same
-    // spirit as the sibling sveltekit fixture's Windows gate.
-    test.skip(
-      mode === "live" && process.platform === "win32" && !!process.env.CI,
-      "kit generateFallback produces no SPA shell on Windows CI",
-    );
     const it = Playwright.make(mode);
 
     it("hydrates the home page (no SSR) and honors the user svelte config", async ({

@@ -31,14 +31,25 @@ export const loadProjectModule = <T = unknown>(
 ): Effect.Effect<T, ModuleLoadError> =>
   Effect.tryPromise({
     try: async () => {
+      let primary: unknown;
       try {
         const require = createRequire(NodePath.resolve(root, "package.json"));
         const resolved = require.resolve(specifier);
         return (await import(/* @vite-ignore */ pathToFileURL(resolved).href)) as T;
-      } catch {
+      } catch (cause) {
+        primary = cause;
+      }
+      try {
         // Fallback: a bare specifier resolves from our own module graph
         // (works for non-linked installs).
         return (await import(/* @vite-ignore */ specifier)) as T;
+      } catch (fallback) {
+        // The project-relative attempt is the meaningful failure — surface
+        // it as the message and cause; the bare fallback failing only says
+        // the specifier isn't in OUR graph, so it rides along in `errors`.
+        const error = new AggregateError([primary, fallback], String(primary));
+        error.cause = primary;
+        throw error;
       }
     },
     catch: (cause) => new ModuleLoadError({ specifier, root, cause }),

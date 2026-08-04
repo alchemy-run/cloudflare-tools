@@ -10,6 +10,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as NodeFs from "node:fs";
+import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as ViteModule from "vite";
 import { DEFAULT_VITE_CONFIG_FILES, makeSvelteKitConfigPlugin } from "./UserConfig.ts";
@@ -230,6 +232,74 @@ export const resolveExportTarget = (entry: unknown): string | undefined => {
   return undefined;
 };
 
+/** Path segment identifying an id inside an `@sveltejs/kit` package. */
+const KIT_PACKAGE_MARKER = "/@sveltejs/kit/";
+
+/**
+ * Re-anchor kit-runtime module ids that were resolved against the wrong
+ * base directory.
+ *
+ * SvelteKit's route manifest stores its fallback root components
+ * (`<kit>/src/runtime/components/{layout,error}.svelte`) as paths RELATIVE
+ * to the Vite root, but resolves them against `process.cwd()`: the dev
+ * server's node loader calls `path.resolve(id)`, and the generated
+ * client/server modules embed `path.relative(absoluteBase, relativeId)`
+ * output (whose `relativeId` is resolved against the cwd). Kit therefore
+ * assumes `process.cwd() === root`. When the dev server is driven
+ * programmatically from another directory — alchemy's dev sidecar, a
+ * monorepo root — those ids re-root outside the project and every SSR
+ * request 500s with `Failed to load url
+ * /@fs/<wrong-base>/.../@sveltejs/kit/src/runtime/components/layout.svelte`.
+ *
+ * This plugin remaps exactly those casualties: an id that points inside an
+ * `@sveltejs/kit` package directory but does NOT exist on disk is re-rooted
+ * onto the project's real kit installation. Ids that resolve to an existing
+ * file are never touched.
+ */
+const makeKitRuntimeRealignPlugin = (kitDirectory: string): ViteModule.Plugin => {
+  const realign = (candidate: string, query: string): string | undefined => {
+    if (NodeFs.existsSync(candidate)) {
+      return undefined;
+    }
+    const normalized = candidate.replaceAll("\\", "/");
+    const index = normalized.lastIndexOf(KIT_PACKAGE_MARKER);
+    if (index === -1) {
+      return undefined;
+    }
+    const remapped = NodePath.join(
+      kitDirectory,
+      normalized.slice(index + KIT_PACKAGE_MARKER.length),
+    );
+    return NodeFs.existsSync(remapped) ? remapped + query : undefined;
+  };
+  return {
+    name: "distilled-sveltekit-kit-runtime-realign",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (!source.includes("@sveltejs")) {
+        return undefined;
+      }
+      const queryIndex = source.indexOf("?");
+      const bare = queryIndex === -1 ? source : source.slice(0, queryIndex);
+      const query = queryIndex === -1 ? "" : source.slice(queryIndex);
+      if (bare.startsWith("/@fs/")) {
+        // Vite serves absolute fs paths as `/@fs/<path>` (`/@fs/C:/...` on
+        // Windows — strip the extra leading slash before a drive letter).
+        const fsPath = bare.slice("/@fs".length);
+        return realign(/^\/[A-Za-z]:[/\\]/.test(fsPath) ? fsPath.slice(1) : fsPath, query);
+      }
+      if (NodePath.isAbsolute(bare)) {
+        return realign(bare, query);
+      }
+      if (bare.startsWith(".") && importer !== undefined) {
+        const importerPath = importer.split("?")[0] ?? importer;
+        return realign(NodePath.resolve(NodePath.dirname(importerPath), bare), query);
+      }
+      return undefined;
+    },
+  };
+};
+
 /**
  * Build the `Framework` service implementation for a SvelteKit project.
  *
@@ -283,19 +353,19 @@ export const make: (
         Effect.mapError((error) => fail("Failed to load the project's Vite", error.cause)),
       );
 
+    const resolveKitDirectory = (root: string) =>
+      FrameworkCore.resolveProjectPackageDirectory(root, "@sveltejs/kit").pipe(
+        Effect.mapError((error) =>
+          fail("Failed to locate the project's @sveltejs/kit", error.cause),
+        ),
+      );
+
     // `@sveltejs/kit`'s `./vite` export carries only an `import` condition, so
     // framework-core's `createRequire().resolve` dance cannot resolve it.
     // Resolve the package directory (via its universally-exported
     // `./package.json`) and walk the exports map instead.
     const loadKitViteModule = Effect.fn(function* (root: string) {
-      const kitDirectory = yield* FrameworkCore.resolveProjectPackageDirectory(
-        root,
-        "@sveltejs/kit",
-      ).pipe(
-        Effect.mapError((error) =>
-          fail("Failed to locate the project's @sveltejs/kit", error.cause),
-        ),
-      );
+      const kitDirectory = yield* resolveKitDirectory(root);
       const manifest = yield* fs
         .readFileString(path.join(kitDirectory, "package.json"))
         .pipe(
@@ -354,6 +424,10 @@ export const make: (
      *   `options.kit` + the target's adapter.
      */
     const resolveViteConfig = Effect.fn(function* (root: string, adapter: Adapter) {
+      // Kit resolves the manifest's `..`-relative fallback-component ids
+      // against `process.cwd()` instead of the Vite root; the realign plugin
+      // repairs them when the two differ (see makeKitRuntimeRealignPlugin).
+      const realign = makeKitRuntimeRealignPlugin(yield* resolveKitDirectory(root));
       const userConfigFile = yield* findViteConfigFile(root);
       if (userConfigFile === undefined) {
         const plugins = yield* loadKitPlugins(root, adapter);
@@ -361,13 +435,14 @@ export const make: (
           root,
           configFile: false,
           ...options?.vite,
-          plugins: [...(options?.vite?.plugins ?? []), plugins],
+          plugins: [realign, ...(options?.vite?.plugins ?? []), plugins],
         } satisfies ViteModule.InlineConfig;
       }
       return {
         root,
         ...options?.vite,
         plugins: [
+          realign,
           ...(options?.vite?.plugins ?? []),
           makeSvelteKitConfigPlugin({ adapter, kit: options?.kit }),
         ],

@@ -13,6 +13,9 @@ export default defineConfig({
   // race the first page load. The server reaches steady state after those
   // reloads, so a retry against the same worker-scoped server is reliable.
   retries: process.env.CI ? 2 : 0,
+  // A systemic failure (runner capacity, broken build) otherwise burns
+  // retries x timeout on every remaining spec — fail the suite fast.
+  maxFailures: process.env.CI ? 5 : 0,
   expect: {
     timeout: 10_000,
   },

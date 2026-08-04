@@ -7,14 +7,15 @@ const SHELL_MARKER = "sveltekit-spa-shell";
 
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
-    // kit v3-next's `generateFallback` writes no SPA-shell `index.html` on
-    // Windows runners, so every live route (which relies on the
-    // single-page-application fallback) 404s with an empty body. Dev mode is
-    // unaffected and stays covered on Windows. Upstream kit issue — same
-    // spirit as the sibling sveltekit fixture's Windows gate.
+    // Same Windows-runner socket-buffer exhaustion as the sibling sveltekit
+    // fixture's gate (see fixtures/sveltekit/scripts/e2e.mjs for the full
+    // evidence trail, incl. the failed port-range-widening experiment): the
+    // live serve's miniflare loopback churn hits kernel AFD buffer limits
+    // late in the suite and every fallback-dependent route 404s. Dev mode is
+    // unaffected and stays covered on Windows.
     test.skip(
       mode === "live" && process.platform === "win32" && !!process.env.CI,
-      "kit generateFallback produces no SPA shell on Windows CI",
+      "Windows CI runner socket-buffer exhaustion (see fixtures/sveltekit/scripts/e2e.mjs)",
     );
     const it = Playwright.make(mode);
 

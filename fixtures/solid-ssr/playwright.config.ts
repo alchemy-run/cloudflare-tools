@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: "./test",
   // Windows CI runs every fixture e2e concurrently; absorb runner flakiness.
   retries: process.env.CI ? 2 : 0,
+  // A systemic failure (runner capacity, broken build) otherwise burns
+  // retries x timeout on every remaining spec — fail the suite fast.
+  maxFailures: process.env.CI ? 5 : 0,
   timeout: 60_000,
   expect: {
     timeout: 10_000,

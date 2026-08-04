@@ -3,7 +3,7 @@ import { assert, describe, expect, it } from "vitest";
 import { buildFixture } from "./utils/build-fixture";
 
 describe("regression", () => {
-  it("bundles mysql2", async () => {
+  it.skipIf(!process.env.TEST_MYSQL_URL)("bundles mysql2", async () => {
     assert(process.env.TEST_MYSQL_URL, "TEST_MYSQL_URL is not set");
     const pluginOptions = {
       compatibilityDate: "2025-07-01",

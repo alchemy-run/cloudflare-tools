@@ -23,9 +23,17 @@ export const runMain = <A, E>(effect: Effect.Effect<A, E, Scope.Scope>) => {
   const scope = Scope.makeUnsafe();
   return NodeRuntime.runMain(effect.pipe(Scope.provide(scope)), {
     teardown: (exit, onExit) => {
-      Effect.runPromise(Scope.close(scope, exit)).then(() =>
-        onExit(exit._tag === "Success" ? 0 : 1),
-      );
+      Effect.runPromise(Scope.close(scope, exit)).then(() => {
+        const code = exit._tag === "Success" ? 0 : 1;
+        onExit(code);
+        // `NodeRuntime.runMain` only force-exits on failure/signal; on success
+        // it waits for the event loop to drain. The runtime layers can leave
+        // lingering handles behind (e.g. `cloudflare-runtime`'s docker proxy
+        // listener is started on a detached fiber with no finalizer, keeping
+        // the loop alive forever after a successful `e2e build`). A CLI must
+        // exit deterministically once its teardown has run.
+        process.exit(code);
+      });
     },
   });
 };

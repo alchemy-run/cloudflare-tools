@@ -2,36 +2,45 @@ import { Text } from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as Options from "@distilled.cloud/e2e/Options";
 import wakuFramework from "@distilled.cloud/waku";
 
+// Target-scoped config carriage: `target.cloudflare.worker` is the cloudflare
+// deploy target's configuration (read by @distilled.cloud/waku via
+// `options.target?.cloudflare?.worker ?? options.vite`) and
+// `target.cloudflare.preview` configures the miniflare preview server.
 export default Options.make({
-  vite: {
-    // `main` and `viteEnvironments` are pinned by @distilled.cloud/waku
-    // (waku's rsc entry + the rsc/ssr topology) — only worker config here.
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: ["nodejs_als"],
-    worker: {
-      name: "fixtures-waku",
-      bindings: [Text.local("MESSAGE", "hello-from-binding")],
-      assets: {
-        htmlHandling: "drop-trailing-slash",
-        notFoundHandling: "none",
+  target: {
+    cloudflare: {
+      worker: {
+        // `main` and `viteEnvironments` are pinned by @distilled.cloud/waku's
+        // cloudflare target (waku's rsc entry + the rsc/ssr topology) — only
+        // worker config here.
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: ["nodejs_als"],
+        worker: {
+          name: "fixtures-waku",
+          bindings: [Text.local("MESSAGE", "hello-from-binding")],
+          assets: {
+            htmlHandling: "drop-trailing-slash",
+            notFoundHandling: "none",
+          },
+        },
       },
-    },
-  },
-  miniflare: {
-    compatibilityDate: "2026-03-10",
-    compatibilityFlags: ["nodejs_als"],
-    bindings: { MESSAGE: "hello-from-binding" },
-    assets: {
-      routerConfig: {
-        has_user_worker: true,
-        invoke_user_worker_ahead_of_assets: false,
-        debug: true,
-      },
-      assetConfig: {
-        html_handling: "drop-trailing-slash",
-        not_found_handling: "none",
-        debug: true,
-        has_static_routing: false,
+      preview: {
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: ["nodejs_als"],
+        bindings: { MESSAGE: "hello-from-binding" },
+        assets: {
+          routerConfig: {
+            has_user_worker: true,
+            invoke_user_worker_ahead_of_assets: false,
+            debug: true,
+          },
+          assetConfig: {
+            html_handling: "drop-trailing-slash",
+            not_found_handling: "none",
+            debug: true,
+            has_static_routing: false,
+          },
+        },
       },
     },
   },

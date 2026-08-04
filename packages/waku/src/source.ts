@@ -18,6 +18,7 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
+import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { make as makeWakuFramework } from "./Waku.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,9 +145,22 @@ export interface SourceProvider {
 export interface WakuSourceOptions {
   /** Project root. Defaults to the process working directory. */
   readonly rootDir?: string | undefined;
+  /**
+   * The user's own worker entry (the user-entry seam,
+   * `DeployTarget.entry`): a module that wraps waku's handler — imported
+   * from `virtual:waku/server-entry` — and re-exports extras (Durable
+   * Object classes, additional handlers). Relative paths resolve against
+   * the root. When unset, waku's own rsc server entry is deployed.
+   */
+  readonly main?: string | undefined;
   /** Waku `srcDir` (relative to the root). @default "src" */
   readonly srcDir?: string | undefined;
-  /** Waku `distDir` (relative to the root). @default "dist" */
+  /**
+   * Waku `distDir` (relative to the root). If `waku.config.ts` customizes
+   * `distDir`, mirror it here (or add it to `memo.exclude`) so the build
+   * output stays excluded from the rebuild-deciding input hash.
+   * @default "dist"
+   */
   readonly distDir?: string | undefined;
   /** Waku `basePath`. @default "/" */
   readonly basePath?: string | undefined;
@@ -453,6 +467,8 @@ const hashWakuInput = Effect.fn(function* (params: {
     root,
     workspaces: workspaceHashes.sort(),
     options: {
+      // Build-affecting: a changed user entry must bust the memo.
+      main: params.options.main,
       srcDir: params.options.srcDir,
       distDir: params.options.distDir,
       basePath: params.options.basePath,
@@ -604,10 +620,17 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
       const framework = makeWakuFramework({
         root: rootDir,
         waku: wakuConfig,
-        vite: {
+        // The target is passed as a value (not the module-specifier default):
+        // the provider runs inside alchemy's process, where resolving the
+        // subpath from the project's node_modules is unnecessary indirection.
+        target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
-        },
+          // The user-entry seam: surfaced as `DeployTarget.entry` and made
+          // the vite plugin's `main` (resolved against the root by
+          // `makeWakuPluginOptions`).
+          ...(options.main !== undefined ? { main: options.main } : undefined),
+        }),
       });
       const output = yield* withRootCwd(
         rootDir,
@@ -691,9 +714,12 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
       const framework = makeWakuFramework({
         root: rootDir,
         waku: wakuConfig,
-        vite: {
+        target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
+          // Dev serves the wrapped user entry too, so DO classes exported
+          // from it exist in dev.
+          ...(options.main !== undefined ? { main: options.main } : undefined),
           worker: {
             name: ctx.worker.name,
             bindings: ctx.worker.bindings,
@@ -703,7 +729,7 @@ export const makeWakuSourceProvider = (options: WakuSourceOptions): SourceProvid
             assets: ctx.worker.assets,
           },
           context: ctx.runtimeContext,
-        },
+        }),
       });
       // The dev server *starts* under the project cwd (waku resolves its
       // html shell and relative inputs from the cwd at startup); the cwd is

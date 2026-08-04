@@ -25,7 +25,11 @@ for (const mode of Playwright.SERVER_METHODS) {
       });
     });
 
-    it("fetches database", async ({ server }) => {
+    // Gated on the `TEST_POSTGRES_URL` secret (wired in ci.yml + turbo.json's
+    // root `test` env list). CI asserts the secret is present, so this can
+    // only skip in local runs without the secret — never silently on CI.
+    const skipIfNoDatabase = process.env.TEST_POSTGRES_URL ? it : it.skip;
+    skipIfNoDatabase("fetches database", async ({ server }) => {
       const response = await server.fetchJson<[{ "?column?": number }]>("/api/db");
       expect(response).toMatchObject([{ "?column?": 1 }]);
     });

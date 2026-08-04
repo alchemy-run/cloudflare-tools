@@ -7,6 +7,7 @@ import {
   collectExternalWorkspaces,
   makeBuildOutputCollector,
   readServerModulesFromDisk,
+  selectEntryByFacade,
   sortServerModules,
   WORKER_ENTRY_PREFIX,
   type BuildOutputCollector,
@@ -324,6 +325,29 @@ describe("collectExternalWorkspaces", () => {
       ]),
     );
     expect(Array.from(workspaces)).toEqual([NodePath.join(base, "pkg")]);
+  });
+});
+
+describe("selectEntryByFacade", () => {
+  const entry = NodePath.resolve("/project/src/worker-entry.ts");
+  const chunk = (facadeModuleId: string | null) => ({
+    fileName: "worker-entry.js",
+    name: "server/worker-entry.js",
+    facadeModuleId,
+  });
+
+  it("matches the plain facade module", () => {
+    expect(selectEntryByFacade(entry)(chunk(entry))).toBe(true);
+  });
+
+  it("matches the wrapped worker-entry facade", () => {
+    const posix = entry.replaceAll("\\", "/");
+    expect(selectEntryByFacade(entry)(chunk(`${WORKER_ENTRY_PREFIX}${posix}`))).toBe(true);
+  });
+
+  it("rejects other chunks", () => {
+    expect(selectEntryByFacade(entry)(chunk(NodePath.resolve("/project/other.ts")))).toBe(false);
+    expect(selectEntryByFacade(entry)(chunk(null))).toBe(false);
   });
 });
 

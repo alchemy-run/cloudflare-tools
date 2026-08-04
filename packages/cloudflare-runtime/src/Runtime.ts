@@ -14,6 +14,7 @@ import {
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
+import * as RegistryProxy from "./registry/RegistryProxy.ts";
 import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
 import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
 import * as Workerd from "./workerd/Workerd.ts";
@@ -40,10 +41,48 @@ export const RuntimeLive = Layer.effect(
 
     const preparePlugins = Effect.fnUntraced(function* (worker: RuntimeWorker) {
       const context = yield* PluginContext.make(worker as RuntimeWorker, plugins);
-      const bindings = yield* Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
-        concurrency: "unbounded",
-      }).pipe(Effect.provideService(PluginContext.PluginContext, context));
-      return { config: yield* context.config, context, bindings };
+      const [bindings, { tails, streamingTails }] = yield* Effect.all(
+        [
+          Effect.all(worker.bindings as ReadonlyArray<BindingHook<never>>, {
+            concurrency: "unbounded",
+          }).pipe(Effect.provideService(PluginContext.PluginContext, context)),
+          prepareTails(worker, context),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return { config: yield* context.config, context, bindings, tails, streamingTails };
+    });
+
+    /**
+     * Resolve each (streaming) tail consumer name to a `ServiceDesignator`
+     * through the dev registry proxy — the same path service bindings to other
+     * local workers take (`Service.local`). The registry proxy's
+     * `ExternalService` entrypoint forwards `tail()` batches and
+     * `tailStream()` sessions to the consumer's process via the workerd debug
+     * port, so consumers may live in other dev processes and may (re)start at
+     * any time. Subscriptions must be registered before `context.config` is
+     * computed, which is why this runs alongside the binding hooks in
+     * `preparePlugins`.
+     */
+    const prepareTails = Effect.fnUntraced(function* (
+      worker: RuntimeWorker,
+      context: PluginContext.PluginContext["Service"],
+    ) {
+      if (!worker.tails?.length && !worker.streamingTails?.length) {
+        return { tails: undefined, streamingTails: undefined };
+      }
+      const proxy = yield* context.get(RegistryProxy.RegistryProxy);
+      const subscribeAll = (names: ReadonlyArray<string> | undefined) =>
+        names?.length
+          ? Effect.forEach([...new Set(names)], (scriptName) =>
+              proxy.api.subscribe({ kind: "worker", scriptName }),
+            )
+          : Effect.succeed(undefined);
+      const [tails, streamingTails] = yield* Effect.all(
+        [subscribeAll(worker.tails), subscribeAll(worker.streamingTails)],
+        { concurrency: "unbounded" },
+      );
+      return { tails, streamingTails };
     });
 
     const prepareContainers = Effect.fnUntraced(function* (worker: RuntimeWorker) {
@@ -94,14 +133,24 @@ export const RuntimeLive = Layer.effect(
             Effect.andThen(docker.validate(tag)),
             Effect.tap(() => {
               const unregister = exitHook(() => docker.removeContainerSync(tag));
+              // Each start cleans up ONLY its own image tag when its scope
+              // closes. Do NOT prune other same-name tags as "stale" here: a
+              // dev session starts the worker more than once (precreate stub
+              // → reconcile), and a cleanup that guesses which sibling tags
+              // are dead can untag the tag a live workerd is about to
+              // `docker create` from — every container start then fails and
+              // the session serves 500s until redeploy.
               return Effect.addFinalizer(() =>
                 docker
                   .removeContainer(tag)
-                  .pipe(Effect.andThen(Effect.sync(() => unregister())), Effect.ignore),
+                  .pipe(
+                    Effect.andThen(docker.removeImageTag(tag)),
+                    Effect.andThen(Effect.sync(() => unregister())),
+                    Effect.ignore,
+                  ),
               );
             }),
             Effect.tap(() => registerImage(className, tag, container.env)),
-            Effect.tap(() => Effect.forkDetach(docker.removeStaleImageTags(tag))),
           );
         },
         { concurrency: "unbounded", discard: true },
@@ -111,10 +160,12 @@ export const RuntimeLive = Layer.effect(
 
     return Runtime.of({
       start: Effect.fn(function* (worker) {
-        const [{ config, context, bindings }, { containerEngine, imageNames }] = yield* Effect.all(
-          [preparePlugins(worker), prepareContainers(worker)],
-          { concurrency: "unbounded" },
-        );
+        const [
+          { config, context, bindings, tails, streamingTails },
+          { containerEngine, imageNames },
+        ] = yield* Effect.all([preparePlugins(worker), prepareContainers(worker)], {
+          concurrency: "unbounded",
+        });
         const ports = yield* workerd.serve(
           {
             sockets: [
@@ -149,6 +200,9 @@ export const RuntimeLive = Layer.effect(
                     localDisk: storage.name,
                   },
                   containerEngine,
+                  tails,
+                  streamingTails,
+                  ...config.userWorker,
                   ...worker.unsafe,
                 },
               },

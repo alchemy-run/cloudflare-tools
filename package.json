@@ -21,11 +21,11 @@
     ],
     "catalogs": {
       "effect": {
-        "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0",
-        "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0",
-        "@effect/sql-pg": ">=4.0.0-beta.97 || >=4.0.0",
-        "@effect/vitest": ">=4.0.0-beta.97 || >=4.0.0",
-        "effect": ">=4.0.0-beta.97 || >=4.0.0"
+        "@effect/platform-bun": ">=4.0.0-beta.102 || >=4.0.0",
+        "@effect/platform-node": ">=4.0.0-beta.102 || >=4.0.0",
+        "@effect/sql-pg": ">=4.0.0-beta.102 || >=4.0.0",
+        "@effect/vitest": ">=4.0.0-beta.102 || >=4.0.0",
+        "effect": ">=4.0.0-beta.102 || >=4.0.0"
       },
       "workers": {
         "@cloudflare/workers-types": "^5.20260704.1",
@@ -35,12 +35,12 @@
     },
     "catalog": {
       "@alchemy.run/node-utils": "^0.0.5",
-      "@distilled.cloud/cloudflare": "^0.29.0",
+      "@distilled.cloud/cloudflare": "^0.30.3",
       "@playwright/test": "^1.61.1",
-      "rolldown": "^1.1.5",
+      "rolldown": "~1.1.5",
       "tsdown": "^0.22.4",
       "typescript": "^7.0.0",
-      "vite": "^8.1.4",
+      "vite": "8.1.4",
       "vitest": "^4.1.10"
     }
   },
@@ -69,5 +69,8 @@
     "turbo": "^2.9.16",
     "typescript": "catalog:"
   },
-  "packageManager": "bun@1.3.13"
+  "packageManager": "bun@1.3.13",
+  "patchedDependencies": {
+    "vocs@2.6.0": "patches/vocs@2.6.0.patch"
+  }
 }

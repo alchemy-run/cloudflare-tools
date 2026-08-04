@@ -15,19 +15,20 @@ export const makeViteFramework = (options: Options.Options): Options.Options.Fra
     Framework,
     Effect.gen(function* () {
       const vite = yield* Vite.Vite;
+      const { worker } = Options.resolveCloudflareOptions(options);
       const wrapError = (error: Vite.ViteError) =>
         new FrameworkError({ framework: "vite", message: error.message, cause: error.cause });
       return Framework.of({
         build: (buildOptions) =>
           vite
             .build(
-              options.vite,
+              worker,
               buildOptions?.root !== undefined ? { root: buildOptions.root } : undefined,
             )
             .pipe(Effect.mapError(wrapError)),
         dev: (devOptions) =>
           vite
-            .dev(options.vite, {
+            .dev(worker, {
               ...(devOptions?.root !== undefined ? { root: devOptions.root } : undefined),
               ...(devOptions?.port !== undefined
                 ? { server: { port: devOptions.port } }

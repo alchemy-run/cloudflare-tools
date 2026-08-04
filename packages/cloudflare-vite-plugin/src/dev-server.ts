@@ -1,3 +1,5 @@
+import type { ExportTypes } from "@distilled.cloud/cloudflare-rolldown-plugin/export-types";
+import { EXPORT_TYPES_MODULE_ID } from "@distilled.cloud/cloudflare-rolldown-plugin/export-types";
 import { MODULE_REFERENCE_REGEX } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import type { BindingHooks, Module } from "@distilled.cloud/cloudflare-runtime";
 import * as Runtime from "@distilled.cloud/cloudflare-runtime/Runtime";
@@ -23,6 +25,7 @@ import type * as vite from "vite";
 import * as ModuleRunnerWorker from "worker:./module-runner/module-runner.worker.ts";
 import * as WrapperWorker from "worker:./module-runner/wrapper.worker.ts";
 import * as ViteAssets from "./assets/ViteAssets";
+import { renderExportWrappers } from "./export-types.ts";
 import type { EntryEnvironment } from "./module-runner/constants.shared.ts";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin";
@@ -31,12 +34,13 @@ export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
 export const startServer = async <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
-  entryEnvironment: EntryEnvironment,
+  entryEnvironment: Omit<EntryEnvironment, "exportTypesId">,
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices.RuntimeServices>,
+  exportTypes: ExportTypes,
 ) => {
   const scope = Scope.makeUnsafe();
-  const address = await serve(options, entryEnvironment, server).pipe(
+  const address = await serve(options, entryEnvironment, server, exportTypes).pipe(
     Effect.provide(ViteAssets.ViteAssetsLive(server)),
     Effect.provide(context),
     Scope.provide(scope),
@@ -171,8 +175,9 @@ const makeModuleFallbackService = Effect.gen(function* () {
 
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
-  entryEnvironment: EntryEnvironment,
+  entryEnvironment: Omit<EntryEnvironment, "exportTypesId">,
   server: vite.ViteDevServer,
+  exportTypes: ExportTypes,
 ) {
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
@@ -180,7 +185,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
     name,
-    modules: yield* Effect.promise(() => makeWorkerModules(options)),
+    modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
     compatibilityDate: options.compatibilityDate ?? "2026-05-12",
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
@@ -189,7 +194,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         binding: "__DISTILLED_MODULE_RUNNER__",
         className: "ModuleRunnerDO",
       }),
-      Json.local("__DISTILLED_ENVIRONMENT__", entryEnvironment),
+      Json.local("__DISTILLED_ENVIRONMENT__", {
+        ...entryEnvironment,
+        exportTypesId: EXPORT_TYPES_MODULE_ID,
+      } satisfies EntryEnvironment),
       Loopback.local({
         binding: "__DISTILLED_INVOKE_MODULE__",
         name: `vite:invoke-module:${name}`,
@@ -216,6 +224,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       },
       ...(options.worker?.durableObjectNamespaces ?? []),
     ],
+    workflows: options.worker?.workflows,
     hyperdrives: options.worker?.hyperdrives,
     assets: options.worker?.assets,
     unsafe: {
@@ -276,7 +285,7 @@ const parseModuleFallbackRequest = async (
   }
 };
 
-async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<Array<Module>> {
+async function makeWorkerModules(exportTypes: ExportTypes): Promise<Array<Module>> {
   const [moduleRunnerWorker, wrapperWorker] = await Promise.all([
     ModuleRunnerWorker.worker(),
     WrapperWorker.worker(),
@@ -286,10 +295,7 @@ async function makeWorkerModules(options: CloudflareVitePluginOptions): Promise<
       `import { createWorkerEntrypointWrapper, createDurableObjectWrapper, createWorkflowEntrypointWrapper } from "./module-runner/wrapper.worker.mjs";`,
       'export { ModuleRunnerDO } from "./module-runner/module-runner.worker.mjs";',
       'export default createWorkerEntrypointWrapper("default");',
-      ...(options.worker?.durableObjectNamespaces ?? []).map(
-        (namespace) =>
-          `export const ${namespace.className} = createDurableObjectWrapper("${namespace.className}");`,
-      ),
+      ...renderExportWrappers(exportTypes),
     ].join("\n"),
     ...moduleRunnerWorker.modules,
     ...wrapperWorker.modules,

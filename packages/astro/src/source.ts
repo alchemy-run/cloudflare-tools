@@ -33,11 +33,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
 import * as Astro from "./Astro.ts";
+import cloudflareTarget from "./cloudflare.ts";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirrors of alchemy's source-provider contract
@@ -195,10 +197,29 @@ export interface AstroSourceOptions {
    */
   readonly sessionKVBindingName?: string;
   /**
+   * Zero-config sessions: default Astro's session driver to Cloudflare KV
+   * (binding `sessionKVBindingName`) when none is configured. `false`
+   * leaves the session config untouched.
+   * @default true
+   */
+  readonly sessions?: boolean;
+  /**
+   * Auto-inject an in-memory local KV namespace for the session binding: in
+   * dev on the dev worker, at build time on the workerd prerender worker
+   * (so session-touching pages can prerender before the Worker's real
+   * namespace exists). Disable once the Worker's own bindings deliver a KV
+   * binding with that name (e.g. when alchemy provisions the session
+   * namespace and passes it through the dev bindings).
+   * @default true
+   */
+  readonly sessionDevKV?: boolean;
+  /**
    * JSON-serializable subset of Astro config merged into the in-memory
-   * `AstroInlineConfig`. The project's `astro.config.*` file is NOT
-   * read (the integration is fully programmatic); use these fields for
-   * the common serializable knobs.
+   * `AstroInlineConfig`. The project's `astro.config.*` file loads
+   * natively; astro merges this inline overlay OVER it (scalars here
+   * override the file). The file itself participates in the `input`
+   * memo hash like any other project file, so these options stay
+   * JSON-serializable while the config file stays fully expressive.
    */
   readonly astro?: {
     readonly site?: string;
@@ -673,6 +694,31 @@ const readClientAssets = (
 // The provider
 // ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Feed the Worker's literal env values into `process.env` so `astro:env`
+ * server secrets (`getSecret`) resolve while Astro runs in the node process
+ * — config loading and node prerendering read env from `process.env`. This
+ * is the role upstream's `loadWranglerEnv` (wrangler `vars` + `.dev.vars`)
+ * plays at `astro:config:done`. Strings pass through, `Redacted<string>`s
+ * are unwrapped, numbers/booleans are stringified; everything else
+ * (Effects, resource bindings) is skipped — those are delivered as real
+ * bindings at runtime, not build-time values. Exported for testing.
+ */
+export const applyWorkerEnvToProcess = (
+  env: Record<string, unknown> | undefined,
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    for (const [key, value] of Object.entries(env ?? {})) {
+      if (typeof value === "string") {
+        process.env[key] = value;
+      } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
+        process.env[key] = Redacted.value(value) as string;
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        process.env[key] = String(value);
+      }
+    }
+  });
+
 const failWith =
   (message: string) =>
   (cause: unknown): SourceProviderError =>
@@ -704,8 +750,15 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
       Effect.provide(
         Astro.make({
           root: rootDir,
-          vite,
-          sessionKVBindingName: options.sessionKVBindingName,
+          // This module IS the alchemy Cloudflare Worker source provider, so
+          // it constructs the Cloudflare deploy target directly (as a value)
+          // rather than resolving the default specifier.
+          target: cloudflareTarget({
+            worker: vite,
+            sessionKVBindingName: options.sessionKVBindingName,
+            sessions: options.sessions,
+            sessionDevKV: options.sessionDevKV,
+          }),
           astro: options.astro,
         }),
       ),
@@ -718,6 +771,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const rootDir = yield* resolveRoot;
+        yield* applyWorkerEnvToProcess(ctx.env);
         const astro = yield* framework(rootDir, {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
@@ -781,6 +835,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
     dev: (ctx) =>
       Effect.gen(function* () {
         const rootDir = yield* resolveRoot;
+        yield* applyWorkerEnvToProcess(ctx.env);
         const queueConsumers = yield* ctx.worker.queueConsumers;
         const astro = yield* framework(rootDir, {
           compatibilityDate: ctx.compatibility.date,

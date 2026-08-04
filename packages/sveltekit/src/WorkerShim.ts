@@ -1,7 +1,7 @@
 /**
  * The generated Cloudflare Worker entry (`_worker.js`) for a SvelteKit build.
  *
- * A fork of `@sveltejs/adapter-cloudflare`'s `src/worker.js` with two
+ * A fork of `@sveltejs/adapter-cloudflare`'s `src/worker.js` with three
  * differences:
  *
  * - The `SERVER` / `MANIFEST` / `ASSETS` placeholders are templated directly
@@ -9,6 +9,42 @@
  *   `builder.copy` string replacement.
  * - `worktop/cfw.cache` is replaced with an inline `caches.default` wrapper
  *   (same lookup/save semantics), dropping the dependency.
+ * - With `notFoundHandling: "single-page-application"`, router-level
+ *   not-founds on navigation-shaped requests are deferred to the assets
+ *   layer (see below) so the configured `not_found_handling` governs.
+ *
+ * ## SPA not-found deferral (divergence from upstream)
+ *
+ * Upstream's `worker.js` never defers: kit's `server.respond` renders its
+ * own 404 error page for unmatched routes, and the assets-layer
+ * `not_found_handling` only applies to requests the worker never sees
+ * (asset-layer navigations under the `Sec-Fetch-Mode: navigate` preference
+ * flag) or to `env.ASSETS.fetch` misses. That leaves the configured
+ * `single-page-application` fallback unreachable for navigations that DO
+ * invoke the worker (e.g. plain `fetch` without `Sec-Fetch-Mode`).
+ *
+ * With `notFoundHandling: "single-page-application"` the shim therefore
+ * defers to `env.ASSETS.fetch(req)` — where the asset worker applies the
+ * configured `not_found_handling` and serves the generated `index.html`
+ * fallback — when ALL of:
+ *
+ * - `server.respond` returned a 404, AND
+ * - the request is navigation-shaped: `GET`/`HEAD` with `Accept`
+ *   containing `text/html` (deliberately excluding kit data/route-resolution
+ *   requests and API `fetch`es), AND
+ * - no kit route *pattern* matches the pathname — the most conservative
+ *   available signal that the 404 is kit's router-level "no route" error
+ *   rather than an intentional endpoint- or page-produced 404 (upstream has
+ *   no deferral, so there are no upstream semantics to mirror; kit marks
+ *   router 404s with no header). Endpoints only exist on matched routes, so
+ *   endpoint 404s are never deferred. A pattern match whose param matchers
+ *   fail is treated as matched (kit's own 404 page renders), as is a 404
+ *   produced by a user `handle` hook on a path that happens to match a
+ *   route pattern.
+ *
+ * `notFoundHandling: "404-page"` keeps exact upstream behavior (no
+ * deferral): upstream documents the `404.html` page as covering asset-layer
+ * misses only, with router-level 404s still rendered by kit.
  *
  * The emitted module is *unbundled* — its imports reach into
  * `.svelte-kit/output/server/**` — and is the input for the rolldown pass
@@ -21,7 +57,53 @@ export interface WorkerShimOptions {
   readonly manifestImport: string;
   /** Name of the static-assets binding. */
   readonly assetsBinding: string;
+  /**
+   * The assets-layer `not_found_handling` the build was produced for. With
+   * `"single-page-application"` the shim defers router-level not-founds on
+   * navigation-shaped requests to the assets binding (see the module doc);
+   * any other value emits upstream-parity behavior (no deferral).
+   * @default "none"
+   */
+  readonly notFoundHandling?: "none" | "404-page" | "single-page-application" | undefined;
 }
+
+/**
+ * The SPA-deferral helper emitted ahead of the fetch handler: kit's
+ * `find_route` pattern probe, minus param matchers (a pattern match with
+ * failing matchers is conservatively treated as matched).
+ */
+const spaRouteProbe = /* js */ `
+// Router-level match probe for the SPA not-found deferral: mirrors kit's
+// find_route pattern test (without param matchers — a pattern match whose
+// matchers fail keeps kit's own 404 rendering).
+const matches_kit_route = (pathname) => {
+  let path = pathname;
+  if (base_path) {
+    if (!path.startsWith(base_path)) return false;
+    path = path.slice(base_path.length) || '/';
+  }
+  for (const route of manifest._.routes) {
+    if (route.pattern.test(path)) return true;
+  }
+  return false;
+};
+`;
+
+const spaDeferral = (assetsBinding: string): string => /* js */ `
+      // not_found_handling: "single-page-application" — defer router-level
+      // not-founds on navigation-shaped requests (GET/HEAD accepting
+      // text/html) to the assets layer, which serves the generated
+      // index.html fallback. Intentional endpoint/page 404s (matched
+      // routes) are never deferred.
+      if (
+        res.status === 404 &&
+        (req.method === 'GET' || req.method === 'HEAD') &&
+        (req.headers.get('accept') || '').includes('text/html') &&
+        !matches_kit_route(pathname)
+      ) {
+        res = await env.${assetsBinding}.fetch(req);
+      }
+`;
 
 export const generateWorkerShim = (options: WorkerShimOptions): string =>
   /* js */ `
@@ -67,6 +149,7 @@ const cache_save = (req, res, ctx) => {
   return res;
 };
 
+${options.notFoundHandling === "single-page-application" ? spaRouteProbe : ""}
 /**
  * We don't know the origin until we receive a request, but that's guaranteed
  * to happen before we call \`read\`.
@@ -137,7 +220,7 @@ export default {
           return req.headers.get('cf-connecting-ip');
         },
       });
-    }
+${options.notFoundHandling === "single-page-application" ? spaDeferral(options.assetsBinding) : ""}    }
 
     // write to the cache only if the response is not an error;
     // \`cache_save\` handles the Cache-Control and Vary headers

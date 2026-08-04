@@ -93,3 +93,101 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((
     }),
   );
 });
+
+/**
+ * A stub whose `docker image inspect` stdout is configurable per test, so
+ * `getWorkerdDockerConfiguration`'s inspect-before-pull check on the egress
+ * interceptor image can be exercised both ways (present vs absent locally).
+ * All other commands (`docker pull`, `docker tag`, …) still succeed with
+ * empty output, matching `SpawnerStub` above.
+ *
+ * `getWorkerdDockerConfiguration`'s pull/skip-pull decision runs on a
+ * `forkDetach` fiber that starts as soon as the `Docker` layer is built —
+ * i.e. before an `it.effect` body gets a chance to run, let alone reset a
+ * shared recording array. So each test below gets its OWN dedicated
+ * `spawned` array (returned alongside the layer) instead of resetting the
+ * top-level one mid-test, which would race the fiber's own spawns.
+ */
+const makeInspectStub = (inspectStdout: string) => {
+  const spawned: Array<ReadonlyArray<string>> = [];
+  const layer = Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      if (command._tag === "StandardCommand") {
+        spawned.push([command.command, ...command.args]);
+      }
+      const isInspect =
+        command._tag === "StandardCommand" &&
+        command.args[0] === "image" &&
+        command.args[1] === "inspect";
+      return Effect.succeed(
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.succeed(
+            ChildProcessSpawner.ExitCode(isInspect && inspectStdout === "" ? 1 : 0),
+          ),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: isInspect ? Stream.make(new TextEncoder().encode(inspectStdout)) : Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        }),
+      );
+    }),
+  );
+  return { layer, spawned };
+};
+
+const present = makeInspectStub("sha256:deadbeef");
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))((it) => {
+  it.effect("skips the pull when the interceptor image is already present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.getWorkerdDockerConfiguration;
+      expect(present.spawned).toContainEqual([
+        "docker",
+        "image",
+        "inspect",
+        PINNED,
+        "--format",
+        "{{.Id}}",
+      ]);
+      expect(present.spawned).not.toContainEqual([
+        "docker",
+        "pull",
+        PINNED_WITHOUT_TAG,
+        "--platform",
+        "linux/amd64",
+      ]);
+    }),
+  );
+});
+
+const absent = makeInspectStub("");
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))((it) => {
+  it.effect("pulls the interceptor image when it is not present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.getWorkerdDockerConfiguration;
+      expect(absent.spawned).toContainEqual([
+        "docker",
+        "image",
+        "inspect",
+        PINNED,
+        "--format",
+        "{{.Id}}",
+      ]);
+      expect(absent.spawned).toContainEqual([
+        "docker",
+        "pull",
+        PINNED_WITHOUT_TAG,
+        "--platform",
+        "linux/amd64",
+      ]);
+    }),
+  );
+});

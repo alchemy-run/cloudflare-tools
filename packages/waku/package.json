@@ -1,7 +1,7 @@
 {
   "name": "@distilled.cloud/waku",
   "version": "0.13.7",
-  "description": "Wrangler-free Waku integration for Cloudflare Workers: programmatic build/dev over @distilled.cloud/cloudflare-vite-plugin implementing the framework-core Framework service.",
+  "description": "Wrangler-free Waku integration implementing the framework-core Framework service: programmatic build/dev with the deploy platform behind a DeployTarget value (Cloudflare Workers built in at ./cloudflare).",
   "keywords": [
     "cloudflare",
     "rsc",
@@ -44,6 +44,12 @@
       "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js",
       "default": "./dist/adapter.js"
+    },
+    "./cloudflare": {
+      "bun": "./src/cloudflare.ts",
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js",
+      "default": "./dist/cloudflare.js"
     },
     "./source": {
       "bun": "./src/source.ts",

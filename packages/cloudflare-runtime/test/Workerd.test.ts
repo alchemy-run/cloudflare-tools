@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Workerd from "../src/workerd/Workerd.ts";
 import * as PortHelpers from "./helpers/port.ts";
 
@@ -215,9 +216,14 @@ layer(services)((it) => {
           expect(yield* Effect.promise(() => response.text())).toBe("ok");
         }).pipe(Effect.scoped);
 
-        // Wait until we can bind to the port ourselves.
-
-        const free = yield* PortHelpers.check(port).pipe(Effect.exit);
+        // Wait until we can bind to the port ourselves. Closing the scope
+        // kills workerd, but the OS releases the listener a moment after the
+        // process exits — a single immediate probe races that on loaded CI
+        // runners (observed on macos-latest), so retry briefly (bounded).
+        const free = yield* PortHelpers.check(port).pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+          Effect.exit,
+        );
         assert(Exit.isSuccess(free));
       }),
     { timeout: 60_000 },

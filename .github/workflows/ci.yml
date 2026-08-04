@@ -44,8 +44,14 @@ jobs:
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
-          for v in TEST_MYSQL_URL TEST_POSTGRES_URL CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
+          for v in TEST_MYSQL_URL TEST_POSTGRES_URL; do
             if [ -z "${!v}" ]; then echo "::error::secret $v is empty — env-gated tests would silently skip"; exit 1; fi
+          done
+          # These two are currently NOT configured as repo secrets, which means
+          # RemoteBindings.integration.test.ts has never run on CI. Warn loudly
+          # until they are added, then move them into the hard-fail loop above.
+          for v in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
+            if [ -z "${!v}" ]; then echo "::warning::secret $v is empty — the remote-bindings integration suite silently skips on CI"; fi
           done
         env:
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}

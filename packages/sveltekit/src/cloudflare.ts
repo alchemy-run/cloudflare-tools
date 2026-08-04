@@ -80,6 +80,7 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
               platform: {
                 env: context.dev.env,
                 bindings: context.dev.bindings,
+                services: context.dev.services,
                 compatibilityDate: config.compatibilityDate,
                 compatibilityFlags: config.compatibilityFlags,
               },

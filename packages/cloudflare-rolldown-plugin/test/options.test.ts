@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { MinimalPluginContext } from "rolldown";
 import type * as vite from "vite";
 import { assert, describe, expect, it } from "vitest";
@@ -16,6 +17,39 @@ const callViteConfig = async (
   } as never);
   assert(result, "config hook returned nothing");
   return result as vite.UserConfig;
+};
+
+const NO_HTML_ROOT = path.resolve("test/fixtures");
+const HTML_ROOT = path.resolve("test/fixtures/client-html");
+
+interface FakeEnvironment {
+  name: string;
+  isBuilt?: boolean;
+  /** Defaults to a directory with no `index.html`. */
+  root?: string;
+  build?: { rollupOptions?: { input?: unknown }; rolldownOptions?: { input?: unknown } };
+}
+
+/** Records the environments the resolved `buildApp` actually builds. */
+const runBuildApp = async (
+  config: vite.UserConfig,
+  environments: Array<FakeEnvironment>,
+): Promise<Array<string>> => {
+  const buildApp = config.builder?.buildApp;
+  assert(typeof buildApp === "function", "buildApp is not a function");
+  const built: Array<string> = [];
+  await buildApp({
+    environments: Object.fromEntries(
+      environments.map(({ name, isBuilt = false, root = NO_HTML_ROOT, build = {} }) => [
+        name,
+        { name, isBuilt, config: { root, build } },
+      ]),
+    ),
+    build: async (environment: { name: string }) => {
+      built.push(environment.name);
+    },
+  } as never);
+  return built;
 };
 
 describe("options plugin", () => {
@@ -168,23 +202,47 @@ describe("options plugin", () => {
       skipEnvironments: ["prerender"],
     });
     const result = await callViteConfig(plugin, {});
-    const buildApp = result.builder?.buildApp;
-    assert(typeof buildApp === "function", "buildApp is not a function");
 
-    const built: Array<string> = [];
-    const builder = {
-      environments: {
-        ssr: { name: "ssr", isBuilt: false },
-        client: { name: "client", isBuilt: false },
-        // Framework-owned environment with no build input of its own.
-        prerender: { name: "prerender", isBuilt: false },
-        already: { name: "already", isBuilt: true },
-      },
-      build: async (environment: { name: string }) => {
-        built.push(environment.name);
-      },
-    };
-    await buildApp(builder as never);
+    const built = await runBuildApp(result, [
+      { name: "ssr" },
+      { name: "client", build: { rollupOptions: { input: "./src/main.tsx" } } },
+      // Framework-owned environment with no build input of its own.
+      { name: "prerender" },
+      { name: "already", isBuilt: true },
+    ]);
     expect(built).toEqual(["ssr", "client"]);
+  });
+
+  it("skips the entry-less client environment in the default buildApp", async () => {
+    // Vite creates `client` for every app. A pure Worker app never configures
+    // it, so building it would fall back to a nonexistent `index.html`.
+    const plugin = optionsPlugin.vite({ main: "./worker.ts" });
+    const result = await callViteConfig(plugin, {});
+
+    const built = await runBuildApp(result, [{ name: "ssr" }, { name: "client" }]);
+    expect(built).toEqual(["ssr"]);
+  });
+
+  it("builds a client environment that has a configured input", async () => {
+    const plugin = optionsPlugin.vite({ main: "./worker.ts" });
+    const result = await callViteConfig(plugin, {});
+
+    const withRollupInput = await runBuildApp(result, [
+      { name: "client", build: { rollupOptions: { input: "./src/main.tsx" } } },
+    ]);
+    expect(withRollupInput).toEqual(["client"]);
+
+    const withRolldownInput = await runBuildApp(result, [
+      { name: "client", build: { rolldownOptions: { input: "./src/main.tsx" } } },
+    ]);
+    expect(withRolldownInput).toEqual(["client"]);
+  });
+
+  it("builds a client environment whose root has an index.html", async () => {
+    const plugin = optionsPlugin.vite({ main: "./worker.ts" });
+    const result = await callViteConfig(plugin, {});
+
+    const built = await runBuildApp(result, [{ name: "client", root: HTML_ROOT }]);
+    expect(built).toEqual(["client"]);
   });
 });

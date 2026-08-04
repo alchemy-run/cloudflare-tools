@@ -3,6 +3,14 @@
 E2E fixture for [vocs](https://vocs.dev) (the minimal React documentation
 framework) on Cloudflare Workers.
 
+> **Workspace patch**: `patches/vocs@2.6.0.patch` (registered in the root
+> `package.json` `patchedDependencies`) fixes an upstream infinite recursion
+> in `getMdxLayoutImport` that crashes every MDX build on Windows. Filed and
+> fixed upstream — [wevm/vocs#611](https://github.com/wevm/vocs/issues/611) /
+> [wevm/vocs#612](https://github.com/wevm/vocs/pull/612); drop the patch when
+> bumping to a vocs release containing the fix. The patch only affects this
+> workspace's install — users bring their own vocs.
+
 Vocs 2.x is built on **waku**: its `vocs()` vite plugin (public export
 `vocs/vite`) composes waku's own `waku/vite-plugins` (environments,
 adapter-alias, static-build, ...) with vocs's mdx/config/patch plugins, and it

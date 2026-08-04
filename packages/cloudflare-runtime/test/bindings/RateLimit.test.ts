@@ -50,34 +50,36 @@ export default {
 `;
 
 layer(localRuntimeLayer)("RateLimit binding", (it) => {
-  it.effect("limits requests once the configured threshold is reached", () =>
-    Effect.gen(function* () {
-      const { fetch } = yield* startTestWorker({
-        name: "ratelimit-test",
-        compatibilityDate: "2026-03-10",
-        compatibilityFlags: [],
-        modules: [{ name: "main.js", type: "ESModule", content: RATE_LIMIT_SCRIPT }],
-        bindings: [
-          RateLimit.local({
-            binding: "TESTRATE",
-            namespaceId: 1,
-            simple: { limit: 2, period: 60 },
-          }),
-        ],
-      });
+  it.effect(
+    "limits requests once the configured threshold is reached",
+    () =>
+      Effect.gen(function* () {
+        const { fetch } = yield* startTestWorker({
+          name: "ratelimit-test",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: RATE_LIMIT_SCRIPT }],
+          bindings: [
+            RateLimit.local({
+              binding: "TESTRATE",
+              namespaceId: 1,
+              simple: { limit: 2, period: 60 },
+            }),
+          ],
+        });
 
-      let res = yield* fetch("/");
-      expect(res.status).toBe(200);
-      expect(yield* Effect.promise(() => res.text())).toBe("success");
+        let res = yield* fetch("/");
+        expect(res.status).toBe(200);
+        expect(yield* Effect.promise(() => res.text())).toBe("success");
 
-      res = yield* fetch("/");
-      expect(res.status).toBe(200);
-      expect(yield* Effect.promise(() => res.text())).toBe("success");
+        res = yield* fetch("/");
+        expect(res.status).toBe(200);
+        expect(yield* Effect.promise(() => res.text())).toBe("success");
 
-      res = yield* fetch("/");
-      expect(res.status).toBe(429);
-      expect(yield* Effect.promise(() => res.text())).toBe("rate limited");
-    }),
+        res = yield* fetch("/");
+        expect(res.status).toBe(429);
+        expect(yield* Effect.promise(() => res.text())).toBe("rate limited");
+      }),
     // The window is anchored at the first request per key, so three
     // sequential requests must trip deterministically — no CI retry.
     { retry: 0 },
@@ -102,7 +104,7 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
         });
 
         for (let i = 0; i < 10; i++) {
-          const statuses: number[] = [];
+          const statuses: Array<number> = [];
           for (let j = 0; j < 3; j++) {
             const res = yield* fetch(`/?key=seq-${i}`);
             statuses.push(res.status);

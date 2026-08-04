@@ -41,7 +41,11 @@ jobs:
       - name: Test
         # Windows runners exhaust socket buffer space (WSAENOBUFS) when many
         # workerd/playwright fixture suites run concurrently — run serially.
-        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=1' || '' }}
+        # The small macOS runners (3 cores) starve under full parallelism too
+        # (chromium launches + workerd fleets): three consecutive runs failed
+        # on three different single tests, including module-eval crashes while
+        # loading playwright configs — bound them to two concurrent suites.
+        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=1' || runner.os == 'macOS' && '--concurrency=2' || '' }}
         env:
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
           TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}

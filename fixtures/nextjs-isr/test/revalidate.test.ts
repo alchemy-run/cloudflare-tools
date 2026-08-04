@@ -68,13 +68,9 @@ for (const mode of Playwright.SERVER_METHODS) {
       // enqueues a background revalidation (DO queue → self-reference
       // fetch → KV write); a later hit serves the regenerated payload.
       await new Promise((resolve) => setTimeout(resolve, 2_500));
-      const fresh = await pollStamp(
-        server,
-        "/fast-isr",
-        "fast-isr-stamp",
-        (s) => s !== primed,
-        { times: 60 },
-      );
+      const fresh = await pollStamp(server, "/fast-isr", "fast-isr-stamp", (s) => s !== primed, {
+        times: 60,
+      });
       expect(fresh).not.toBe(primed);
     });
   });

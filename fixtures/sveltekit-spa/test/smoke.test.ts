@@ -7,6 +7,16 @@ const SHELL_MARKER = "sveltekit-spa-shell";
 
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
+    // Same Windows-runner socket-buffer exhaustion as the sibling sveltekit
+    // fixture's gate (see fixtures/sveltekit/scripts/e2e.mjs for the full
+    // evidence trail, incl. the failed port-range-widening experiment): the
+    // live serve's miniflare loopback churn hits kernel AFD buffer limits
+    // late in the suite and every fallback-dependent route 404s. Dev mode is
+    // unaffected and stays covered on Windows.
+    test.skip(
+      mode === "live" && process.platform === "win32" && !!process.env.CI,
+      "Windows CI runner socket-buffer exhaustion (see fixtures/sveltekit/scripts/e2e.mjs)",
+    );
     const it = Playwright.make(mode);
 
     it("hydrates the home page (no SSR) and honors the user svelte config", async ({

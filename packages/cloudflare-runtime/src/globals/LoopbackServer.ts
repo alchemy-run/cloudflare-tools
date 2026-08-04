@@ -106,11 +106,28 @@ export const LoopbackServerLive = Layer.effect(
         }
       }),
     );
+    // workerd re-connects for every loopback subrequest once its pooled
+    // connection is closed. Node's default `keepAliveTimeout` of 5s closes
+    // idle sockets between test/request bursts, producing per-burst TCP churn
+    // that piles up TIME_WAIT sockets — on Windows CI this exhausts ephemeral
+    // ports/AFD buffers (WSAENOBUFS #10055, ConnectEx ERROR_DUP_NAME #52).
+    // Keep idle connections around for a minute so they actually get reused.
+    server.keepAliveTimeout = 60_000;
+    // Must stay above `keepAliveTimeout` so Node doesn't tear down a reused
+    // socket while request headers are still arriving.
+    server.headersTimeout = 65_000;
     yield* Effect.callback<void>((resume) => {
       server.listen(0, "127.0.0.1", () => resume(Effect.void));
     });
     const address = yield* getAddress(server);
-    yield* Effect.addFinalizer(() => Effect.sync(() => server.close()));
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        // `close()` only stops listening; long-lived keep-alive connections
+        // would otherwise linger until the peer closes them.
+        server.close();
+        server.closeAllConnections();
+      }),
+    );
     const scope = yield* Effect.scope;
     const makeHandler = yield* Effect.promise(
       async () => await import("@effect/platform-node/NodeHttpServer").then((m) => m.makeHandler),

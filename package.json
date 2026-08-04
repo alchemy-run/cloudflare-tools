@@ -37,10 +37,10 @@
       "@alchemy.run/node-utils": "^0.0.5",
       "@distilled.cloud/cloudflare": "^0.30.3",
       "@playwright/test": "^1.61.1",
-      "rolldown": "^1.1.5",
+      "rolldown": "~1.1.5",
       "tsdown": "^0.22.4",
       "typescript": "^7.0.0",
-      "vite": "^8.1.4",
+      "vite": "8.1.4",
       "vitest": "^4.1.10"
     }
   },
@@ -52,8 +52,8 @@
     "check:write": "bun run format:write && bun run lint:write && turbo run typecheck",
     "format": "oxfmt format --check .",
     "format:write": "oxfmt format .",
-    "lint": "oxlint lint . --ignore-pattern 'workers-sdk'",
-    "lint:write": "oxlint lint . --ignore-pattern 'workers-sdk' --fix",
+    "lint": "oxlint lint . --ignore-pattern 'upstream'",
+    "lint:write": "oxlint lint . --ignore-pattern 'upstream' --fix",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "submodules:init": "git submodule update --init --recursive",

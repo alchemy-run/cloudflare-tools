@@ -44,7 +44,32 @@ export interface BasePluginOptions {
     entry?: string;
     children?: Array<string>;
   };
+  /**
+   * Vite environment names that must be left untouched by the Cloudflare
+   * plugins. Frameworks can add Node-side server environments to the same dev
+   * server or builder (e.g. Astro's `astro` and `prerender` environments), and
+   * applying the Worker treatment (unenv polyfills, workerd resolve
+   * conditions, dependency pre-bundling) to them breaks their Node runtime.
+   *
+   * The `client` environment is always excluded and does not need to be
+   * listed here.
+   *
+   * @default []
+   * @example
+   * ```ts
+   * cloudflare({ viteEnvironments: { entry: "ssr" }, skipEnvironments: ["astro", "prerender"] });
+   * ```
+   */
+  skipEnvironments?: Array<string>;
 }
+
+/**
+ * Whether the named Vite environment must be left untouched by the Cloudflare
+ * plugins — the browser `client` environment, plus anything the user listed in
+ * {@link BasePluginOptions.skipEnvironments}.
+ */
+export const isSkippedEnvironment = (options: BasePluginOptions, name: string): boolean =>
+  name === "client" || (options.skipEnvironments?.includes(name) ?? false);
 
 export const parseViteEnvironments = (options: BasePluginOptions): [string, ...Array<string>] => {
   const entry = options.viteEnvironments?.entry ?? "ssr";
@@ -69,5 +94,12 @@ export const parseViteEnvironments = (options: BasePluginOptions): [string, ...A
     }
     return name;
   });
+  for (const name of options.skipEnvironments ?? []) {
+    if (name === entry || children.includes(name)) {
+      throw new Error(
+        `The environment "${name}" cannot be both a worker environment and listed in "skipEnvironments".`,
+      );
+    }
+  }
   return [entry, ...children];
 };

@@ -15,6 +15,22 @@ export interface WorkerdPorts {
   [socket: string]: number;
 }
 
+/**
+ * Receives a decoded chunk of the workerd process's output along with the
+ * stream it was written to.
+ */
+export type OutputSink = (chunk: string, stream: "stdout" | "stderr") => void;
+
+export interface ServeOptions {
+  /**
+   * Capture the workerd process's output instead of piping it to the parent
+   * process's stdout/stderr. Output produced before the process finishes
+   * starting is not captured; startup failures surface as typed errors
+   * instead.
+   */
+  readonly onOutput?: OutputSink;
+}
+
 export class Workerd extends Context.Service<
   Workerd,
   {
@@ -22,6 +38,7 @@ export class Workerd extends Context.Service<
     readonly serve: (
       config: Config,
       args?: Record<string, string | number | boolean>,
+      options?: ServeOptions,
     ) => Effect.Effect<WorkerdPorts, ConfigError | SystemError, Scope.Scope>;
   }
 >()("cloudflare-runtime/workerd/Workerd") {}
@@ -44,8 +61,11 @@ interface ProcessHandle {
   readonly control: (count: number) => Effect.Effect<Array<ControlMessage>, SystemError>;
   /** Resumes with an error if the process fails to start. */
   readonly error: () => Effect.Effect<never, ConfigError | SystemError>;
-  /** Pipes the process's stderr to the console. Called after initialization is complete. */
-  readonly pipe: () => Effect.Effect<void, never, Scope.Scope>;
+  /**
+   * Pipes the process's stdout/stderr to the console, or to `sink` when one
+   * is provided. Called after initialization is complete.
+   */
+  readonly pipe: (sink?: OutputSink) => Effect.Effect<void, never, Scope.Scope>;
   /** Kills the process. */
   readonly kill: () => void;
 }
@@ -60,7 +80,7 @@ const make = (
   Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
-      function* (config, args) {
+      function* (config, args, options) {
         // Debug facility: dump each serve's full workerd config as JSON.
         // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
         const dumpDir = process.env.WORKERD_DUMP_CONFIG;
@@ -105,7 +125,7 @@ const make = (
           (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
           (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
         const control = yield* Effect.raceAllFirst([handle.control(count), handle.error()]);
-        yield* handle.pipe();
+        yield* handle.pipe(options?.onOutput);
         const ports: WorkerdPorts = {};
         for (const message of control) {
           if (message.event === "listen") {
@@ -139,6 +159,7 @@ const makeStreamPump = (
   sink: (chunk: string) => void,
 ) => {
   const chunks: Array<string> = [];
+  let target = sink;
   let forwarded = 0;
   let forwarding = false;
   const done = (async () => {
@@ -146,7 +167,7 @@ const makeStreamPump = (
       for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
         chunks.push(chunk);
         if (forwarding) {
-          sink(chunk);
+          target(chunk);
           forwarded = chunks.length;
         }
       }
@@ -157,10 +178,12 @@ const makeStreamPump = (
   })();
   return {
     done,
-    forward: () => {
+    /** Start forwarding, optionally redirecting to a capture sink. */
+    forward: (override?: (chunk: string) => void) => {
+      if (override) target = override;
       forwarding = true;
       while (forwarded < chunks.length) {
-        sink(chunks[forwarded++]);
+        target(chunks[forwarded++]);
       }
     },
   };
@@ -220,10 +243,10 @@ const makeBun = () =>
                 resume(classifyWorkerdError(text, child.exitCode, child.signalCode));
               });
             }),
-          pipe: () =>
+          pipe: (sink) =>
             Effect.sync(() => {
-              stdout.forward();
-              stderr.forward();
+              stdout.forward(sink && ((chunk) => sink(chunk, "stdout")));
+              stderr.forward(sink && ((chunk) => sink(chunk, "stderr")));
             }),
           kill: () => child.kill("SIGKILL"),
         };
@@ -350,12 +373,16 @@ const makeNode = () =>
               child.stderr?.off("error", onError);
             });
           }),
-        pipe: () => {
+        pipe: (sink) => {
+          const stdoutDecoder = new TextDecoder();
+          const stderrDecoder = new TextDecoder();
           const onStdout = (chunk: Buffer) => {
-            process.stdout.write(chunk);
+            if (sink) sink(stdoutDecoder.decode(chunk, { stream: true }), "stdout");
+            else process.stdout.write(chunk);
           };
           const onStderr = (chunk: Buffer) => {
-            process.stderr.write(chunk);
+            if (sink) sink(stderrDecoder.decode(chunk, { stream: true }), "stderr");
+            else process.stderr.write(chunk);
           };
           return Effect.acquireRelease(
             Effect.sync(() => {

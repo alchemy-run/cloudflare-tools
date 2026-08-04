@@ -109,6 +109,7 @@
     "./globals/ScheduledOptions": "./dist/node/globals/ScheduledOptions.shared.mjs",
     "./globals/Storage": "./dist/node/globals/Storage.mjs",
     "./platform-proxy": "./dist/node/platform-proxy/index.mjs",
+    "./platform-proxy/connect": "./dist/node/platform-proxy/connect.mjs",
     "./platform-proxy/getPlatformProxy": "./dist/node/platform-proxy/getPlatformProxy.mjs",
     "./platform-proxy/PlatformProxy": "./dist/node/platform-proxy/PlatformProxy.mjs",
     "./platform-proxy/PlatformProxyProtocol": "./dist/node/platform-proxy/PlatformProxyProtocol.shared.mjs",

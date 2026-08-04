@@ -24,7 +24,7 @@ interface Env extends BaseEnv {
  *   `server.headers` in the Vite config.
  *
  * Mirrors the behavior of `CustomAssetWorker` in
- * `workers-sdk/packages/vite-plugin-cloudflare/src/workers/asset-worker`.
+ * `upstream/workers-sdk/packages/vite-plugin-cloudflare/src/workers/asset-worker`.
  */
 export default class ViteAssetWorker extends AssetWorkerInner<Env> {
   override async fetch(request: Request): Promise<Response> {

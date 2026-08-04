@@ -39,7 +39,9 @@ jobs:
         run: bun run check
 
       - name: Test
-        run: bun run test
+        # Windows runners exhaust socket buffer space (WSAENOBUFS) when many
+        # workerd/playwright fixture suites run concurrently — run serially.
+        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=1' || '' }}
         env:
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
           TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}

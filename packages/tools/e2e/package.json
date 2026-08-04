@@ -7,8 +7,8 @@
   },
   "type": "module",
   "exports": {
+    "./Framework": "./src/Framework.ts",
     "./Options": "./src/Options.ts",
-    "./Harness": "./src/Harness.ts",
     "./Playwright": "./src/Playwright.ts"
   },
   "scripts": {
@@ -17,6 +17,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
+    "@distilled.cloud/framework-core": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect"
   },

@@ -38,6 +38,9 @@ export interface ServeOptions {
   readonly host?: string;
 }
 
+/** Maximum number of port-collision retries for a single `serve` call (each attempt spawns a workerd process). */
+const MAX_SERVE_ATTEMPTS = 8;
+
 export interface WorkerProxyInstance {
   readonly url: URL;
   readonly set: (upstream: URL) => Effect.Effect<void, SystemError>;
@@ -111,16 +114,24 @@ export const WorkerProxyLive = Layer.effect(
 
     // The `findAvailablePort` function is lower overhead than `serve`, but it's best-effort.
     // If there is a race condition, we may not be able to bind to the port, so we retry.
-    const serveWithRetry: typeof serve = (options) =>
+    // The retry MUST be bounded: every attempt spawns a fresh workerd process, and on
+    // Windows `isAddressInUseError` matches any `std::terminate` start crash — an
+    // environmental failure (e.g. socket-buffer exhaustion on CI) would otherwise turn
+    // this into an unbounded workerd-spawn storm that amplifies the exhaustion.
+    const serveWithRetry = (
+      options: Parameters<typeof serve>[0],
+      attempt = 1,
+    ): ReturnType<typeof serve> =>
       serve(options).pipe(
         Effect.catchIf(
           (error) =>
             Workerd.isAddressInUseError(error) &&
             !options.strictPort &&
-            options.port <= Port.MAX_PORT,
+            options.port <= Port.MAX_PORT &&
+            attempt < MAX_SERVE_ATTEMPTS,
           () =>
             Effect.flatMap(ports.find(options.port + 1), (port) =>
-              serveWithRetry({ ...options, port }),
+              serveWithRetry({ ...options, port }, attempt + 1),
             ),
         ),
       );

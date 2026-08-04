@@ -1,0 +1,21 @@
+{
+  "name": "@fixtures/monorepo-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "e2e dev --port 3109",
+    "build": "e2e build",
+    "preview": "e2e preview",
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "pretest": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/e2e": "workspace:*",
+    "@distilled.cloud/framework-core": "workspace:*",
+    "@playwright/test": "catalog:",
+    "effect": "catalog:effect",
+    "vite": "catalog:"
+  }
+}

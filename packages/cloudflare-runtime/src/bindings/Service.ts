@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { SERVICE_USER_WORKER } from "../internal/constants.ts";
 import * as Plugin from "../Plugin.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import { RegistryProxy } from "../registry/RegistryProxy.ts";
@@ -51,6 +52,35 @@ export const local = ({
         })),
       ),
   );
+
+export interface SelfServiceProps {
+  /**
+   * Named entrypoint on the worker. Defaults to the default entrypoint.
+   */
+  readonly entrypoint?: string;
+}
+
+/**
+ * Bind the worker to itself (a same-script service binding, e.g. OpenNext's
+ * `WORKER_SELF_REFERENCE`). Unlike {@link local}, this resolves in-process with
+ * no dev-registry round trip, so it works while the worker is still starting.
+ *
+ * The binding targets the user worker service directly, **bypassing the
+ * middleware chain** (assets router, etc.) that fronts the worker's entry
+ * socket. Requests sent through this binding always reach the worker's own
+ * handlers, even for paths that static assets would otherwise serve. This is
+ * the correct semantic for self-invocation patterns like ISR revalidation,
+ * where the request must hit the worker's `fetch` handler rather than the
+ * assets middleware.
+ */
+export const self = (binding: string, { entrypoint }: SelfServiceProps = {}): BindingHook =>
+  Effect.succeed({
+    name: binding,
+    service: {
+      name: SERVICE_USER_WORKER,
+      ...(entrypoint !== undefined ? { entrypoint } : undefined),
+    },
+  });
 
 /**
  * Bind to a deployed Cloudflare Worker via the remote bindings proxy.

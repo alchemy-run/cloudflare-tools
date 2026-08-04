@@ -24,13 +24,17 @@ const workerConfig = (
   },
   target: "esnext",
   dts: false,
+  // The cloudflare/build-utils plugins are typed against the workspace's
+  // rolldown while tsdown's `UserConfig` is typed against its own nested
+  // copy; the structural compare between the two plugin types blows tsc's
+  // depth limit, so bridge through `unknown`.
   plugins: [
     cloudflare({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: options.compatibilityFlags,
     }),
     InternalWorkerExportPlugin(),
-  ],
+  ] as unknown as UserConfig["plugins"],
   deps: {
     alwaysBundle: [/.+/],
   },
@@ -82,6 +86,6 @@ export default defineConfig([
         return `${name}.${name.endsWith(".d") ? "mts" : "mjs"}`;
       },
     },
-    plugins: [InternalWorkerImportPlugin()],
+    plugins: [InternalWorkerImportPlugin()] as unknown as UserConfig["plugins"],
   },
 ]);

@@ -160,13 +160,22 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         return {
           appType,
           builder:
-            appType === "spa"
+            // Vite merges plugin `config` results over the user config, so an
+            // unconditional default here would clobber a framework's own
+            // `buildApp` orchestrator (e.g. Astro's prerender -> ssr -> client
+            // pipeline). Only default it when the resolved user config doesn't
+            // already define one.
+            appType === "spa" || userConfig.builder?.buildApp !== undefined
               ? undefined
               : {
                   // We need to include this for `builder.buildApp()` to work
                   // because not all frameworks provide it...
                   buildApp: async (builder) => {
                     for (const environment of Object.values(builder.environments)) {
+                      // Framework-owned environments we were told to leave
+                      // alone may have no build input; never drive them from
+                      // our default orchestrator.
+                      if (pluginOptions.skipEnvironments?.includes(environment.name)) continue;
                       // ...however, if your framework does provide a `buildApp` hook,
                       // this check prevents us from building the environment twice.
                       if (environment.isBuilt) continue;

@@ -26,7 +26,7 @@ const PUBLIC_DIR_PREFIX = "__VITE_PUBLIC_DIR__";
  * resolve through the dev server instead of through a static snapshot.
  *
  * Mirrors the dev-mode asset wiring in
- * `workers-sdk/packages/vite-plugin-cloudflare/src/miniflare-options.ts`.
+ * `upstream/workers-sdk/packages/vite-plugin-cloudflare/src/miniflare-options.ts`.
  */
 export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
   Layer.effect(

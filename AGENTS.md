@@ -13,16 +13,36 @@ Code must pass linting, formatting, and typechecking. Use `bun run check` to run
 
 ### Published Packages
 
+- `packages/astro`: Programmatic Astro integration implementing the framework-core `Framework` service, with the deploy target passed as a value; the wrangler-free Cloudflare target (a fork of `@astrojs/cloudflare` over `cloudflare-vite-plugin`) ships at the `./cloudflare` subpath.
 - `packages/cloudflare-rolldown-plugin`: Rolldown plugin for Cloudflare Workers.
 - `packages/cloudflare-runtime`: Effect-native local runtime for Cloudflare Workers, powered by `workerd`.
 - `packages/cloudflare-vite-plugin`: Vite plugin for Cloudflare Workers; composes `cloudflare-rolldown-plugin` and `cloudflare-runtime`.
+- `packages/framework-core`: Platform-neutral framework-integration core: the `BuildOutput` contract, the `alchemy:build-output` Vite collector plugin, the project module loader, the `Framework` service contract, and the `DeployTarget` contract (the deploy target as a value passed to framework integrations).
+- `packages/nuxt`: Wrangler-free Nuxt integration implementing the `Framework` service (programmatic build over the project's `@nuxt/kit`; the Cloudflare target — nitro's `cloudflare_module` preset with `deployConfig` off and the entry/exports seam — ships at `@distilled.cloud/nuxt/cloudflare`).
+- `packages/sveltekit`: Wrangler-free SvelteKit integration implementing the `Framework` service; the Cloudflare deploy target (in-memory kit adapter + rolldown re-bundle for workerd + dev stub platform) ships at `@distilled.cloud/sveltekit/cloudflare`.
+- `packages/waku`: Wrangler-free Waku integration implementing the `Framework` service (platform-neutral programmatic build/dev; the Cloudflare target — `cloudflare-vite-plugin` injection + the adapter fork — ships at `@distilled.cloud/waku/cloudflare`).
 
 ### Internals
 
-- `workers-sdk/*`: Git submodule containing the `cloudflare/workers-sdk` repository.
-- `fixtures/*`: Test fixtures for various Cloudflare Workers scenarios.
-- `packages/tools/*`: Internal build and test utilities.
+- `upstream/workers-sdk/*`: Git submodule containing the `cloudflare/workers-sdk` repository.
+- `fixtures/*`: Framework fixtures driven by the e2e harness (`e2e dev/build/preview` + Playwright smoke tests in both `live` and `dev` modes).
+- `packages/tools/*`: Internal build and test utilities, including `packages/tools/e2e` (the fixture harness; target-scoped config carriage in `e2e.config.ts`).
 - `packages/vendor/*`: Vendored-in packages from `cloudflare/workers-sdk`. See `packages/vendor/README.md` for more details.
+
+## Framework Integrations
+
+Framework packages (waku/astro/sveltekit, later nextjs) separate two concerns:
+
+- The **framework half** — programmatic build/dev orchestration implementing framework-core's `Framework` service (`{ build, dev }` returning the `BuildOutput` contract).
+- The **deploy-target half** — everything platform-specific (adapter/integration forks, bundler plugin injection, finishing passes, preview serving), passed to the framework as a `DeployTarget` value (a prop). Cloudflare is the first target; each framework ships its implementation as a subpath module (e.g. `@distilled.cloud/waku/cloudflare`). Future platforms (AWS) implement the same seams without touching framework packages or framework-core.
+
+The precise `DeployTarget` contract, the harness config carriage, and the per-framework migration recipes live in `packages/framework-core/README.md` — read that before touching any framework package.
+
+Doctrine for all framework/target work:
+
+- **Wrangler-free, programmatic-only.** No `wrangler.json` is read or written anywhere; all worker configuration is in-memory options (plugin/adapter options here; Worker props on the alchemy side). We never spawn a framework's CLI binary (upstream pipelines may internally — that is upstream orchestration, not ours).
+- **Platform-proxy policy.** Wherever an upstream integration uses wrangler's `getPlatformProxy` (SvelteKit `adapter-cloudflare`, OpenNext `initOpenNextCloudflareForDev`, Astro `platformProxy`), reimplement the feature in `@distilled.cloud/cloudflare-runtime` (workerd-backed Node-side proxies for `env`/`cf`/`ctx`/`caches`, configured in-memory) — never take a wrangler dependency.
+- **Version pinning.** The upstream surfaces these integrations touch are `@experimental`/`unstable_`/unexported: pin exact framework versions, e2e-test against real apps in CI, and treat version bumps as deliberate migrations, not routine updates.
 
 ## File Conventions
 
@@ -46,15 +66,15 @@ We use `tsdown` to resolve the `worker:` imports into bundled modules that can b
 
 ### 1. Reference the Miniflare implementation
 
-- In Miniflare, bindings are implemented as plugins located at `workers-sdk/packages/miniflare/src/plugins/*`.
+- In Miniflare, bindings are implemented as plugins located at `upstream/upstream/workers-sdk/packages/miniflare/src/plugins/*`.
 - Each plugin defines a set of callbacks. The most important are:
   - `getBindings`: Returns a list of `Worker_Binding`s that will be added to the user's worker in `workerd`.
   - `getServices`: Returns a list of services - typically internal worker scripts - that are used to implement the binding.
   - `getExtensions`: Some simpler bindings are implemented as extensions, which are internal modules that run within the user worker, as opposed to a separate service.
 - Some bindings offer local and remote implementations, and some are remote-only. Remote implementations are denoted by the `remoteProxyConnectionString` option.
-- The source code for services and extensions is located in `workers-sdk/packages/miniflare/src/workers/*`.
+- The source code for services and extensions is located in `upstream/upstream/workers-sdk/packages/miniflare/src/workers/*`.
   - Some services extend a Cloudflare internal package, such as `@cloudflare/workers-shared`.
-- Look at `workers-sdk/packages/miniflare/test` to see how the binding is tested. The `cloudflare-runtime` implementation must pass all of the same test cases, to the extent possible.
+- Look at `upstream/upstream/workers-sdk/packages/miniflare/test` to see how the binding is tested. The `cloudflare-runtime` implementation must pass all of the same test cases, to the extent possible.
 
 ### 2. Implement the remote binding (if applicable)
 
@@ -108,7 +128,7 @@ export type BindingServices =
 
 ### 4. Adapt the relevant services and extensions
 
-Create `.worker.ts` files in `workers-sdk/packages/miniflare/src/workers/<binding-name>` for the services and extensions that need to be adapted.
+Create `.worker.ts` files in `upstream/upstream/workers-sdk/packages/miniflare/src/workers/<binding-name>` for the services and extensions that need to be adapted.
 
 The upstream worker implementations may be more complex than we need, so you may not want to simply copy and paste. Instead, aim to match the upstream implementation as closely as possible while avoiding unnecessary abstractions and creating as few files as possible.
 

@@ -43,17 +43,17 @@ section / `at commit <sha>`). Capture the old SHA(s), update the submodule, then
 diff to see scope.
 
 ```bash
-git submodule update --remote workers-sdk
-git -C workers-sdk rev-parse HEAD        # the new SHA
+git submodule update --remote upstream/workers-sdk
+git -C upstream/workers-sdk rev-parse HEAD        # the new SHA
 
 # For each vendored package, diff old recorded SHA -> HEAD:
-git -C workers-sdk diff --stat <old-sha>..HEAD -- packages/workers-shared
-git -C workers-sdk diff --stat <old-sha>..HEAD -- packages/workflows-shared
+git -C upstream/workers-sdk diff --stat <old-sha>..HEAD -- packages/workers-shared
+git -C upstream/workers-sdk diff --stat <old-sha>..HEAD -- packages/workflows-shared
 ```
 
 If `--remote` leaves the submodule unchanged, the workspace tree already points
 at the latest commit; the package READMEs are just behind. Still re-vendor
-against `git -C workers-sdk rev-parse HEAD`.
+against `git -C upstream/workers-sdk rev-parse HEAD`.
 
 ## Step 2 — Re-vendor each changed package
 
@@ -65,7 +65,7 @@ For each changed file, format-normalize the **old** upstream and diff against
 the current vendored copy:
 
 ```bash
-git -C workers-sdk show <old-sha>:packages/<upstream>/<file> > /tmp/old.ts
+git -C upstream/workers-sdk show <old-sha>:packages/<upstream>/<file> > /tmp/old.ts
 cp /tmp/old.ts /tmp/old.fmt.ts
 bunx oxfmt format /tmp/old.fmt.ts && bunx oxlint --fix /tmp/old.fmt.ts
 diff /tmp/old.fmt.ts packages/vendor/<upstream>/src/<vendored-path>
@@ -106,7 +106,7 @@ the Miniflare plugin between the same two SHAs:
 
 ```bash
 # Plugin wiring (getBindings / getServices) + the worker templates:
-git -C workers-sdk diff <old-sha>..HEAD -- \
+git -C upstream/workers-sdk diff <old-sha>..HEAD -- \
   packages/miniflare/src/plugins/<feature> \
   packages/miniflare/src/workers/<feature>
 ```
@@ -152,7 +152,7 @@ Concrete couplings that show up:
   service in `ViteAssets.ts` (`ViteAssetsLive`) — both the `assets:worker`
   service and the `assets:router` middleware.
 
-The vite plugin mirrors `workers-sdk/packages/vite-plugin-cloudflare` (e.g.
+The vite plugin mirrors `upstream/workers-sdk/packages/vite-plugin-cloudflare` (e.g.
 `src/miniflare-options.ts` and `src/workers/*`), so diff that package between the
 same two SHAs when a change looks vite-specific.
 

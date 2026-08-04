@@ -1,0 +1,68 @@
+{
+  "name": "@distilled.cloud/framework-core",
+  "version": "0.13.7",
+  "description": "Shared framework-integration core for Cloudflare Workers: BuildOutput contract, Vite build-output collector, project module loader, and the Framework service contract.",
+  "keywords": [
+    "cloudflare",
+    "vite",
+    "workers"
+  ],
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/framework-core#readme",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "John Royal",
+    "email": "john@alchemy.run",
+    "url": "https://distilled.cloud"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
+    "directory": "packages/framework-core"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist .cache",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "devDependencies": {
+    "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "effect": "catalog:effect",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:effect",
+    "vite": "^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

@@ -1,6 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { ModuleRunner, ssrDynamicImportKey, ssrModuleExportsKey } from "vite/module-runner";
-import { ENVIRONMENT_NAME_HEADER, INIT_PATH } from "./constants.shared.ts";
+import {
+  ENVIRONMENT_NAME_HEADER,
+  EXPORT_TYPES_EVENT,
+  INIT_PATH,
+  REQUEST_EXPORT_TYPES_EVENT,
+} from "./constants.shared.ts";
 import { stripInternalEnv, type Env } from "./env.worker.ts";
 
 declare global {
@@ -70,6 +75,14 @@ export class ModuleRunnerDO extends DurableObject<Env> {
 
     const moduleRunner = this.makeModuleRunner(server, environmentName);
     this.moduleRunners.set(environmentName, moduleRunner);
+    // `send()` writes to this socket, which is how `import.meta.hot.send()` in
+    // user code reaches the dev server.
+    this.webSockets.set(environmentName, server);
+    server.addEventListener("message", ({ data }) => {
+      if (isRequestExportTypes(data)) {
+        void this.reportExportTypes(environmentName);
+      }
+    });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -79,6 +92,41 @@ export class ModuleRunnerDO extends DurableObject<Env> {
       throw new NotInitializedError(environmentName);
     }
     webSocket.send(data);
+  }
+
+  /**
+   * Evaluates the Worker entry and reports how each of its exports should be
+   * wrapped. The dev server needs this before it can serve a request, so the
+   * import runs here rather than being driven from user code.
+   */
+  private async reportExportTypes(environmentName: string): Promise<void> {
+    const { entryId, exportTypesId } = this.env.__DISTILLED_ENVIRONMENT__;
+    let data: unknown;
+    try {
+      // Both imports run inside this object's IoContext, so they can go
+      // straight to the module runner instead of through `callbacks`.
+      const { getExportTypes } = (await this.import(environmentName, exportTypesId)) as {
+        getExportTypes: (module: unknown) => Record<string, string>;
+      };
+      data = getExportTypes(await this.import(environmentName, entryId));
+    } catch (error) {
+      // A reply still goes out so the dev server does not wait out its timeout.
+      // The entry failing to evaluate is reported to the user through the
+      // request that triggered it; the dev server keeps its current export
+      // types.
+      // oxlint-disable-next-line no-console
+      console.error("Failed to determine the Worker entry's export types:", error);
+      data = null;
+    }
+    this.send(environmentName, JSON.stringify({ type: "custom", event: EXPORT_TYPES_EVENT, data }));
+  }
+
+  private async import(environmentName: string, id: string): Promise<unknown> {
+    const moduleRunner = this.moduleRunners.get(environmentName);
+    if (!moduleRunner) {
+      throw new NotInitializedError(environmentName);
+    }
+    return await moduleRunner.import(id);
   }
 
   async executeCallback(id: number): Promise<void> {
@@ -170,6 +218,22 @@ export class ModuleRunnerDO extends DurableObject<Env> {
         },
       },
     );
+  }
+}
+
+function isRequestExportTypes(data: string | ArrayBuffer): boolean {
+  if (typeof data !== "string" || !data.includes(REQUEST_EXPORT_TYPES_EVENT)) {
+    return false;
+  }
+  try {
+    const payload: unknown = JSON.parse(data);
+    return (
+      typeof payload === "object" &&
+      payload !== null &&
+      (payload as { event?: unknown }).event === REQUEST_EXPORT_TYPES_EVENT
+    );
+  } catch {
+    return false;
   }
 }
 

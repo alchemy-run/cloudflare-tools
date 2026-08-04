@@ -3,15 +3,19 @@ import * as Layer from "effect/Layer";
 import {
   AnalyticsEngine,
   Assets,
+  Browser,
   Cache,
   D1,
   DispatchNamespace,
   Hyperdrive,
+  Images,
   KvNamespace,
   Queue,
   R2Bucket,
   RateLimit,
+  SecretsStore,
   SendEmail,
+  Stream,
   Workflows,
 } from "./bindings/index.ts";
 import * as Docker from "./Docker.ts";
@@ -54,25 +58,31 @@ export const layerLocalBindings = () =>
   Layer.mergeAll(
     AnalyticsEngine.AnalyticsEngineLive,
     Assets.AssetsLive,
+    Browser.BrowserLive,
     Cache.CacheLive,
     D1.D1Live,
     DispatchNamespace.DispatchNamespaceLive,
     Hyperdrive.HyperdriveLive,
+    Images.ImagesLive,
     KvNamespace.KvNamespaceLive,
     Queue.QueueLive,
     R2Bucket.R2BucketLive,
     RateLimit.RateLimitLive,
+    SecretsStore.SecretsStoreLive,
     SendEmail.SendEmailLive,
+    Stream.StreamLive,
     Workflows.WorkflowsLive,
   );
 
 export type BindingServices =
   | AnalyticsEngine.AnalyticsEngine
   | Assets.Assets
+  | Browser.Browser
   | Cache.Cache
   | D1.D1
   | DispatchNamespace.DispatchNamespace
   | Hyperdrive.Hyperdrive
+  | Images.Images
   | KvNamespace.KvNamespace
   | Loopback.Loopback
   | Queue.Queue
@@ -80,7 +90,9 @@ export type BindingServices =
   | RateLimit.RateLimit
   | RemoteBindings.RemoteBindings
   | RegistryProxy.RegistryProxy
+  | SecretsStore.SecretsStore
   | SendEmail.SendEmail
+  | Stream.Stream
   | Workflows.Workflows;
 
 export type RuntimeServices = Runtime.Runtime | BindingServices;

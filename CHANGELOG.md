@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.15.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.15.0) (2026-07-30)
+
+### Bug Fixes
+
+- **vite-plugin**: detect Worker exports instead of only wrapping configured ones - by John Royal in [#93](https://github.com/alchemy-run/cloudflare-tools/pull/93) [(de3f3f5)](https://github.com/alchemy-run/cloudflare-tools/commit/de3f3f5293d2d68381d68831a8933dc1b80b28a9)
+- **cloudflare-runtime**: resolve dead-letter-queue services at Queue plugin init - by sam in [#92](https://github.com/alchemy-run/cloudflare-tools/pull/92) [(ec21e6c)](https://github.com/alchemy-run/cloudflare-tools/commit/ec21e6ce652b3a4b9b72837e287f044fa1aa4ccc)
+- **runtime**: skip docker pull when the egress interceptor image is already local - by Matthew Aylward in [#89](https://github.com/alchemy-run/cloudflare-tools/pull/89) [(0be86d9)](https://github.com/alchemy-run/cloudflare-tools/commit/0be86d9996b720071ce697503868b89ff27320ab)
+
 ## [v0.14.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.14.0) (2026-07-29)
 
 ### Features

@@ -27,6 +27,43 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;
   /**
+   * Cron expressions (UTC) that trigger this worker's `scheduled()` handler.
+   * Each expression gets a Node-side timer that hits the entry socket's
+   * `/cdn-cgi/handler/scheduled` route at every match, so crons actually
+   * fire during local development. The route is also reachable manually
+   * (Miniflare-compatible: `?cron=<expr>&time=<epoch-millis>`).
+   */
+  readonly crons?: ReadonlyArray<string>;
+  /**
+   * Names of tail consumer workers (the deployed `tail_consumers` setting).
+   * workerd delivers this worker's trace events to each consumer's `tail()`
+   * handler. Consumers are resolved through the on-disk dev registry — the
+   * same path service bindings to other local workers take — so a consumer
+   * may run in a separate `cloudflare-runtime` or `wrangler dev` process and
+   * may (re)start at any time. Events produced while a consumer is not
+   * running are dropped with a warning, matching dev-registry semantics.
+   */
+  readonly tails?: ReadonlyArray<string>;
+  /**
+   * Names of streaming tail consumer workers (the deployed
+   * `streaming_tail_consumers` setting). The handler contract differs from
+   * plain `tails`: a plain tail consumer exports `tail(items)` and receives an
+   * array of completed `TraceItem`s after the producer's invocation has
+   * finished, while a streaming tail consumer exports `tailStream(event)`,
+   * which is invoked with the invocation's `onset` event as soon as the
+   * producer starts executing and returns a handler (a function, or an object
+   * keyed by event type) that receives every subsequent event (`spanOpen` /
+   * `spanClose`, `log`, `exception`, `diagnosticChannel`, `return`, …)
+   * streamed live during execution, ending with the terminal `outcome` event.
+   * Consumers are resolved through the on-disk dev registry exactly like
+   * `tails` — the registry proxy's `ExternalService` entrypoint forwards the
+   * `tailStream()` session to the consumer's process via the workerd debug
+   * port — so a consumer may run in a separate process and may (re)start at
+   * any time. Sessions started while a consumer is not running are dropped
+   * with a warning, matching dev-registry semantics.
+   */
+  readonly streamingTails?: ReadonlyArray<string>;
+  /**
    * Whether the Cache API (`caches.default` / `caches.open()`) stores
    * responses. Defaults to `true`; when `false` every cache operation is a
    * no-op (matching production behaviour on `workers.dev` subdomains).

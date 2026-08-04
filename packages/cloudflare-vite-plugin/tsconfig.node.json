@@ -4,7 +4,13 @@
   "exclude": ["dist", "**/*.worker.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
-    "outDir": "dist",
+    // Type checking only: `dist` belongs to tsdown, and anything left there
+    // would be published by the `files` entry.
+    "outDir": ".cache/node",
     "rootDir": "src"
-  }
+  },
+  "references": [
+    { "path": "../cloudflare-rolldown-plugin" },
+    { "path": "../cloudflare-runtime/tsconfig.node.json" }
+  ]
 }

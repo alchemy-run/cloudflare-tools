@@ -1,5 +1,12 @@
+import type { ExportTypes } from "@distilled.cloud/cloudflare-rolldown-plugin/export-types";
+import {
+  haveExportTypesChanged,
+  isExportTypes,
+  WORKER_EXPORT_TYPES_EVENT,
+} from "@distilled.cloud/cloudflare-rolldown-plugin/export-types";
 import { parseViteEnvironments } from "@distilled.cloud/cloudflare-rolldown-plugin/options";
 import type { OptionsApi } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
+import { workerEntryId } from "@distilled.cloud/cloudflare-rolldown-plugin/plugins";
 import { resolvePluginApi } from "@distilled.cloud/cloudflare-rolldown-plugin/utils";
 import type { RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
 import type * as Context from "effect/Context";
@@ -7,6 +14,7 @@ import * as NodeHttp from "node:http";
 import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
 import type { ServerHandle } from "./dev-server.js";
+import { configuredExportTypes, mergeExportTypes } from "./export-types.js";
 import { resolveForwardedHost } from "./forwarded-host.js";
 import type { CloudflareVitePluginOptions } from "./plugin.js";
 import { handleWebSocket } from "./websockets.js";
@@ -15,6 +23,10 @@ let context: Context.Context<RuntimeServices> | undefined;
 
 export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
   const environmentNames = parseViteEnvironments(options);
+  const configured = configuredExportTypes(options);
+  // Which exports the running Worker was generated for. Kept across dev server
+  // restarts so a restart does not undo what was detected.
+  let exportTypes: ExportTypes = configured;
   let handle: ServerHandle | undefined;
   let isServerRestarting = false;
   let removeUpgradeListener: (() => void) | undefined;
@@ -110,27 +122,117 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
         context ??= await createDefaultContext();
       }
       const [input] = inputs;
-      handle ??= await startServer(
-        options,
-        { environmentName: environmentNames[0], entryId: input, entryName: input },
-        server,
-        options.context ?? context!,
-      );
-      const address = handle.address;
-      for (const environmentName of environmentNames) {
-        const environment = server.environments[environmentName];
-        if (environment instanceof DistilledDevEnvironment) {
+      const entryEnvironment = {
+        environmentName: environmentNames[0],
+        // The module runner imports the generated Worker entry rather than the
+        // user entry: it is the module that re-exports everything the Worker
+        // needs and that reports its export types over `import.meta.hot`.
+        entryId: input ? workerEntryId(input) : input,
+        entryName: input,
+      };
+      const entryEnvironments = () =>
+        environmentNames
+          .map((name) => server.environments[name])
+          .filter((environment) => environment instanceof DistilledDevEnvironment);
+
+      const connect = async (address: string | URL) => {
+        for (const environment of entryEnvironments()) {
           await environment.depsOptimizer?.init();
           await environment.connect(address);
         }
+      };
+      handle ??= await startServer(
+        options,
+        entryEnvironment,
+        server,
+        options.context ?? context!,
+        exportTypes,
+      );
+      await connect(handle.address);
+      let address = handle.address;
+
+      const bindWebSocket = () => {
+        removeUpgradeListener?.();
+        removeUpgradeListener = server.httpServer
+          ? handleWebSocket(server.httpServer, address)
+          : undefined;
+      };
+
+      /**
+       * Replaces the Worker runtime so it is regenerated for `exportTypes`.
+       * workerd needs a named export for every entrypoint, Durable Object, and
+       * Workflow class, and those exports are baked into the Worker's entry
+       * module at startup.
+       */
+      const restartRuntime = async () => {
+        await handle?.close();
+        handle = await startServer(
+          options,
+          entryEnvironment,
+          server,
+          options.context ?? context!,
+          exportTypes,
+        );
+        await connect(handle.address);
+        address = handle.address;
+        bindWebSocket();
+      };
+
+      /**
+       * Applies export types reported by the Worker. Returns `true` when they
+       * no longer match what the running Worker was generated for, in which
+       * case a runtime restart has been queued on `applying`.
+       */
+      let applying: Promise<void> = Promise.resolve();
+      const applyExportTypes = (detected: ExportTypes): boolean => {
+        const next = mergeExportTypes(configured, detected);
+        if (!haveExportTypesChanged(exportTypes, next)) {
+          return false;
+        }
+        exportTypes = next;
+        applying = applying
+          .catch(() => {})
+          .then(restartRuntime)
+          .catch((error: unknown) => {
+            server.config.logger.error(`Failed to reload the Worker runtime: ${String(error)}`, {
+              error: error instanceof Error ? error : undefined,
+              timestamp: true,
+            });
+          });
+        return true;
+      };
+
+      if (input) {
+        // Vite's internal CSS plugins rely on `buildStart` having run for the
+        // client environment before a server environment transforms a module.
+        // Vite does that while initializing the dev server, which is after
+        // this hook, and evaluating the entry now would fail without it.
+        await server.environments.client.pluginContainer.buildStart();
+        // Detect up front so that the first request already reaches a Worker
+        // exposing every entrypoint the entry module defines.
+        const detected = await entryEnvironments()[0]?.requestExportTypes();
+        if (detected && applyExportTypes(detected)) {
+          await applying;
+        }
+        // From here on the entry reports its exports over HMR every time it is
+        // re-evaluated, which is how entrypoints added later get picked up.
+        for (const environment of entryEnvironments()) {
+          environment.hot.on(WORKER_EXPORT_TYPES_EVENT, (data: unknown) => {
+            if (!isExportTypes(data) || !applyExportTypes(data)) {
+              return;
+            }
+            server.config.logger.info("Worker exports changed, reloading the Worker runtime.", {
+              timestamp: true,
+            });
+          });
+        }
       }
+
       if (!input) {
         // If there is no input, we are in SPA mode, so we don't need to route requests to the server.
         return;
       }
-      if (server.httpServer) {
-        removeUpgradeListener = handleWebSocket(server.httpServer, address);
-      }
+      bindWebSocket();
       return () => {
         server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res) {
           const url = new URL(req.originalUrl ?? req.url ?? "/", address);
@@ -142,6 +244,19 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           request.on("response", (response) => {
             res.writeHead(response.statusCode ?? 500, response.headers);
             response.pipe(res);
+          });
+          // Without a listener a connection error is an unhandled `error`
+          // event, which takes down the dev server. Requests in flight while
+          // the Worker runtime is being replaced hit exactly that.
+          request.on("error", (error) => {
+            server.config.logger.error(`Worker request failed: ${error.message}`, {
+              error,
+              timestamp: true,
+            });
+            if (!res.headersSent) {
+              res.writeHead(502, { "content-type": "text/plain" });
+            }
+            res.end("Bad Gateway");
           });
         });
         if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {

@@ -97,6 +97,19 @@ export interface NextjsFrameworkOptions {
   readonly services?: unknown;
 }
 
+/**
+ * Extract the edge-runtime function paths from `.next/server/
+ * middleware-manifest.json`. `middleware` entries are supported (OpenNext
+ * runs the middleware in the worker); `functions` entries are routes/pages
+ * compiled for the edge runtime, which `@opennextjs/cloudflare` does not
+ * support.
+ */
+export const listEdgeFunctions = (manifest: unknown): Array<string> => {
+  if (typeof manifest !== "object" || manifest === null) return [];
+  const functions = (manifest as { functions?: Record<string, unknown> }).functions;
+  return functions === undefined ? [] : Object.keys(functions);
+};
+
 /** The default compatibility date when the options provide none. */
 export const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
 
@@ -284,6 +297,30 @@ export const make = (
           Effect.mapError((error) => fail(error.message)(error.cause)),
           Effect.provide(spawnerLayer),
         );
+
+        // 1.5. Edge-runtime routes/pages are not supported by
+        // @opennextjs/cloudflare (it shims `next/dist/compiled/edge-runtime`
+        // to an empty module, so they 500 at runtime). Fail the build with
+        // the exact route list instead of shipping a mystery 500 — the same
+        // code runs fine on Workers under the node runtime.
+        const manifestPath = path.join(root, ".next", "server", "middleware-manifest.json");
+        const manifestRaw = yield* fs
+          .readFileString(manifestPath)
+          .pipe(Effect.orElseSucceed(() => undefined));
+        if (manifestRaw !== undefined) {
+          const edgeRoutes = yield* Effect.try({
+            try: () => listEdgeFunctions(JSON.parse(manifestRaw)),
+            catch: fail(`Failed to parse ${manifestPath}`),
+          });
+          if (edgeRoutes.length > 0) {
+            return yield* Effect.fail(
+              fail(
+                `Edge-runtime routes/pages are not supported by @opennextjs/cloudflare: ${edgeRoutes.join(", ")}. ` +
+                  `Remove \`export const runtime = "edge"\` from these modules — the node runtime runs on Workers.`,
+              )(undefined),
+            );
+          }
+        }
 
         // 2. The final bundle pass (what wrangler does implicitly on deploy).
         yield* fs.remove(p.workerDirectory, { recursive: true }).pipe(Effect.ignore);

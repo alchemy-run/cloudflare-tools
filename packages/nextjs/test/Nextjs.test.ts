@@ -1,6 +1,7 @@
 import { sortServerModules, type OutputFile } from "@distilled.cloud/framework-core";
 import { describe, expect, it } from "vitest";
 import {
+  listEdgeFunctions,
   DEFAULT_COMPATIBILITY_DATE,
   hasDoQueueClass,
   makeRunnerConfig,
@@ -109,5 +110,23 @@ describe("server module ordering", () => {
     );
     expect(sorted[0]?.name).toBe(WORKER_ENTRY_MODULE);
     expect(WORKER_ENTRY_MODULE).toBe("worker/worker.js");
+  });
+});
+
+describe("listEdgeFunctions", () => {
+  it("returns edge function paths from the middleware manifest", () => {
+    expect(
+      listEdgeFunctions({
+        middleware: { "/": { files: [] } },
+        functions: { "/api/edge/route": { files: [] }, "/edge-page": { files: [] } },
+      }),
+    ).toEqual(["/api/edge/route", "/edge-page"]);
+  });
+
+  it("treats middleware-only manifests (and junk) as edge-free", () => {
+    expect(listEdgeFunctions({ middleware: { "/": { files: [] } } })).toEqual([]);
+    expect(listEdgeFunctions({})).toEqual([]);
+    expect(listEdgeFunctions(undefined)).toEqual([]);
+    expect(listEdgeFunctions("nope")).toEqual([]);
   });
 });

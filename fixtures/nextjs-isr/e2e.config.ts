@@ -1,28 +1,35 @@
-import { KvNamespace, Text } from "@distilled.cloud/cloudflare-runtime/bindings";
+import { KvNamespace } from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as Options from "@distilled.cloud/e2e/Options";
 import { kCurrentWorker } from "miniflare";
 
+/**
+ * The writable-ISR configuration: KV-backed incremental cache
+ * (`NEXT_INC_CACHE_KV`) + Durable Object revalidation queue
+ * (`NEXT_CACHE_DO_QUEUE` on the same-script `DOQueueHandler` class) +
+ * the `WORKER_SELF_REFERENCE` self service binding.
+ *
+ * The dev (workerd) runtime auto-wires the DO queue and self-reference:
+ * `@distilled.cloud/nextjs` detects the `DOQueueHandler` export in the
+ * built worker. The preview (miniflare) config declares them explicitly.
+ */
 export default Options.make({
-  // The Next.js (OpenNext-based) Framework implementation, resolved from this
-  // fixture's own node_modules.
   framework: "@distilled.cloud/nextjs",
   vite: {
     compatibilityDate: "2026-05-12",
     compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
     worker: {
-      name: "fixtures-nextjs",
+      name: "fixtures-nextjs-isr",
       bindings: [
-        Text.local("TEST_TEXT", "hello-from-binding"),
-        KvNamespace.local({ binding: "FIXTURE_KV" }),
+        KvNamespace.local({ binding: "NEXT_INC_CACHE_KV" }),
+        KvNamespace.local({ binding: "NEXT_TAG_CACHE_KV" }),
       ],
     },
   },
   miniflare: {
-    name: "fixtures-nextjs",
+    name: "fixtures-nextjs-isr",
     compatibilityDate: "2026-05-12",
     compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
-    bindings: { TEST_TEXT: "hello-from-binding" },
-    kvNamespaces: ["FIXTURE_KV"],
+    kvNamespaces: ["NEXT_INC_CACHE_KV", "NEXT_TAG_CACHE_KV"],
     serviceBindings: { WORKER_SELF_REFERENCE: kCurrentWorker },
     durableObjects: {
       NEXT_CACHE_DO_QUEUE: { className: "DOQueueHandler", useSQLite: true },

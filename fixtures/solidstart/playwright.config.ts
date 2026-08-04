@@ -2,8 +2,6 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./test",
-  // Windows CI runs every fixture e2e concurrently; absorb runner flakiness.
-  retries: process.env.CI ? 2 : 0,
   timeout: 60_000,
   // The dev-mode smoke test is flaky on CI (it also fails intermittently on
   // main, e.g. runs 30733973174/30733916976): this fixture pins vite 7 (for

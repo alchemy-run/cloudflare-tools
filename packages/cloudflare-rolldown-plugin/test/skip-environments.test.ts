@@ -154,7 +154,7 @@ describe("skipEnvironments", () => {
     // `node:child_process` is polyfilled by unenv (workerd cannot spawn
     // processes), so the plugin resolves it rather than externalizing it.
     await (
-      hook.handler as (
+      hook.handler as unknown as (
         this: typeof context,
         source: string,
         importer: string | undefined,

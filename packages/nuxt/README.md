@@ -11,17 +11,17 @@ The package follows the framework × deploy-target split defined in
 `@distilled.cloud/framework-core` (see its README for the full `DeployTarget`
 contract):
 
-| Module                                                    | Role                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@distilled.cloud/nuxt` (`src/Nuxt.ts`, `src/index.ts`)   | **Framework half.** Drives the PROJECT's `@nuxt/kit` programmatically (loaded via the universally-resolvable `nuxt/kit` subpath): `loadNuxt` for build and dev, hook registration, nitro output mapping onto framework-core's `BuildOutput`, and the `Framework` service implementation. Target-agnostic — zero Cloudflare imports.                                                                          |
-| `@distilled.cloud/nuxt/cloudflare` (`src/cloudflare.ts`)  | **Target half.** The Cloudflare Workers `NuxtTarget`: nitro's `cloudflare_module` preset, the wrangler-free nitro config enforcement (`deployConfig: false`, `nodeCompat: true`), the user-entry seam (`main` → nitro's entry), and the proxy-backed dev platform (`src/dev/host.ts`).                                                                                                                       |
-| `@distilled.cloud/nuxt/source` (`src/source.ts`)          | Alchemy Worker **source provider** (structural `WorkerSourceModule` contract): maps the Nuxt build onto alchemy's bundle/assets/hash slots, plus a rebuild-free memo hash and nitro-dev `dev()`. Cloudflare-specific by nature; it passes the cloudflare target factory to the framework directly.                                                                                                            |
-| `src/dev/{host,plugin,shared}.ts`                         | The **dev transport**: host half opens cloudflare-runtime's platform proxy and injects connect info; worker half is a dev-only nitro plugin that reconstructs `event.context.cloudflare` inside nitro's dev SSR worker thread.                                                                                                                                                                               |
+| Module                                                   | Role                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@distilled.cloud/nuxt` (`src/Nuxt.ts`, `src/index.ts`)  | **Framework half.** Drives the PROJECT's `@nuxt/kit` programmatically (loaded via the universally-resolvable `nuxt/kit` subpath): `loadNuxt` for build and dev, hook registration, nitro output mapping onto framework-core's `BuildOutput`, and the `Framework` service implementation. Target-agnostic — zero Cloudflare imports. |
+| `@distilled.cloud/nuxt/cloudflare` (`src/cloudflare.ts`) | **Target half.** The Cloudflare Workers `NuxtTarget`: nitro's `cloudflare_module` preset, the wrangler-free nitro config enforcement (`deployConfig: false`, `nodeCompat: true`), the user-entry seam (`main` → nitro's entry), and the proxy-backed dev platform (`src/dev/host.ts`).                                              |
+| `@distilled.cloud/nuxt/source` (`src/source.ts`)         | Alchemy Worker **source provider** (structural `WorkerSourceModule` contract): maps the Nuxt build onto alchemy's bundle/assets/hash slots, plus a rebuild-free memo hash and nitro-dev `dev()`. Cloudflare-specific by nature; it passes the cloudflare target factory to the framework directly.                                  |
+| `src/dev/{host,plugin,shared}.ts`                        | The **dev transport**: host half opens cloudflare-runtime's platform proxy and injects connect info; worker half is a dev-only nitro plugin that reconstructs `event.context.cloudflare` inside nitro's dev SSR worker thread.                                                                                                      |
 
 Background on why the integration is shaped this way:
 
 - **The project's `nuxt.config.ts` loads natively.** `loadNuxt({ cwd, dev,
-  ready: false, overrides })` resolves the user's config, layers, and modules
+ready: false, overrides })` resolves the user's config, layers, and modules
   through c12 exactly as `nuxi` would. The integration's injection rides the
   highest-priority `overrides` layer (`src/UserConfig.ts`); the user's file
   stays authoritative for everything not named there.
@@ -55,9 +55,7 @@ interface NuxtTarget extends DeployTarget<NuxtTargetConfig> {
   /** Last-word mutation of the resolved nitro config (`nitro:config`). */
   configureNitro?(nitroConfig: NitroConfigSlice, context: NuxtNitroContext): void;
   /** Acquire the dev platform (scoped) and return the injection dev needs. */
-  devPlatform?(
-    context: NuxtDevPlatformContext,
-  ): Effect<NuxtDevPlatform, DeployTargetError, Scope>;
+  devPlatform?(context: NuxtDevPlatformContext): Effect<NuxtDevPlatform, DeployTargetError, Scope>;
 }
 ```
 
@@ -88,7 +86,7 @@ drives), with a bounded readiness probe before returning the URL.
 
 - **`nitroPreset`** — `"cloudflare_module"`.
 - **`configureNitro`** — wrangler-free doctrine: `cloudflare.deployConfig:
-  false` (nitro must never write a `wrangler.json` into user projects) and
+false` (nitro must never write a `wrangler.json` into user projects) and
   `cloudflare.nodeCompat: true` by default (without a wrangler config on
   disk nitro would otherwise skip its hybrid workerd node-compat; the
   deployed worker enables the `nodejs_compat` flag to match).
@@ -157,8 +155,7 @@ import * as Nuxt from "@distilled.cloud/nuxt";
 
 export default Options.make({
   // string form: framework: "@distilled.cloud/nuxt"
-  framework: (options) =>
-    Nuxt.layer(Nuxt.fromHarnessOptions(options as Nuxt.HarnessOptions)),
+  framework: (options) => Nuxt.layer(Nuxt.fromHarnessOptions(options as Nuxt.HarnessOptions)),
   target: {
     cloudflare: {
       worker: {
@@ -233,7 +230,7 @@ change to this package's framework half.
 ### `NuxtOptions` (framework)
 
 | Option               | Default                                                | Purpose                                                                                                                            |
-| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| -------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `root`               | `process.cwd()`                                        | Project root (the directory containing `nuxt.config.ts`).                                                                          |
 | `target`             | `"@distilled.cloud/nuxt/cloudflare"`                   | Deploy target: value, factory, or module specifier.                                                                                |
 | `compatibilityDate`  | —                                                      | Forwarded to the target config (carried for serve/deploy consumers).                                                               |

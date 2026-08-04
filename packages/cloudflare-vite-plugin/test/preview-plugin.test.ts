@@ -5,8 +5,8 @@ import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import * as vite from "vite";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { PreviewWorkerBuild } from "../src/preview-server.ts";
-import cloudflareVitePlugin from "../src/plugin.ts";
+import type { PreviewWorkerBuild } from "#/preview-server.ts";
+import cloudflareVitePlugin from "#/plugin.ts";
 
 // Stand-in for the workerd preview runtime: a plain HTTP server; every
 // proxied request responds with "worker".

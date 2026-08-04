@@ -124,8 +124,11 @@ export const resolveRoot: (
 export declare namespace Options {
   type Input = Options | Effect.Effect<Options>;
   type MiniflareOptions = {
+    // `NonNullable` before `Omit`: newer miniflare versions surface the
+    // optional `assets` slot as `{...} | undefined`, and `Omit` over a
+    // union with `undefined` collapses to `{}`.
     [K in keyof Miniflare.Options]?: K extends "assets"
-      ? Omit<Miniflare.Options[K], "directory">
+      ? Omit<NonNullable<Miniflare.Options[K]>, "directory">
       : Miniflare.Options[K];
   };
 

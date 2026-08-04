@@ -179,6 +179,9 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                       // ...however, if your framework does provide a `buildApp` hook,
                       // this check prevents us from building the environment twice.
                       if (environment.isBuilt) continue;
+                      // `skipEnvironments` opts out of environments the app
+                      // declared; this covers the one Vite creates unasked.
+                      if (isEntrylessClientEnvironment(environment)) continue;
                       await builder.build(environment);
                     }
                   },
@@ -207,6 +210,26 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
     },
   };
 });
+
+/**
+ * Vite always creates a default `client` environment, even for a pure Worker
+ * app that has no browser bundle. Building it makes Vite fall back to its
+ * default `index.html` entry, so the build fails on a file the app never
+ * referenced. Treat the environment as absent unless the app gave it an entry
+ * or serves an HTML shell.
+ */
+const isEntrylessClientEnvironment = (environment: {
+  name: string;
+  config: { root: string; build: { rollupOptions?: { input?: unknown } } };
+}): boolean => {
+  if (environment.name !== "client") return false;
+  const build = environment.config.build as {
+    rollupOptions?: { input?: unknown };
+    rolldownOptions?: { input?: unknown };
+  };
+  if (build.rollupOptions?.input || build.rolldownOptions?.input) return false;
+  return !fs.existsSync(path.join(environment.config.root, "index.html"));
+};
 
 const defaultEnvironmentEntries = (
   environmentName: string,

@@ -7,6 +7,16 @@
 // cloudflare-runtime's own contributions were fixed (bounded retries,
 // keep-alive loopback servers, no unspecified connect targets); the residual
 // churn is outside this repo. Skip on Windows CI only.
+//
+// Re-validated 2026-08-04 with two controlled CI experiments on the
+// test/sveltekit-windows-ungate branch: (1) running this fixture ISOLATED
+// (nothing before it) still fails 11/26 with `bind(0.0.0.0:0)` WSAENOBUFS;
+// (2) widening the dynamic port range to 64k (`netsh int ipv4 set
+// dynamicport tcp start=1025 num=64510`, verified applied) does not help —
+// the exhaustion is kernel buffer space (AFD/nonpaged pool), not the
+// ephemeral-port range. This is a runner-capacity limitation, not a bug
+// this repo can fix; the next lever would be connection reuse inside
+// miniflare's loopback blob-store client (upstream).
 import { execSync } from "node:child_process";
 
 if (process.platform === "win32" && process.env.CI) {

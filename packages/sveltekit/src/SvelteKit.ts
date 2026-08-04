@@ -89,6 +89,13 @@ export interface SvelteKitAdapterContext {
          * `platform.env`).
          */
         readonly bindings?: ReadonlyArray<unknown> | undefined;
+        /**
+         * A pre-built runtime-services context the dev platform hosts its
+         * proxy in (opaque to the framework half; the Cloudflare target
+         * takes a `cloudflare-runtime` `Context<RuntimeServices>`). Enables
+         * remote()-lowered bindings; without it the platform is local-only.
+         */
+        readonly services?: unknown;
       }
     | undefined;
 }
@@ -203,6 +210,13 @@ export interface SvelteKitOptions {
          * a workerd-backed platform proxy.
          */
         readonly bindings?: ReadonlyArray<unknown> | undefined;
+        /**
+         * A pre-built runtime-services context the dev platform hosts its
+         * proxy in (opaque to the framework half; the Cloudflare target
+         * takes a `cloudflare-runtime` `Context<RuntimeServices>`). Enables
+         * remote()-lowered bindings; without it the platform is local-only.
+         */
+        readonly services?: unknown;
       }
     | undefined;
 }
@@ -509,7 +523,11 @@ export const make: (
       yield* requireAdapterHook(target);
       const adapter = target.adapter({
         root,
-        dev: { env: options?.dev?.env, bindings: options?.dev?.bindings },
+        dev: {
+          env: options?.dev?.env,
+          bindings: options?.dev?.bindings,
+          services: options?.dev?.services,
+        },
       });
       // Registered before the server is acquired so it runs after the server
       // closes (finalizers are LIFO): the dev platform (e.g. the Cloudflare

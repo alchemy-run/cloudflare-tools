@@ -112,6 +112,12 @@ export interface SourceDevContext extends SourceContext {
     readonly name: string;
     readonly bindings: ReadonlyArray<unknown>;
   };
+  /**
+   * The host's pre-built `Context<RuntimeServices>` (opaque here). Handed
+   * to the dev platform proxy so remote()-lowered bindings resolve against
+   * the host's runtime stack.
+   */
+  readonly runtimeContext: unknown;
 }
 
 /** Mirror of alchemy's server-mode `SourceDevHandle`. */
@@ -581,6 +587,11 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
         frameworkOptions(ctx, {
           env: resolveDevEnvOverrides(ctx.env),
           bindings: ctx.worker.bindings,
+          // The host's runtime stack (includes remote-bindings support) —
+          // the dev platform proxy is hosted in it instead of the
+          // credential-free internal layer, so `Alchemy.remote()` bindings
+          // resolve in dev.
+          services: ctx.runtimeContext,
         }),
       );
       const server = yield* framework

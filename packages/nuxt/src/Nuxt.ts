@@ -129,6 +129,11 @@ export interface NuxtDevPlatformContext {
    * binding hooks and serves them through its platform proxy).
    */
   readonly bindings?: ReadonlyArray<unknown> | undefined;
+  /**
+   * Pre-built runtime-services context for the dev platform's proxy (opaque
+   * to the framework half — see `NuxtOptions.dev.services`).
+   */
+  readonly services?: unknown;
 }
 
 /**
@@ -242,6 +247,15 @@ export interface NuxtOptions {
          * worker thread through a workerd-backed platform proxy.
          */
         readonly bindings?: ReadonlyArray<unknown> | undefined;
+        /**
+         * A pre-built runtime-services context the dev platform should host
+         * its proxy in (opaque to the framework half; the Cloudflare target
+         * takes a `cloudflare-runtime` `Context<RuntimeServices>`). Embedders
+         * that already run a runtime stack — alchemy's dev sidecar — pass it
+         * so remote()-lowered bindings resolve; without it the platform is
+         * local-only.
+         */
+        readonly services?: unknown;
       }
     | undefined;
 }
@@ -451,6 +465,7 @@ export const make: (
                 root,
                 env: options?.dev?.env,
                 bindings: options?.dev?.bindings,
+                services: options?.dev?.services,
               })
               .pipe(Effect.mapError((error) => fail(error.message, error.cause)))
           : undefined;

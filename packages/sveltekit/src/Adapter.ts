@@ -357,6 +357,13 @@ export interface CloudflareDevPlatformOptions {
    * the values must be `cloudflare-runtime` `BindingHooks`.
    */
   readonly bindings?: ReadonlyArray<unknown> | undefined;
+  /**
+   * Pre-built `Context<RuntimeServices>` to host the proxy in (opaque —
+   * travels through the target-agnostic framework half). Enables
+   * remote()-lowered bindings, which the proxy's internal local-only layer
+   * cannot serve.
+   */
+  readonly services?: unknown;
   /** Compatibility date for the binding-proxy workerd instance. */
   readonly compatibilityDate?: string | undefined;
   /** Compatibility flags for the binding-proxy workerd instance. */
@@ -384,6 +391,8 @@ export interface OpenDevPlatformProxyOptions {
   readonly compatibilityDate?: string | undefined;
   readonly compatibilityFlags?: ReadonlyArray<string> | undefined;
   readonly bindings: ReadonlyArray<unknown>;
+  /** See {@link CloudflareDevPlatformOptions.services}. */
+  readonly services?: unknown;
 }
 
 export type OpenDevPlatformProxy = (
@@ -413,6 +422,11 @@ const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
       ? { compatibilityFlags: [...options.compatibilityFlags] }
       : undefined),
     bindings: options.bindings as BindingHooks,
+    ...(options.services !== undefined
+      ? {
+          services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
+        }
+      : undefined),
   });
 };
 
@@ -464,6 +478,7 @@ export const makeDevPlatformEmulator = (
       compatibilityDate: options.compatibilityDate,
       compatibilityFlags: options.compatibilityFlags,
       bindings: options.bindings ?? [],
+      services: options.services,
     }));
   return {
     platform: async ({ prerender }) => {

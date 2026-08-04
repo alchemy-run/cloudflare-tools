@@ -138,8 +138,8 @@ export const getPlatformProxy = async <
     // (platform services, HttpClient); narrow both arms to the services
     // `open` consumes.
     const context: Context.Context<RuntimeServices.RuntimeServices> =
-      options.services
-      ?? ((await Effect.runPromise(
+      options.services ??
+      ((await Effect.runPromise(
         Layer.build(makeLayer(options.persist)).pipe(Scope.provide(scope)),
       )) as Context.Context<RuntimeServices.RuntimeServices>);
     const effect = open<B, Env>(options).pipe(

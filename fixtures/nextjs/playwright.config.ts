@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: "./test",
   // Windows CI runs every fixture e2e concurrently; absorb runner flakiness.
   retries: process.env.CI ? 2 : 0,
+  // Retries x timeout inflation makes a truly-broken suite take ~25 minutes
+  // to fail on CI; bail after a handful of failures instead.
+  maxFailures: process.env.CI ? 5 : 0,
   // The dev worker fixture runs a full OpenNext build on start (preview
   // parity — no build.json reuse), so keep generous timeouts.
   timeout: 120_000,

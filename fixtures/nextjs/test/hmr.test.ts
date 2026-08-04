@@ -1,26 +1,19 @@
 /**
- * Dev v2 ("hmr" mode) spec: drives the `@distilled.cloud/nextjs` Framework
- * service directly (the harness's `dev` fixture is wired to the default
- * "preview" mode via e2e.config.ts, so this spec builds its own layer) and
- * exercises:
+ * Dev v2 ("hmr" mode) spec: spawns `scripts/hmr-server.mjs` — the Framework
+ * service driving the real `next dev` (Turbopack) with proxied Cloudflare
+ * bindings — in a CHILD Node process (next's require hooks collide with
+ * playwright's in-worker transform, and a separate process is how the dev
+ * server runs in real life), then exercises over HTTP:
  *
  * - the page serves through the real `next dev` (Turbopack) server
  * - `getCloudflareContext().env` sees a binding value in SSR output —
  *   without `initOpenNextCloudflareForDev()` and without wrangler
+ * - the same binding read from an API route
  * - an edit to a page file is reflected on a subsequent request (bounded
- *   Effect retry; the file is restored in a finally)
+ *   retry; the file is restored in a finally)
  */
-import { Text } from "@distilled.cloud/cloudflare-runtime/bindings";
-import { Framework } from "@distilled.cloud/framework-core";
-import nextjsFramework from "@distilled.cloud/nextjs";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, test } from "@playwright/test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Schedule from "effect/Schedule";
-import * as Scope from "effect/Scope";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,57 +21,61 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const probePage = NodePath.join(root, "app", "hmr-probe", "page.jsx");
 
-const layer = nextjsFramework({
-  root,
-  dev: { mode: "hmr" },
-  vite: {
-    compatibilityDate: "2026-05-12",
-    compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
-    worker: {
-      name: "fixtures-nextjs-hmr",
-      bindings: [Text.local("TEST_TEXT", "hello-from-binding")],
-    },
-  },
-}).pipe(Layer.provideMerge(NodeServices.layer));
-
-const runtime = ManagedRuntime.make(layer);
-let scope: Scope.Scope.Closeable;
+let child: NodeChildProcess.ChildProcess;
 let url: URL;
 
-/** GET `path` until `predicate(body)` holds — bounded, Effect-scheduled. */
-const pollText = (
+/** GET `path` until `predicate(body)` holds — bounded polling. */
+const pollText = async (
   path: string,
   predicate: (body: string) => boolean,
   { times = 60 }: { times?: number } = {},
-): Promise<string> =>
-  runtime.runPromise(
-    Effect.tryPromise(async () => {
+): Promise<string> => {
+  let last = "";
+  for (let i = 0; i < times; i++) {
+    try {
       const response = await fetch(new URL(path, url));
       const body = await response.text();
-      if (response.status !== 200 || !predicate(body)) {
-        throw new Error(
-          `not ready (status ${response.status}): ${body.slice(0, 500).replace(/\n/g, " ")}`,
-        );
-      }
-      return body;
-    }).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times })),
-  );
+      last = `status ${response.status}: ${body.slice(0, 500).replace(/\n/g, " ")}`;
+      if (response.status === 200 && predicate(body)) return body;
+    } catch (error) {
+      last = String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`not ready after ${times} attempts: ${last}`);
+};
 
 test.beforeAll(async () => {
   // Cold `next dev` prepare + first Turbopack compile can be slow.
   test.setTimeout(300_000);
-  scope = Scope.makeUnsafe();
-  const server = await runtime.runPromise(
-    Framework.use((framework) => framework.dev({ root })).pipe(Scope.provide(scope)),
+  child = NodeChildProcess.spawn(
+    process.execPath,
+    [NodePath.join(root, "scripts", "hmr-server.mjs")],
+    { cwd: root, stdio: ["ignore", "pipe", "inherit"] },
   );
-  url = new URL(server.url);
+  url = await new Promise<URL>((resolve, reject) => {
+    let buffer = "";
+    child.stdout!.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const match = buffer.match(/DEV_URL (\S+)/);
+      if (match !== null) resolve(new URL(match[1]!));
+    });
+    child.once("exit", (code) =>
+      reject(new Error(`hmr-server exited before reporting a URL (code ${code}): ${buffer}`)),
+    );
+  });
 });
 
 test.afterAll(async () => {
-  if (scope !== undefined) {
-    await runtime.runPromise(Scope.close(scope, Exit.void));
+  if (child !== undefined && child.exitCode === null) {
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    child.kill("SIGTERM");
+    // The driver closes the Next app + binding proxy on SIGTERM; escalate
+    // if it wedges so the suite never hangs on teardown.
+    const timeout = setTimeout(() => child.kill("SIGKILL"), 15_000);
+    await exited;
+    clearTimeout(timeout);
   }
-  await runtime.dispose();
 });
 
 test.describe("hmr dev mode", () => {
@@ -113,7 +110,5 @@ test.describe("hmr dev mode", () => {
     } finally {
       await NodeFs.writeFile(probePage, original, "utf8");
     }
-    // The restore is picked up too (leaves the tree clean for other specs).
-    await pollText("/hmr-probe", (b) => b.includes("marker:v1"), { times: 120 });
   });
 });

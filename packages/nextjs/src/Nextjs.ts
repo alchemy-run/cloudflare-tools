@@ -8,6 +8,7 @@ import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as FrameworkCore from "@distilled.cloud/framework-core";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -85,6 +86,15 @@ export interface NextjsFrameworkOptions {
     | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
+  /**
+   * The host's runtime stack (a `Context.Context<RuntimeServices>`, e.g.
+   * alchemy's `DevContext.runtimeContext`). When provided, dev servers host
+   * the binding proxy in it instead of building the credential-free internal
+   * layer — this is what makes `Alchemy.remote()` bindings resolve in dev.
+   * Typed `unknown` to keep the option JSON-tolerant at the boundary; it is
+   * narrowed internally.
+   */
+  readonly services?: unknown;
 }
 
 /** The default compatibility date when the options provide none. */
@@ -311,6 +321,20 @@ export const make = (
         return output;
       });
 
+      // The runtime context the dev servers host their binding proxy in:
+      // the caller-provided host stack (includes remote-bindings support,
+      // so `Alchemy.remote()` bindings resolve) when present, the internal
+      // credential-free layer otherwise.
+      const resolveRuntimeContext = Effect.fn(function* () {
+        if (options?.services !== undefined) {
+          return options.services as Context.Context<RuntimeServices.RuntimeServices>;
+        }
+        const scope = yield* Effect.scope;
+        return yield* Layer.buildWithScope(makeRuntimeLayer(), scope).pipe(
+          Effect.mapError(fail("Failed to start the cloudflare-runtime services")),
+        );
+      });
+
       const dev = Effect.fn(function* (devOptions?: FrameworkCore.FrameworkDevOptions) {
         const root = yield* resolveRoot(devOptions?.root);
 
@@ -319,10 +343,7 @@ export const make = (
         // getCloudflareContext() contract. No OpenNext build involved.
         if (options?.dev?.mode === "hmr") {
           const worker = options?.vite?.worker;
-          const scope = yield* Effect.scope;
-          const context = yield* Layer.buildWithScope(makeRuntimeLayer(), scope).pipe(
-            Effect.mapError(fail("Failed to start the cloudflare-runtime services")),
-          );
+          const context = yield* resolveRuntimeContext();
           const server = yield* DevServer.start({
             root,
             port: devOptions?.port,
@@ -351,10 +372,7 @@ export const make = (
         );
         const withDoQueue = !declaresDoQueue && hasDoQueueClass(output.serverModules[0]);
 
-        const scope = yield* Effect.scope;
-        const context = yield* Layer.buildWithScope(makeRuntimeLayer(), scope).pipe(
-          Effect.mapError(fail("Failed to start the cloudflare-runtime services")),
-        );
+        const context = yield* resolveRuntimeContext();
 
         const url = yield* Runtime.Runtime.use((runtime) =>
           runtime.start({

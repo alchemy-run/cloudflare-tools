@@ -111,6 +111,12 @@ export interface DevContext extends SourceContext {
     readonly queueConsumers: Effect.Effect<NonNullable<WorkerWiring["queueConsumers"]>>;
     readonly assets: WorkerWiring["assets"] | undefined;
   };
+  /**
+   * The host's runtime stack (a `Context.Context<RuntimeServices>`) — the
+   * dev binding proxy is hosted in it instead of the credential-free
+   * internal layer, so `Alchemy.remote()` bindings resolve in dev.
+   */
+  readonly runtimeContext: unknown;
 }
 
 export type SourceDevHandle = { readonly mode: "server"; readonly url: URL };
@@ -566,6 +572,10 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const queueConsumers = yield* ctx.worker.queueConsumers;
       const devOptions: Nextjs.NextjsFrameworkOptions = {
         ...frameworkOptions(ctx),
+        // The host's runtime stack (includes remote-bindings support) — the
+        // dev binding proxy is hosted in it instead of the credential-free
+        // internal layer, so `Alchemy.remote()` bindings resolve in dev.
+        services: ctx.runtimeContext,
         vite: {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,

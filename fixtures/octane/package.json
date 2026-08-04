@@ -1,0 +1,28 @@
+{
+  "name": "@fixtures/octane",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "e2e dev --port 3112",
+    "build": "e2e build",
+    "preview": "e2e preview",
+    "test": "playwright test",
+    "pretest": "playwright install chromium && bun run build"
+  },
+  "dependencies": {
+    "@octanejs/adapter-cloudflare": "0.0.12",
+    "@octanejs/vite-plugin": "0.1.22",
+    "octane": "0.1.22",
+    "vite": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@distilled.cloud/e2e": "workspace:*",
+    "@distilled.cloud/octane": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/node": "^24.12.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

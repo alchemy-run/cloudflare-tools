@@ -38,6 +38,21 @@ jobs:
       - name: Check (format, lint, typecheck)
         run: bun run check
 
+      - name: Assert test secrets are present
+        # Several tests gate on these (`it.skip` without them) — a missing
+        # secret must fail loudly here instead of silently shrinking coverage.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          for v in TEST_MYSQL_URL TEST_POSTGRES_URL CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
+            if [ -z "${!v}" ]; then echo "::error::secret $v is empty — env-gated tests would silently skip"; exit 1; fi
+          done
+        env:
+          TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
+          TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
       - name: Test
         # Windows runners exhaust socket buffer space (WSAENOBUFS) when many
         # workerd/playwright fixture suites run concurrently — run serially.

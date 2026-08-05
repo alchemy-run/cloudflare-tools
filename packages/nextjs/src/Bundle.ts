@@ -89,6 +89,13 @@ export const bundleWorker = (
     const result = yield* Effect.tryPromise({
       try: () =>
         esbuild.build({
+          // Pin the build's working directory: without it, esbuild uses its
+          // long-lived shared service process's cwd, which is captured when
+          // the service first spawns — under a concurrent engine that can be
+          // another build's transient chdir target (possibly deleted by the
+          // time this build runs), which fails resolution of even absolute
+          // entry paths.
+          absWorkingDir: options.openNextDirectory,
           plugins: [makeWranglerExternalsPlugin()],
           entryPoints: [NodePath.join(options.openNextDirectory, WORKER_ENTRY_NAME)],
           outdir: options.outDirectory,

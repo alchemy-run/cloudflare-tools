@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.16.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.16.0) (2026-08-05)
+
+### Features
+
+- **octane**: OctaneJS framework integration + fixture - by sam in [#101](https://github.com/alchemy-run/cloudflare-tools/pull/101) [(62baa96)](https://github.com/alchemy-run/cloudflare-tools/commit/62baa963dec1d7af7fbb43a7758abef3b54a025f)
+- **nextjs**: Next.js integration (OpenNext, wrangler-free) - by John Royal in [#82](https://github.com/alchemy-run/cloudflare-tools/pull/82) [(9667362)](https://github.com/alchemy-run/cloudflare-tools/commit/9667362c987b3b7796fabaafd453377e038bf09c)
+- **platform-proxy**: remote() bindings under framework dev bridges - by sam in [#99](https://github.com/alchemy-run/cloudflare-tools/pull/99) [(b229a7a)](https://github.com/alchemy-run/cloudflare-tools/commit/b229a7a43cd0502082137d6f04ebaf8adc13f4f5)
+- framework integrations (Astro, SvelteKit, Waku, Nuxt) without wrangler - by John Royal in [#74](https://github.com/alchemy-run/cloudflare-tools/pull/74) [(f441ece)](https://github.com/alchemy-run/cloudflare-tools/commit/f441ece6b227a872b1ac1520a5dec8f7db71fd3f)
+- **cloudflare-runtime**: local emulation — cron, secret_key, email (send+receive), secrets store, browser, images, stream, tails (+streaming) - by sam in [#97](https://github.com/alchemy-run/cloudflare-tools/pull/97) [(db3111e)](https://github.com/alchemy-run/cloudflare-tools/commit/db3111ec71df82138b4e384a841dc818e99c7d68)
+
+### Bug Fixes
+
+- **rolldown-plugin**: skip the entry-less client environment in the fallback buildApp - by Saatvik Arya in [#100](https://github.com/alchemy-run/cloudflare-tools/pull/100) [(8874639)](https://github.com/alchemy-run/cloudflare-tools/commit/88746397dd781d88a3f719f6743ea532e01e2f2a)
+
 ## [v0.15.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.15.0) (2026-07-30)
 
 ### Bug Fixes

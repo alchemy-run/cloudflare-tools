@@ -60,13 +60,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Test
-        # Windows runners exhaust socket buffer space (WSAENOBUFS) when many
-        # workerd/playwright fixture suites run concurrently — run serially.
+        # Windows ran serially (--concurrency=1) after WSAENOBUFS socket-buffer
+        # exhaustion under full parallelism (c9183e5, 2026-07-20). Since then
+        # the actual churn sources were fixed (keep-alive loopback servers,
+        # bounded port scans/retries — ce721e5) and the one suite that exhausts
+        # AFD buffers even in isolation is skipped on Windows
+        # (fixtures/sveltekit/scripts/e2e.mjs). Four concurrent suites on the
+        # 4-core runner cut the test step from ~9.5m to a few minutes; if
+        # WSAENOBUFS reappears, step down before re-serializing.
         # The small macOS runners (3 cores) starve under full parallelism too
         # (chromium launches + workerd fleets): three consecutive runs failed
         # on three different single tests, including module-eval crashes while
         # loading playwright configs — bound them to two concurrent suites.
-        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=1' || runner.os == 'macOS' && '--concurrency=2' || '' }}
+        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=4' || runner.os == 'macOS' && '--concurrency=2' || '' }}
         env:
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
           TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}

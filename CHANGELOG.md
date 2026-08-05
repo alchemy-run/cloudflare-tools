@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.16.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.16.1) (2026-08-05)
+
+### Bug Fixes
+
+- **nextjs**: pin absWorkingDir on the final worker bundle pass - by sam in [#102](https://github.com/alchemy-run/cloudflare-tools/pull/102) [(6e85ed3)](https://github.com/alchemy-run/cloudflare-tools/commit/6e85ed38689a26925fd458cb289e74f7b3cd8747)
+
 ## [v0.16.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.16.0) (2026-08-05)
 
 ### Features

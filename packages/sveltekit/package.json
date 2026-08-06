@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/sveltekit",
-  "version": "0.13.7",
+  "version": "0.17.0",
   "description": "SvelteKit integration for Cloudflare Workers: wrangler-free in-memory adapter, programmatic build with a workerd re-bundle pass, and dev via SvelteKit's own Vite server.",
   "keywords": [
     "cloudflare",

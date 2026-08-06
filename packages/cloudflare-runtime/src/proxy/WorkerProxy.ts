@@ -79,7 +79,17 @@ export const WorkerProxyLive = Layer.effect(
         port:
           options.port && options.strictPort
             ? yield* ports.check(options.port)
-            : yield* ports.find(options.port ?? 0),
+            : options.port
+              ? // A configured (non-strict) port: a dev-session restart races
+                // the previous session's teardown, and an instant fallback
+                // would silently shift every configured port in the stack up
+                // by one in nondeterministic order — serving the wrong app on
+                // the ports the user knows. Wait out the teardown before
+                // falling back to the hunt (the caller warns on drift).
+                yield* ports
+                  .waitFor(options.port)
+                  .pipe(Effect.catch(() => ports.find(options.port!)))
+              : yield* ports.find(0),
         host,
         strictPort,
         // Dual-bind only for the loopback default — an explicit host is

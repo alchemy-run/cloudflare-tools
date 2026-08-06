@@ -1,5 +1,6 @@
 import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as NodeNet from "node:net";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
@@ -47,6 +48,18 @@ export interface Ports {
    */
   readonly check: (port: number) => Effect.Effect<number, ConfigError>;
   /**
+   * Waits for a specific port to become available (uncached probes on a
+   * short interval), reserving it on success. Fails with `AddressInUse`
+   * when the grace window elapses — or immediately when the port is
+   * reserved by this process group, since the holder won't release it.
+   *
+   * This is the allocator for user-configured ports: a dev-session restart
+   * races the previous session's teardown, and without a grace window the
+   * configured port silently drifts — cascading every configured port in
+   * the stack up by one in nondeterministic order.
+   */
+  readonly waitFor: (port: number) => Effect.Effect<number, ConfigError>;
+  /**
    * Marks a port as occupied for the lifetime of the cache, preventing it from being assigned to another worker.
    * Note that this is best-effort; the caller should include retry logic to handle race conditions.
    */
@@ -83,6 +96,13 @@ interface PortsOptions {
  * cleanly for everyone else.
  */
 const RESERVATION_TTL_MS = 30_000;
+/**
+ * Grace window for `waitFor`: ~3s of 250ms probes. A killed dev session
+ * releases its listeners well within this; a genuinely-occupied port only
+ * delays that one worker's startup by the window before falling back.
+ */
+const WAIT_FOR_INTERVAL = "250 millis";
+const WAIT_FOR_ATTEMPTS = 12;
 const globalSearchLock = Semaphore.makeUnsafe(1);
 const globalReservations = new Map<number, number>();
 const isReserved = (port: number) => {
@@ -187,6 +207,10 @@ export const make = (options: PortsOptions) =>
         }),
       );
     }, searchLock.withPermits(1));
+    // Uncached availability probe across all local hosts — `waitFor` polls
+    // with it, so the 30s negative cache must not poison the retries.
+    const probe = (port: number) =>
+      Effect.forEach(HOSTS, (host) => bind(port, host)).pipe(Effect.as(port));
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {
@@ -197,6 +221,22 @@ export const make = (options: PortsOptions) =>
         }
         return yield* search(port);
       }),
+      waitFor: (port) =>
+        Effect.suspend(() =>
+          // Reserved in-process (at entry or mid-wait): the holder keeps it
+          // for the cache lifetime, so waiting cannot succeed (e.g. two
+          // workers configured the same port) — fail and let the caller
+          // fall back. The retry predicate re-checks so a reservation
+          // arriving during the grace window also stops the wait.
+          isReserved(port) ? Effect.fail(addressInUseError(port)) : probe(port),
+        ).pipe(
+          Effect.retry({
+            while: (): boolean => !isReserved(port),
+            schedule: Schedule.spaced(WAIT_FOR_INTERVAL),
+            times: WAIT_FOR_ATTEMPTS,
+          }),
+          Effect.tap(() => reserve(port)),
+        ),
       check: (port) =>
         Effect.suspend(() =>
           isReserved(port)

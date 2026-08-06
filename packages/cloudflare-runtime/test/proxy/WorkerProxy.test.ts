@@ -376,6 +376,41 @@ layer(services, { excludeTestServices: true })((it) => {
     }),
   );
 
+  it.effect("waits out a previous session's teardown instead of shifting configured ports", () =>
+    Effect.gen(function* () {
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const base = yield* PortHelpers.find(0);
+
+      // Simulate a dev restart racing the old session's teardown: the old
+      // session still holds the middle configured port when the new
+      // session's proxies start. Without a grace window the middle worker
+      // silently drifts onto a neighbor's configured port — serving the
+      // wrong app on a port the user knows.
+      const stale = yield* Effect.forkChild(
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* PortHelpers.occupy(base + 1);
+            yield* Effect.sleep("750 millis");
+          }),
+        ),
+      );
+
+      const [a, b, c] = yield* Effect.all(
+        [
+          proxy.serve({ port: base }),
+          proxy.serve({ port: base + 1 }),
+          proxy.serve({ port: base + 2 }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      yield* Fiber.join(stale);
+
+      expect(Number(a.url.port)).toBe(base);
+      expect(Number(b.url.port)).toBe(base + 1);
+      expect(Number(c.url.port)).toBe(base + 2);
+    }),
+  );
+
   it.effect("starts many proxies concurrently requesting the same port without collisions", () =>
     Effect.gen(function* () {
       const proxy = yield* WorkerProxy.WorkerProxy;

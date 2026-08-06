@@ -661,6 +661,11 @@ export const make = (
                 {
                   configFile: false,
                   root,
+                  // Warn-level: rolldown-vite's native progress reporter
+                  // ("transforming...") writes straight to the fd, which
+                  // corrupts hosting-process reporters (e.g. alchemy-test)
+                  // that can only intercept JS-level writers.
+                  logLevel: "warn",
                   plugins: [
                     project.vitePlugins.unstable_combinedPlugins(wakuConfig),
                     collector.plugin,

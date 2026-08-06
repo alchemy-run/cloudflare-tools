@@ -1,5 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as PlatformError from "effect/PlatformError";
+import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
@@ -43,7 +45,11 @@ export const runnerPath = (): string => fileURLToPath(new URL("./runner.mjs", im
  * cwd-coupled module state, spawns `next build`, and can `process.exit(1)`,
  * so it must never run inside the calling process.
  *
- * Output is inherited so `next build` progress streams through.
+ * Output is piped and forwarded through the parent's `process.stdout` /
+ * `process.stderr` stream writes (NOT fd-level `"inherit"`) so `next build`
+ * progress still streams to the terminal, while harnesses that patch the
+ * JS-level writers (e.g. alchemy-test's stray-output capture) can divert it
+ * into their logs instead of having it corrupt reporter output.
  */
 export const runOpenNextBuild = (
   config: RunnerConfig,
@@ -53,10 +59,31 @@ export const runOpenNextBuild = (
     const command = ChildProcess.make("node", [runnerPath(), JSON.stringify(config)], {
       cwd: config.appDir,
       stdin: "ignore",
-      stdout: "inherit",
-      stderr: "inherit",
+      stdout: "pipe",
+      stderr: "pipe",
     });
-    const exitCode = yield* spawner.exitCode(command).pipe(
+    // Look the writer up at call time — harnesses swap the property.
+    const forward = (
+      stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>,
+      target: "stdout" | "stderr",
+    ) =>
+      Stream.runForEach(stream, (chunk) =>
+        Effect.sync(() => {
+          process[target].write(chunk);
+        }),
+      );
+    const exitCode = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* spawner.spawn(command);
+        // Drain stdout/stderr concurrently with waiting for exit — an unread
+        // pipe eventually fills and blocks the build.
+        const [code] = yield* Effect.all(
+          [handle.exitCode, forward(handle.stdout, "stdout"), forward(handle.stderr, "stderr")],
+          { concurrency: "unbounded" },
+        );
+        return code;
+      }),
+    ).pipe(
       Effect.mapError(
         (cause) =>
           new RunnerError({

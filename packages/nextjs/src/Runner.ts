@@ -1,7 +1,9 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { PlatformError } from "effect/PlatformError";
+import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
 
 export class RunnerError extends Data.TaggedError<"RunnerError">("RunnerError")<{
@@ -43,31 +45,55 @@ export const runnerPath = (): string => fileURLToPath(new URL("./runner.mjs", im
  * cwd-coupled module state, spawns `next build`, and can `process.exit(1)`,
  * so it must never run inside the calling process.
  *
- * Output is inherited so `next build` progress streams through.
+ * Output is piped and re-emitted through the parent's own
+ * `process.stdout`/`process.stderr` JS streams — NOT `stdio: "inherit"`.
+ * `inherit` writes straight to the process file descriptors, bypassing any
+ * in-process stdout capture (e.g. a test runner's log file), which silently
+ * discards `next build`'s failure output when the pipeline exits non-zero.
  */
 export const runOpenNextBuild = (
   config: RunnerConfig,
 ): Effect.Effect<void, RunnerError, ChildProcessSpawner.ChildProcessSpawner> =>
-  Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const command = ChildProcess.make("node", [runnerPath(), JSON.stringify(config)], {
-      cwd: config.appDir,
-      stdin: "ignore",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    const exitCode = yield* spawner.exitCode(command).pipe(
-      Effect.mapError(
-        (cause) =>
-          new RunnerError({
-            message: "Failed to spawn the OpenNext build runner (is `node` on PATH?)",
-            cause,
-          }),
-      ),
-    );
-    if (exitCode !== 0) {
-      return yield* new RunnerError({
-        message: `The OpenNext build pipeline exited with code ${exitCode}`,
-      });
-    }
-  });
+  Effect.scoped(
+    Effect.gen(function* () {
+      const child = yield* ChildProcess.make("node", [runnerPath(), JSON.stringify(config)], {
+        cwd: config.appDir,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new RunnerError({
+              message: "Failed to spawn the OpenNext build runner (is `node` on PATH?)",
+              cause,
+            }),
+        ),
+      );
+      const forward = (
+        stream: Stream.Stream<Uint8Array, PlatformError>,
+        dest: NodeJS.WriteStream,
+      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
+      const { exitCode } = yield* Effect.all(
+        {
+          exitCode: child.exitCode,
+          stdout: forward(child.stdout, process.stdout),
+          stderr: forward(child.stderr, process.stderr),
+        },
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new RunnerError({
+              message: "Failed reading the OpenNext build runner's output",
+              cause,
+            }),
+        ),
+      );
+      if (exitCode !== 0) {
+        return yield* new RunnerError({
+          message: `The OpenNext build pipeline exited with code ${exitCode}`,
+        });
+      }
+    }),
+  );

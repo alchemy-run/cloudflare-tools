@@ -9,29 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiWasmRouteImport } from './routes/api.wasm'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as ApiDbRouteImport } from './routes/api.db'
+import { Route as ApiWasmRouteImport } from './routes/api.wasm'
 
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiWasmRoute = ApiWasmRouteImport.update({
-  id: '/api/wasm',
-  path: '/api/wasm',
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDbRoute = ApiDbRouteImport.update({
   id: '/api/db',
   path: '/api/db',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWasmRoute = ApiWasmRouteImport.update({
+  id: '/api/wasm',
+  path: '/api/wasm',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -71,13 +71,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -85,11 +78,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/wasm': {
-      id: '/api/wasm'
-      path: '/api/wasm'
-      fullPath: '/api/wasm'
-      preLoaderRoute: typeof ApiWasmRouteImport
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/db': {
@@ -97,6 +90,13 @@ declare module '@tanstack/react-router' {
       path: '/api/db'
       fullPath: '/api/db'
       preLoaderRoute: typeof ApiDbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/wasm': {
+      id: '/api/wasm'
+      path: '/api/wasm'
+      fullPath: '/api/wasm'
+      preLoaderRoute: typeof ApiWasmRouteImport
       parentRoute: typeof rootRouteImport
     }
   }

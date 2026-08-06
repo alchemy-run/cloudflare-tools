@@ -7,11 +7,12 @@ export default defineConfig({
   // A systemic failure (runner capacity, broken build) otherwise burns
   // retries x timeout on every remaining spec — fail the suite fast.
   maxFailures: process.env.CI ? 5 : 0,
-  timeout: 60_000,
+  // Cold dev boots (vite + workerd + module-runner connect) and the
+  // edit-poll-restore HMR specs need headroom over the usual 60s.
+  timeout: 120_000,
   expect: {
     timeout: 10_000,
   },
-  snapshotPathTemplate: "{testDir}/__snapshots__/{testFileName}/{arg}{ext}",
   projects: [
     {
       name: "chromium",

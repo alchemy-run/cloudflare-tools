@@ -63,7 +63,9 @@ describe("Assets / buildAssetConfigs", () => {
       },
     });
     expect(routerConfig).toMatchObject({
-      invoke_user_worker_ahead_of_assets: true,
+      // an array routes selectively via static_routing; the blanket
+      // worker-first flag stays off so unmatched paths serve assets first
+      invoke_user_worker_ahead_of_assets: false,
       has_user_worker: true,
     });
     expect(routerConfig.static_routing).toBeDefined();
@@ -82,5 +84,23 @@ describe("Assets / buildAssetConfigs", () => {
       assets: { directory: "/tmp/x", runWorkerFirst: false },
     });
     expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(false);
+  });
+
+  it("serves assets first when runWorkerFirst is omitted (wrangler default)", () => {
+    const { routerConfig } = Assets.buildAssetConfigs({
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: [],
+      assets: { directory: "/tmp/x" },
+    });
+    expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(false);
+  });
+
+  it("enables invoke_user_worker_ahead_of_assets when runWorkerFirst is true", () => {
+    const { routerConfig } = Assets.buildAssetConfigs({
+      compatibilityDate: "2026-03-10",
+      compatibilityFlags: [],
+      assets: { directory: "/tmp/x", runWorkerFirst: true },
+    });
+    expect(routerConfig.invoke_user_worker_ahead_of_assets).toBe(true);
   });
 });

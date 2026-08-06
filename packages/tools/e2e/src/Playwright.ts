@@ -1,3 +1,4 @@
+import "./TailwindNodeCompat.ts";
 import { test } from "@playwright/test";
 import * as Exit from "effect/Exit";
 import * as ManagedRuntime from "effect/ManagedRuntime";

@@ -40,6 +40,7 @@ export {
   type DeployTargetServer,
   type DeployTargetServices,
 } from "./DeployTarget.ts";
+export { findEphemeralPort } from "./DevPort.ts";
 export {
   Framework,
   FrameworkError,

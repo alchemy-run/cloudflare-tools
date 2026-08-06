@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
+import * as NodeNet from "node:net";
 import * as ProxyWorker from "worker:./WorkerProxy.worker.ts";
 import * as Internet from "../globals/Internet.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
@@ -54,6 +55,23 @@ export const WorkerProxyLive = Layer.effect(
     const internet = yield* Internet.Internet;
     const ports = yield* Port.make({ cache: true });
 
+    // `localhost` resolves to BOTH 127.0.0.1 and ::1, and browsers prefer
+    // IPv6. A proxy bound only on 127.0.0.1 leaves `[::1]:port` free for any
+    // other process (e.g. a framework dev server hunting from its default
+    // port) to claim — after which `http://localhost:port` silently serves
+    // that other process instead of (or interleaved with) the proxy. When
+    // serving on the loopback default, bind an additional `[::1]` socket so
+    // the proxy owns its port on both address families. Machines without an
+    // IPv6 loopback are detected once and skip the extra socket.
+    const ipv6Loopback = yield* Effect.callback<boolean>((resume) => {
+      const server = NodeNet.createServer();
+      server.once("error", () => resume(Effect.succeed(false)));
+      server.listen({ port: 0, host: "::1", exclusive: true }, () =>
+        server.close(() => resume(Effect.succeed(true))),
+      );
+      return Effect.sync(() => server.close());
+    });
+
     const normalizeOptions = Effect.fnUntraced(function* (options: ServeOptions) {
       const host = options.host ?? "127.0.0.1";
       const strictPort = options.strictPort ?? false;
@@ -64,6 +82,9 @@ export const WorkerProxyLive = Layer.effect(
             : yield* ports.find(options.port ?? 0),
         host,
         strictPort,
+        // Dual-bind only for the loopback default — an explicit host is
+        // served verbatim.
+        ipv6: options.host === undefined && ipv6Loopback,
         token: crypto.randomUUID(),
       };
     });
@@ -74,7 +95,7 @@ export const WorkerProxyLive = Layer.effect(
       formatInternalWorkerModules,
     );
 
-    const serve = ({ host, port, token }: ResolvedOptions) =>
+    const serve = ({ host, port, token, ipv6 }: ResolvedOptions) =>
       workerd
         .serve({
           sockets: [
@@ -83,6 +104,19 @@ export const WorkerProxyLive = Layer.effect(
               address: `${host}:${port}`,
               service: { name: "proxy:worker" },
             },
+            // The IPv6 half of `localhost` (see `ipv6Loopback` above). The
+            // port was probed across both families by `ports.find`/`check`,
+            // so this bind only fails on a genuine race — handled by
+            // `serveWithRetry` like any other collision.
+            ...(ipv6
+              ? [
+                  {
+                    name: "http-ipv6",
+                    address: `[::1]:${port}`,
+                    service: { name: "proxy:worker" },
+                  },
+                ]
+              : []),
           ],
           services: [
             {
@@ -140,6 +174,11 @@ export const WorkerProxyLive = Layer.effect(
       serve: Effect.fn("WorkerProxy.serve")(function* (options = {}) {
         const resolved = yield* normalizeOptions(options);
         const url = yield* serveWithRetry(resolved);
+        if (options.port !== undefined && options.port !== 0 && Number(url.port) !== options.port) {
+          yield* Effect.logWarning(
+            `Port ${options.port} is in use by another process; serving on ${url.port} instead. Stop the other process, pick a different port, or set \`strictPort: true\` to fail instead.`,
+          );
+        }
         return {
           url,
           set: Effect.fn("WorkerProxyInstance.set")(function* (upstream) {

@@ -32,19 +32,11 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Cache bun package downloads
-        # Windows only: `bun install` costs ~3m there (4s on ubuntu, 18s on
-        # macOS) and the bulk is downloading + extracting ~3.5k package
-        # tarballs on a slow filesystem. Restoring bun's global cache leaves
-        # only the (hardlink) install step.
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
-
       - name: Install dependencies
+        # ~2-3m on Windows (4s ubuntu / 18s macOS): bun-on-Windows tarball
+        # extraction + linking I/O. Caching bun's global cache was tried and
+        # is a net loss — the post-job save of ~200k small files cost 5m35s
+        # (run 31061143040), more than the install it would partially skip.
         run: bun install --frozen-lockfile
 
       - name: Check (format, lint, typecheck)

@@ -65,14 +65,17 @@ jobs:
         # the actual churn sources were fixed (keep-alive loopback servers,
         # bounded port scans/retries — ce721e5) and the one suite that exhausts
         # AFD buffers even in isolation is skipped on Windows
-        # (fixtures/sveltekit/scripts/e2e.mjs). Four concurrent suites on the
-        # 4-core runner cut the test step from ~9.5m to a few minutes; if
-        # WSAENOBUFS reappears, step down before re-serializing.
+        # (fixtures/sveltekit/scripts/e2e.mjs). Parallelism cuts the test
+        # step from ~9.5m serial to ~5-6m. Concurrency=4 flaked 1-in-3 runs
+        # (Stream `list watermarks` starved past its 30s timeout while
+        # chromium fixtures ran alongside the runtime suite on the 4-core
+        # runner) — bound to 3. If WSAENOBUFS or starvation timeouts
+        # reappear, step down to 2 before re-serializing.
         # The small macOS runners (3 cores) starve under full parallelism too
         # (chromium launches + workerd fleets): three consecutive runs failed
         # on three different single tests, including module-eval crashes while
         # loading playwright configs — bound them to two concurrent suites.
-        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=4' || runner.os == 'macOS' && '--concurrency=2' || '' }}
+        run: bun run test ${{ runner.os == 'Windows' && '--concurrency=3' || runner.os == 'macOS' && '--concurrency=2' || '' }}
         env:
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
           TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}

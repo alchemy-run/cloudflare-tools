@@ -226,6 +226,11 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     ],
     workflows: options.worker?.workflows,
     hyperdrives: options.worker?.hyperdrives,
+    // Without this the worker starts with no consumers, so a producer
+    // binding for a queue this worker consumes resolves to the dev-registry
+    // proxy instead of a local broker — and that accepts-and-drops every
+    // message, with `send()` never settling.
+    queueConsumers: options.worker?.queueConsumers,
     assets: options.worker?.assets,
     unsafe: {
       moduleFallback,

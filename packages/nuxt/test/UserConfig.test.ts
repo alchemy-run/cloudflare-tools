@@ -28,7 +28,18 @@ describe("normalizePresetName / isSamePreset", () => {
 describe("makeNuxtOverrides", () => {
   it("injects the target preset into the nitro overrides", () => {
     const overrides = makeNuxtOverrides({ nitroPreset: "cloudflare_module" });
-    expect(overrides).toEqual({ nitro: { preset: "cloudflare_module" } });
+    expect(overrides).toEqual({
+      nitro: { preset: "cloudflare_module" },
+      vite: { logLevel: "warn" },
+    });
+  });
+
+  it("lets integration-level vite config override the warn logLevel default", () => {
+    const overrides = makeNuxtOverrides({
+      nitroPreset: "cloudflare_module",
+      nuxtConfig: { vite: { logLevel: "info" } },
+    });
+    expect(overrides["vite"]).toEqual({ logLevel: "info" });
   });
 
   it("merges integration-level nuxt config, with the preset winning over its nitro slice", () => {

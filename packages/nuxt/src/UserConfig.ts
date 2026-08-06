@@ -109,8 +109,17 @@ export const makeNuxtOverrides = (input: NuxtOverridesInput): Record<string, unk
   const userExternals = isPlainObject(userNitro?.["externals"])
     ? (userNitro["externals"] as Record<string, unknown>)
     : undefined;
+  const userVite =
+    input.nuxtConfig !== undefined && isPlainObject(input.nuxtConfig["vite"])
+      ? (input.nuxtConfig["vite"] as Record<string, unknown>)
+      : undefined;
   return {
     ...input.nuxtConfig,
+    // Warn-level vite default: rolldown-vite's native progress reporter
+    // ("transforming...") writes straight to the fd, which corrupts
+    // hosting-process reporters (e.g. alchemy-test) that can only intercept
+    // JS-level writers. Integration-level `vite.logLevel` still wins.
+    vite: { logLevel: "warn", ...userVite },
     nitro: {
       ...userNitro,
       ...(input.nitroPreset !== undefined ? { preset: input.nitroPreset } : undefined),

@@ -31,13 +31,11 @@ const requireHere = createRequire(import.meta.url);
  */
 export const CLIENT_MODULE_SPECIFIER = "@distilled.cloud/cloudflare-runtime/platform-proxy/connect";
 
-/** Resolve the absolute path of the shipped dev-only nitro plugin. */
+/** Resolve the compiled dev plugin even when Bun loads this host from `src`. */
 export const resolveDevPluginPath = (): string => {
   const here = fileURLToPath(import.meta.url);
-  // src (bun/vitest run the .ts sources; nitro transpiles TS plugins) vs
-  // dist (node runs the compiled .js).
-  const extension = here.endsWith(".ts") ? ".ts" : ".js";
-  return NodePath.join(NodePath.dirname(here), `plugin${extension}`);
+  const packageRoot = NodePath.resolve(NodePath.dirname(here), "../..");
+  return NodePath.join(packageRoot, "dist/dev/plugin.js");
 };
 
 /** Resolve {@link CLIENT_MODULE_SPECIFIER} to an absolute file path. */

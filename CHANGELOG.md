@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.17.0](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.17.0) (2026-08-06)
+
+### Bug Fixes
+
+- **runtime**: settle send() when the registry drops a queue message - by sam in [#105](https://github.com/alchemy-run/cloudflare-tools/pull/105) [(ebf74b6)](https://github.com/alchemy-run/cloudflare-tools/commit/ebf74b6006a084b71f46d9e5a04e6a3108b33ec4)
+- **cloudflare-vite-plugin**: forward queueConsumers to the dev runtime - by @apostolos-geyer in [#104](https://github.com/alchemy-run/cloudflare-tools/pull/104) [(834ac7c)](https://github.com/alchemy-run/cloudflare-tools/commit/834ac7c072dc7cc6ae0d3a83520cd0e6d8c64a3c)
+
 ## [v0.16.1](https://github.com/alchemy-run/cloudflare-tools/releases/tag/v0.16.1) (2026-08-05)
 
 ### Bug Fixes

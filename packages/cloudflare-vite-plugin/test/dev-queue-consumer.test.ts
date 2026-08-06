@@ -89,20 +89,20 @@ async function startDevServer() {
         method: "POST",
         signal: AbortSignal.timeout(10_000),
       }),
-    received: async (): Promise<string[]> => {
+    received: async (): Promise<Array<string>> => {
       const response = await fetch(new URL("/received", url), {
         signal: AbortSignal.timeout(10_000),
       });
-      return (await response.json()) as string[];
+      return (await response.json()) as Array<string>;
     },
   };
 }
 
 /** Delivery is asynchronous, so poll rather than assert on the first read. */
 async function receivedEventually(
-  received: () => Promise<string[]>,
+  received: () => Promise<Array<string>>,
   count: number,
-): Promise<string[]> {
+): Promise<Array<string>> {
   const deadline = Date.now() + 30_000;
   let last = await received();
   while (last.length < count && Date.now() < deadline) {

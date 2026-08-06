@@ -161,12 +161,17 @@ export class ExternalQueueConsumer extends WorkerEntrypoint<Env, Subscriber.Queu
     this.env.REGISTRY_DEBUG_PORT.connect(service.debugPortAddress).getEntrypoint(service.service),
   );
 
-  fetch(request: Request): Promise<Response> | Response {
+  async fetch(request: Request): Promise<Response> {
     const fetcher = this.target.resolve();
     if (!fetcher) {
       console.warn(
         `[registry] No consumer registered for queue "${this.ctx.props.queueName}". Accepting and dropping message.`,
       );
+      // Drain the request body before responding: workerd's queue client
+      // does not settle the producer's `send()` promise until the request
+      // body has been consumed, so responding without reading it would
+      // leave `send()` pending forever.
+      await request.arrayBuffer();
       return Response.json({
         metadata: {
           metrics: { backlogCount: 0, backlogBytes: 0, oldestMessageTimestamp: 0 },

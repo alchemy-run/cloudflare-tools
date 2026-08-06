@@ -1076,6 +1076,33 @@ layer(localRuntimeLayer, {
   );
 
   it.effect(
+    "settles send() when no consumer of the queue is running anywhere",
+    () =>
+      Effect.gen(function* () {
+        // Producer only: the binding routes through the registry proxy,
+        // which has no target and accepts-and-drops (with a `[registry]`
+        // warning). The drop must still settle the producer's `send()` —
+        // the stub previously responded without draining the request body,
+        // and workerd's queue client only settles once the body has been
+        // consumed, so `send()` (and this fetch) hung forever
+        // (alchemy-run/alchemy#1109).
+        const producer = yield* startTestWorker({
+          name: "drop-producer",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: CROSS_PRODUCER_SCRIPT }],
+          bindings: [Queue.local({ binding: "QUEUE", queueName: "nobody-consumes" })],
+        });
+
+        const res = yield* producer
+          .fetch("/", { method: "POST" })
+          .pipe(Effect.timeout("15 seconds"));
+        expect(res.status).toBe(204);
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
     "dead-letters messages to a consumer in a different instance",
     () =>
       Effect.gen(function* () {

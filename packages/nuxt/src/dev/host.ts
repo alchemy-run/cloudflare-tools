@@ -14,6 +14,7 @@
 import { DeployTargetError } from "@distilled.cloud/framework-core";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,8 +35,18 @@ export const CLIENT_MODULE_SPECIFIER = "@distilled.cloud/cloudflare-runtime/plat
 /** Resolve the compiled dev plugin even when Bun loads this host from `src`. */
 export const resolveDevPluginPath = (): string => {
   const here = fileURLToPath(import.meta.url);
-  const packageRoot = NodePath.resolve(NodePath.dirname(here), "../..");
-  return NodePath.join(packageRoot, "dist/dev/plugin.js");
+  const dir = NodePath.dirname(here);
+  if (here.endsWith(".ts")) {
+    // Running from src (bun resolves the `bun` export condition). Nitro's
+    // rollup parses injected plugins as JavaScript before any TS transform,
+    // so raw `plugin.ts` (`import type *`, interfaces) fails to parse.
+    // Prefer the compiled plugin whenever the package ships one; fall back
+    // to the TS source only for an unbuilt in-repo checkout.
+    const compiled = NodePath.join(dir, "..", "..", "dist", "dev", "plugin.js");
+    if (existsSync(compiled)) return compiled;
+    return NodePath.join(dir, "plugin.ts");
+  }
+  return NodePath.join(dir, "plugin.js");
 };
 
 /** Resolve {@link CLIENT_MODULE_SPECIFIER} to an absolute file path. */

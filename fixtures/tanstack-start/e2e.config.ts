@@ -14,7 +14,12 @@ export default Config.string("TEST_POSTGRES_URL").pipe(
           name: "fixtures-tanstack-start",
           bindings: [Text.local("TEST_POSTGRES_URL", url)],
           assets: {
-            runWorkerFirst: true,
+            // Assets are matched ahead of the worker (`runWorkerFirst`
+            // deliberately unset): the TanStack worker has no ASSETS-binding
+            // fallback, so `runWorkerFirst: true` would 404 every static
+            // asset (verified against miniflare with
+            // `invoke_user_worker_ahead_of_assets: true`). This now matches
+            // the preview router config below — the two used to disagree.
             htmlHandling: "auto-trailing-slash",
             notFoundHandling: "none",
           },
@@ -27,6 +32,8 @@ export default Config.string("TEST_POSTGRES_URL").pipe(
         assets: {
           routerConfig: {
             has_user_worker: true,
+            // Parity with the worker config above: assets first, worker for
+            // everything unmatched.
             invoke_user_worker_ahead_of_assets: false,
             debug: true,
           },

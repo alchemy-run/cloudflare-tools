@@ -338,7 +338,9 @@ export const buildAssetConfigs = (
     staticRouting = parseStaticRouting(worker.assets.runWorkerFirst);
   }
   const routerConfig: RouterConfig = {
-    invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst !== false,
+    // Matches wrangler: assets are served first unless `runWorkerFirst: true`.
+    // An array selects routes via `static_routing` instead of the blanket flag.
+    invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst === true,
     static_routing: staticRouting,
     has_user_worker: true,
   };

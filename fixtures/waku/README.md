@@ -3,11 +3,15 @@
 E2E fixture for `@distilled.cloud/waku` — the wrangler-free [Waku](https://waku.gg)
 integration for Cloudflare Workers.
 
-There is no `waku.config.ts`, no `vite.config.ts`, and no `wrangler.jsonc`:
-`e2e.config.ts` selects the framework and carries the entire worker
-configuration in memory via the target-scoped carriage
-(`target.cloudflare.worker` for the dev/build worker config,
-`target.cloudflare.preview` for the miniflare preview server).
+There is no `vite.config.ts` and no `wrangler.jsonc`: `e2e.config.ts`
+selects the framework and carries the entire worker configuration in memory
+via the target-scoped carriage (`target.cloudflare.worker` for the dev/build
+worker config, `target.cloudflare.preview` for the miniflare preview
+server). A real `waku.config.ts` DOES exist — the integration loads it
+natively (the same `vite.runnerImport("/waku.config")` semantics as waku's
+own CLI) and the smoke test asserts both of its user-observable settings:
+the `rscBase: "custom-rsc"` override and a user vite plugin's virtual
+module rendered by `src/pages/config-marker.tsx`.
 
 ## What it exercises
 

@@ -5,7 +5,7 @@ export default Options.make({
     compatibilityDate: "2026-03-10",
     compatibilityFlags: ["nodejs_als"],
     worker: {
-      name: "fixtures-solid-ssr",
+      name: "fixtures-solid-spa",
       bindings: [],
       assets: {
         htmlHandling: "auto-trailing-slash",

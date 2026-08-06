@@ -1,8 +1,9 @@
 # @fixtures/solid-spa
 
 E2E fixture for a **client-only Solid SPA** (plain Vite + `vite-plugin-solid`
-+ `@solidjs/router`, no SSR and no worker script) deployed as a Cloudflare
-assets-only site with `not_found_handling: "single-page-application"`.
+
+- `@solidjs/router`, no SSR and no worker script) deployed as a Cloudflare
+  assets-only site with `not_found_handling: "single-page-application"`.
 
 `e2e.config.ts` declares no `main`: the build output is pure static assets,
 and in live mode the harness serves them under miniflare's asset router with

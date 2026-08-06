@@ -1,4 +1,5 @@
 import { CLIENT_MARKER } from "./client-marker.ts";
+import type * as ClientMarker from "./client-marker.ts";
 
 const marker = document.querySelector<HTMLParagraphElement>("#client-marker")!;
 const render = (value: string) => {
@@ -23,7 +24,7 @@ if (import.meta.hot) {
   // runs this callback in place — this module is NOT re-executed.
   import.meta.hot.accept("./client-marker.ts", (mod) => {
     if (mod) {
-      render((mod as typeof import("./client-marker.ts")).CLIENT_MARKER);
+      render((mod as typeof ClientMarker).CLIENT_MARKER);
     }
   });
 }

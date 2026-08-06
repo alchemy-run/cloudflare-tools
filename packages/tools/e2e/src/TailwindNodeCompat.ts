@@ -10,12 +10,18 @@ import Module from "node:module";
 // registration under bun (it is purely a config-import cache), so dropping
 // it is safe. Imported for its side effect from Playwright.ts so every
 // playwright worker process is guarded before vite loads tailwind.
-const originalRegister = Module.register.bind(Module);
-Module.register = ((specifier: unknown, ...rest: Array<never>) => {
-  if (String(specifier).includes("esm-cache")) return;
-  return (originalRegister as (...args: Array<unknown>) => unknown)(specifier, ...rest);
-}) as typeof Module.register;
-// Propagate the patched `register` into the `node:module` ESM namespace —
-// tailwind calls it through an ESM named-import binding, which snapshots
-// builtin exports at namespace creation.
-Module.syncBuiltinESMExports();
+let installed = false;
+
+export const installTailwindNodeCompat = (): void => {
+  if (installed) return;
+  installed = true;
+  const originalRegister = Module.register.bind(Module);
+  Module.register = ((specifier: unknown, ...rest: Array<never>) => {
+    if (String(specifier).includes("esm-cache")) return;
+    return (originalRegister as (...args: Array<unknown>) => unknown)(specifier, ...rest);
+  }) as typeof Module.register;
+  // Propagate the patched `register` into the `node:module` ESM namespace —
+  // tailwind calls it through an ESM named-import binding, which snapshots
+  // builtin exports at namespace creation.
+  Module.syncBuiltinESMExports();
+};

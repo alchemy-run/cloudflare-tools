@@ -1,10 +1,13 @@
-import "./TailwindNodeCompat.ts";
 import { test } from "@playwright/test";
+import { installTailwindNodeCompat } from "./TailwindNodeCompat.ts";
 import * as Exit from "effect/Exit";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
 import * as Runtime from "./Runtime.ts";
 import * as Server from "./Server.ts";
+
+// Guard every playwright worker process before vite can load tailwind.
+installTailwindNodeCompat();
 
 export const SERVER_METHODS = ["live", "dev"] as const;
 export type ServerMethod = (typeof SERVER_METHODS)[number];

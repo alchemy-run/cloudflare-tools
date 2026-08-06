@@ -32,7 +32,7 @@ const requireHere = createRequire(import.meta.url);
  */
 export const CLIENT_MODULE_SPECIFIER = "@distilled.cloud/cloudflare-runtime/platform-proxy/connect";
 
-/** Resolve the absolute path of the shipped dev-only nitro plugin. */
+/** Resolve the compiled dev plugin even when Bun loads this host from `src`. */
 export const resolveDevPluginPath = (): string => {
   const here = fileURLToPath(import.meta.url);
   const dir = NodePath.dirname(here);

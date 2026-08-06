@@ -119,9 +119,9 @@ const makeEvent = () => ({
 });
 
 describe("module resolution", () => {
-  it("resolves the shipped dev plugin next to the host module", () => {
+  it("resolves the compiled dev plugin when the host loads from source", () => {
     const path = resolveDevPluginPath();
-    expect(path).toMatch(/dev[/\\]plugin\.(ts|js)$/);
+    expect(path).toMatch(/dist[/\\]dev[/\\]plugin\.js$/);
     expect(NodeFs.existsSync(path)).toBe(true);
   });
 

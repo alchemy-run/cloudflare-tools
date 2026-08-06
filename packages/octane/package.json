@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/octane",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "OctaneJS integration for Cloudflare Workers: the project's own `vite build` driven programmatically (Octane's plugin builds client + server and its Cloudflare adapter emits the Worker entry), wrangler-free.",
   "keywords": [
     "cloudflare",

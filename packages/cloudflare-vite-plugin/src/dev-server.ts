@@ -226,6 +226,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     ],
     workflows: options.worker?.workflows,
     hyperdrives: options.worker?.hyperdrives,
+    queueConsumers: options.worker?.queueConsumers,
     assets: options.worker?.assets,
     unsafe: {
       moduleFallback,

@@ -41,8 +41,15 @@ for (const mode of Playwright.SERVER_METHODS) {
       // The client effect ran (SSR renders "Auto" and hydration keeps it
       // until clicked).
       await expect(toggle).toHaveText("Auto");
-      await toggle.click();
-      await expect(toggle).toHaveText("Light");
+      // In dev the click can land before hydration attaches the handler —
+      // retry, but only click while the toggle still reads "Auto" so a
+      // registered-but-slow click never advances the cycle twice.
+      await expect(async () => {
+        if ((await toggle.textContent()) === "Auto") {
+          await toggle.click();
+        }
+        await expect(toggle).toHaveText("Light", { timeout: 500 });
+      }).toPass({ timeout: 15_000 });
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     });
 

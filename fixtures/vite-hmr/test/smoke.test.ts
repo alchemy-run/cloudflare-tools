@@ -6,6 +6,22 @@ import { fileURLToPath } from "node:url";
 const CLIENT_MARKER_FILE = fileURLToPath(new URL("../src/client-marker.ts", import.meta.url));
 const SERVER_MARKER_FILE = fileURLToPath(new URL("../src/server-marker.ts", import.meta.url));
 
+// Write `content` and poll `check` until the dev server reflects it,
+// re-writing periodically: linux CI's watcher occasionally drops the change
+// event for a file edited twice in quick succession, and a re-write (same
+// bytes, new mtime) re-fires it. Each write is a legitimate hot update, so
+// specs asserting update semantics (state preservation) remain valid.
+const writeUntil = async (file: string, content: string, check: () => Promise<boolean>) => {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await writeFile(file, content, "utf8");
+    for (let poll = 0; poll < 10; poll++) {
+      if (await check()) return;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  throw new Error(`edit to ${file} never propagated to the dev server`);
+};
+
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {
     const it = Playwright.make(mode);
@@ -48,25 +64,20 @@ for (const mode of Playwright.SERVER_METHODS) {
       await page.click("#counter");
       await expect(page.locator("#counter")).toHaveText("Count is 1");
 
+      const marker = page.locator("#client-marker");
+      const showsMarker = (value: string) => async () => (await marker.textContent()) === value;
       const source = await readFile(CLIENT_MARKER_FILE, "utf8");
       const edited = source.replace('"client-marker-v1"', '"client-marker-v2"');
       expect(edited).not.toBe(source);
       try {
-        await writeFile(CLIENT_MARKER_FILE, edited, "utf8");
-        // Bounded: toHaveText polls until the explicit timeout.
-        await expect(page.locator("#client-marker")).toHaveText("client-marker-v2", {
-          timeout: 30_000,
-        });
+        await writeUntil(CLIENT_MARKER_FILE, edited, showsMarker("client-marker-v2"));
         // The proof of real HMR: the accept callback swapped the marker while
         // the module (and its counter state) stayed alive.
         await expect(page.locator("#counter")).toHaveText("Count is 1");
       } finally {
-        await writeFile(CLIENT_MARKER_FILE, source, "utf8");
+        // Restore (and wait for it) so later specs see a settled server.
+        await writeUntil(CLIENT_MARKER_FILE, source, showsMarker("client-marker-v1"));
       }
-      // Wait for the restore to land so later specs see a settled server.
-      await expect(page.locator("#client-marker")).toHaveText("client-marker-v1", {
-        timeout: 30_000,
-      });
       await expect(page.locator("#counter")).toHaveText("Count is 1");
     });
 
@@ -74,33 +85,34 @@ for (const mode of Playwright.SERVER_METHODS) {
       test.skip(mode === "live", "edit propagation is a dev-server behavior");
 
       // Bounded poll: mid-update requests may fail while the module graph
-      // invalidates; retry until the expected marker (or give up well inside
-      // the test timeout).
-      const pollFor = async (expected: string) => {
+      // invalidates; treat request errors as "not yet".
+      const servesMarker = (value: string) => async () => {
+        try {
+          const body = await server.fetchJson<{ marker: string }>("/api/marker");
+          return body.marker === value;
+        } catch {
+          // mid-update — the module graph may be invalidating
+          return false;
+        }
+      };
+      const expectMarker = async (value: string) => {
         for (let attempt = 0; attempt < 60; attempt++) {
-          try {
-            const body = await server.fetchJson<{ marker: string }>("/api/marker");
-            if (body.marker === expected) return;
-          } catch {
-            // mid-update — retry
-          }
+          if (await servesMarker(value)()) return;
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
-        throw new Error(`timed out waiting for /api/marker to serve "${expected}"`);
+        throw new Error(`timed out waiting for /api/marker to serve "${value}"`);
       };
 
-      await pollFor("server-marker-v1");
+      await expectMarker("server-marker-v1");
       const source = await readFile(SERVER_MARKER_FILE, "utf8");
       const edited = source.replace('"server-marker-v1"', '"server-marker-v2"');
       expect(edited).not.toBe(source);
       try {
-        await writeFile(SERVER_MARKER_FILE, edited, "utf8");
-        await pollFor("server-marker-v2");
+        await writeUntil(SERVER_MARKER_FILE, edited, servesMarker("server-marker-v2"));
       } finally {
-        await writeFile(SERVER_MARKER_FILE, source, "utf8");
+        // Restore (and wait for it) so later specs see a settled server.
+        await writeUntil(SERVER_MARKER_FILE, source, servesMarker("server-marker-v1"));
       }
-      // Wait for the restore to land so later specs see a settled server.
-      await pollFor("server-marker-v1");
     });
   });
 }

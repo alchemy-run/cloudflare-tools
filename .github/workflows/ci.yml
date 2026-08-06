@@ -32,17 +32,6 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Exclude workspace from Windows Defender
-        # Defender's real-time scanning taxes every file bun/vite/workerd
-        # touches; node_modules alone is ~3.5k packages. The runner VM is
-        # ephemeral and already executes arbitrary repo code, so scanning CI
-        # build I/O buys nothing but latency.
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:USERPROFILE\.bun", "$env:LOCALAPPDATA\Temp"
-          Add-MpPreference -ExclusionProcess "bun.exe", "node.exe", "workerd.exe"
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 

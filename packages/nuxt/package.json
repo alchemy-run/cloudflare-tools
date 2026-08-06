@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/nuxt",
-  "version": "0.13.7",
+  "version": "0.17.1",
   "description": "Nuxt integration for Cloudflare Workers: programmatic build over the project's @nuxt/kit with nitro's cloudflare_module preset, wrangler-free.",
   "keywords": [
     "cloudflare",

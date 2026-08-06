@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/nextjs",
-  "version": "0.13.7",
+  "version": "0.17.1",
   "description": "Next.js framework integration for Cloudflare Workers: OpenNext-based build pipeline and cloudflare-runtime dev server, wrangler-free.",
   "keywords": [
     "cloudflare",

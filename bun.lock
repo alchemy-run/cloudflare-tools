@@ -352,7 +352,7 @@
     },
     "packages/astro": {
       "name": "@distilled.cloud/astro",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@astrojs/internal-helpers": "0.10.1",
         "@astrojs/underscore-redirects": "1.0.3",
@@ -384,7 +384,7 @@
     },
     "packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.16.1",
+      "version": "0.17.1",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -409,7 +409,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.16.1",
+      "version": "0.17.1",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@puppeteer/browsers": "^2.10.6",
@@ -447,7 +447,7 @@
     },
     "packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.16.1",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
@@ -478,7 +478,7 @@
     },
     "packages/framework-core": {
       "name": "@distilled.cloud/framework-core",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "devDependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@effect/platform-node": "catalog:effect",
@@ -496,7 +496,7 @@
     },
     "packages/nextjs": {
       "name": "@distilled.cloud/nextjs",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare": "catalog:",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
@@ -518,7 +518,7 @@
     },
     "packages/nuxt": {
       "name": "@distilled.cloud/nuxt",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/framework-core": "workspace:*",
@@ -540,7 +540,7 @@
     },
     "packages/octane": {
       "name": "@distilled.cloud/octane",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/framework-core": "workspace:*",
         "fast-glob": "^3.3.2",
@@ -560,7 +560,7 @@
     },
     "packages/sveltekit": {
       "name": "@distilled.cloud/sveltekit",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
@@ -654,7 +654,7 @@
     },
     "packages/waku": {
       "name": "@distilled.cloud/waku",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",

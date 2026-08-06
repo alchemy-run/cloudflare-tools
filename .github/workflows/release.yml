@@ -1,371 +1,69 @@
 name: Release NPM Packages
 
+# Thin consumer of the shared release workflow in alchemy-run/actions.
+# It bumps every publishable package to one shared version, commits +
+# tags, publishes to npm via OIDC trusted publishing in dependency-graph
+# order (waves), then cuts a GitHub Release.
+#
+# This repo's publish DAG is four waves deep:
+#   1. cloudflare-rolldown-plugin
+#   2. cloudflare-runtime, framework-core
+#   3. cloudflare-vite-plugin, nextjs, nuxt, sveltekit, octane
+#   4. astro, waku
+#
+# `build-mode: per-package` because our packages build to `dist/`
+# (the shared up-front artifact only ships `lib/`/`bin/`). Each publish
+# job runs the build command inside its own package dir; turbo's
+# automatic package scoping + `dependsOn: ^build` builds upstream
+# workspace deps first.
+
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: "Bump type"
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-      version-override:
-        description: "Exact version override (e.g. 0.5.0-alpha.0). Leave empty to use bump type."
+      version:
+        description: >-
+          Release spec. Empty = next beta. `patch|minor|major` or `x.y.z`
+          for a stable release. `beta[.N]` / `alpha[.N]` / `rc[.N]` for a
+          prerelease. Anything else = tag release on `0.0.0-<name>` (no
+          git commit/tag/GitHub Release).
         required: false
         type: string
+        default: ""
+      force-latest:
+        description: >-
+          Publish under npm's `latest` dist-tag whatever the channel
+          (e.g. promote an rc to latest).
+        required: false
+        type: boolean
+        default: false
 
+# Reusable workflows can't widen permissions — the caller must grant
+# `contents: write` (commit + tag) and `id-token: write` (npm OIDC).
 permissions:
   contents: write
   id-token: write
 
-env:
-  NODE_VERSION: "24"
-  # Files produced by the bump job and consumed by the commit-and-tag job.
-  # All publishable packages share one version, so all three package.jsons
-  # plus bun.lock and CHANGELOG.md get rewritten.
-  BUMP_ARTIFACT_PATHS: |
-    packages/cloudflare-rolldown-plugin/package.json
-    packages/cloudflare-runtime/package.json
-    packages/cloudflare-vite-plugin/package.json
-    bun.lock
-    CHANGELOG.md
-
 jobs:
-  # ── Step 1: Compute the next version and stage the bump in-memory. ──
-  # No git commit: a failed publish leaves no orphan commit behind. The staged
-  # files ride to commit-and-tag as an artifact.
-  bump:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.bump.outputs.version }}
-      sha: ${{ steps.sha.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-
-      - id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: ${{ env.NODE_VERSION }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install
-
-      - id: bump
-        run: |
-          set -euo pipefail
-          if [ -n "${{ inputs.version-override }}" ]; then
-            bun ./scripts/bump.ts "${{ inputs.version-override }}"
-            VERSION="${{ inputs.version-override }}"
-          else
-            bun ./scripts/bump.ts "${{ inputs.bump }}"
-            VERSION=$(node -p "require('./packages/cloudflare-rolldown-plugin/package.json').version")
-          fi
-          echo "Resolved version: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bump-files
-          path: ${{ env.BUMP_ARTIFACT_PATHS }}
-          if-no-files-found: error
-          retention-days: 7
-
-  # ── Step 2: Commit + tag BEFORE publishing.
-  # Committing first means the publishable source of truth is the tagged commit;
-  # publish jobs check it out by SHA. Durability: if a previous attempt already
-  # committed and tagged but failed during npm publish, this job detects HEAD is
-  # already at the tag and skips the commit/push.
-  commit-and-tag:
-    needs: bump
-    runs-on: ubuntu-latest
-    outputs:
-      sha: ${{ steps.commit.outputs.sha }}
-    steps:
-      - name: Generate bot token
-        id: bot-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.ALCHEMY_VERSION_BOT_ID }}
-          private-key: ${{ secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY }}
-
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-          token: ${{ steps.bot-token.outputs.token }}
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: bump-files
-
-      - name: Configure git
-        run: |
-          git config user.email "alchemy-version-bot[bot]@users.noreply.github.com"
-          git config user.name "alchemy-version-bot[bot]"
-
-      - id: commit
-        name: Commit bump + changelog, tag, push
-        env:
-          VERSION: ${{ needs.bump.outputs.version }}
-        run: |
-          set -euo pipefail
-          TAG="v${VERSION}"
-
-          # Durability: if HEAD already points at the release tag (resumed run
-          # after a previous attempt committed+tagged but publish failed), there
-          # is nothing to do. Use HEAD as the publish SHA.
-          HEAD_TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
-          if [ "$HEAD_TAG" = "$TAG" ]; then
-            echo "HEAD is already at ${TAG}; skipping commit/tag/push"
-            SHA=$(git rev-parse HEAD)
-            echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git add -A
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit (already on a release commit?)"
-          else
-            git commit -m "chore(release): ${VERSION}"
-          fi
-
-          if ! git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
-            git tag -a "${TAG}" -m "Release ${TAG}"
-          fi
-
-          git push origin HEAD
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already on remote, skipping tag push"
-          else
-            git push origin "refs/tags/${TAG}"
-          fi
-
-          SHA=$(git rev-parse HEAD)
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-
-  # ── Step 3: Publish each package strictly in dep order. ──
-  # Sequential jobs (rolldown-plugin → runtime → vite-plugin) so downstream
-  # installs never see a missing dep version on npm. Each job is gated on the
-  # previous one succeeding. Build uses `bun turbo run build --filter` so
-  # upstream workspace deps build first via turbo's `^build`.
-  publish-rolldown-plugin:
-    needs: [bump, commit-and-tag]
-    runs-on: ubuntu-latest
-    environment: npm
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.commit-and-tag.outputs.sha }}
-
-      - uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: ${{ env.NODE_VERSION }}
-
-      # Node 24 ships npm 11.12+, which already exceeds Trusted Publishing's
-      # >= 11.5.1 OIDC-client floor and bundles sigstore for provenance. We
-      # deliberately do NOT run `npm install -g npm@latest`: npm's in-place
-      # self-upgrade has a known race where arborist drops bundled deps
-      # mid-rebuild, leaving publish unable to `require('sigstore')`.
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install
-
-      - run: bun turbo run build --filter=@distilled.cloud/cloudflare-rolldown-plugin
-
-      - name: Publish
-        env:
-          VERSION: ${{ needs.bump.outputs.version }}
-          PKG_DIR: cloudflare-rolldown-plugin
-        run: |
-          set -euo pipefail
-          PKG_NAME=$(node -p "require('./packages/${PKG_DIR}/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-          cd "packages/${PKG_DIR}"
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz | head -1)
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then TAG="next"; fi
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
-
-  publish-runtime:
-    needs: [bump, commit-and-tag, publish-rolldown-plugin]
-    runs-on: ubuntu-latest
-    environment: npm
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.commit-and-tag.outputs.sha }}
-
-      - uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: ${{ env.NODE_VERSION }}
-
-      # Node 24 ships npm 11.12+, which already exceeds Trusted Publishing's
-      # >= 11.5.1 OIDC-client floor and bundles sigstore for provenance. We
-      # deliberately do NOT run `npm install -g npm@latest`: npm's in-place
-      # self-upgrade has a known race where arborist drops bundled deps
-      # mid-rebuild, leaving publish unable to `require('sigstore')`.
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install
-
-      - run: bun turbo run build --filter=@distilled.cloud/cloudflare-runtime
-
-      - name: Publish
-        env:
-          VERSION: ${{ needs.bump.outputs.version }}
-          PKG_DIR: cloudflare-runtime
-        run: |
-          set -euo pipefail
-          PKG_NAME=$(node -p "require('./packages/${PKG_DIR}/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-          cd "packages/${PKG_DIR}"
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz | head -1)
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then TAG="next"; fi
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
-
-  publish-vite-plugin:
-    needs: [bump, commit-and-tag, publish-runtime]
-    runs-on: ubuntu-latest
-    environment: npm
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.commit-and-tag.outputs.sha }}
-
-      - uses: actions/setup-node@v6
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: ${{ env.NODE_VERSION }}
-
-      # Node 24 ships npm 11.12+, which already exceeds Trusted Publishing's
-      # >= 11.5.1 OIDC-client floor and bundles sigstore for provenance. We
-      # deliberately do NOT run `npm install -g npm@latest`: npm's in-place
-      # self-upgrade has a known race where arborist drops bundled deps
-      # mid-rebuild, leaving publish unable to `require('sigstore')`.
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install
-
-      - run: bun turbo run build --filter=@distilled.cloud/cloudflare-vite-plugin
-
-      - name: Publish
-        env:
-          VERSION: ${{ needs.bump.outputs.version }}
-          PKG_DIR: cloudflare-vite-plugin
-        run: |
-          set -euo pipefail
-          PKG_NAME=$(node -p "require('./packages/${PKG_DIR}/package.json').name")
-          echo "--- Publishing ${PKG_NAME}@${VERSION} ---"
-          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
-            echo "${PKG_NAME}@${VERSION} already published, skipping"
-            exit 0
-          fi
-          cd "packages/${PKG_DIR}"
-          bun pm pack --destination .
-          TARBALL=$(ls *.tgz | head -1)
-          TAG="latest"
-          if echo "${VERSION}" | grep -q '-'; then TAG="next"; fi
-          npm publish "${TARBALL}" --access public --tag "${TAG}"
-          rm -f *.tgz
-          echo "--- Published ${PKG_NAME}@${VERSION} ---"
-
-  # ── Step 4: Create GitHub Release. ──
-  # Runs only after every publish job succeeded. Skipped for prerelease versions
-  # (those containing '-').
-  finalize:
-    needs: [bump, commit-and-tag, publish-rolldown-plugin, publish-runtime, publish-vite-plugin]
-    if: ${{ !contains(needs.bump.outputs.version, '-') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.commit-and-tag.outputs.sha }}
-          fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Create GitHub Release
-        env:
-          VERSION: ${{ needs.bump.outputs.version }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="v${VERSION}"
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            echo "Release ${TAG} already exists, skipping"
-            exit 0
-          fi
-          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            bunx changelogithub --from "$PREV_TAG" --to "${TAG}"
-          else
-            bunx changelogithub --to "${TAG}"
-          fi
+  release:
+    uses: alchemy-run/actions/.github/workflows/release.yml@main
+    with:
+      version: ${{ inputs.version }}
+      repo: alchemy-run/cloudflare-tools
+      current-version: "0.17.0"
+      build-mode: per-package
+      build-command: bun x turbo run build
+      force-latest: ${{ inputs.force-latest }}
+      packages: |
+        [
+          { "dir": "packages/cloudflare-rolldown-plugin", "name": "@distilled.cloud/cloudflare-rolldown-plugin" },
+          { "dir": "packages/cloudflare-runtime",         "name": "@distilled.cloud/cloudflare-runtime" },
+          { "dir": "packages/cloudflare-vite-plugin",     "name": "@distilled.cloud/cloudflare-vite-plugin" },
+          { "dir": "packages/framework-core",             "name": "@distilled.cloud/framework-core" },
+          { "dir": "packages/nextjs",                     "name": "@distilled.cloud/nextjs" },
+          { "dir": "packages/nuxt",                       "name": "@distilled.cloud/nuxt" },
+          { "dir": "packages/astro",                      "name": "@distilled.cloud/astro" },
+          { "dir": "packages/sveltekit",                  "name": "@distilled.cloud/sveltekit" },
+          { "dir": "packages/waku",                       "name": "@distilled.cloud/waku" },
+          { "dir": "packages/octane",                     "name": "@distilled.cloud/octane" }
+        ]
+    secrets: inherit

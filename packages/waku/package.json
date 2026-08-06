@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/waku",
-  "version": "0.13.7",
+  "version": "0.17.1",
   "description": "Wrangler-free Waku integration implementing the framework-core Framework service: programmatic build/dev with the deploy platform behind a DeployTarget value (Cloudflare Workers built in at ./cloudflare).",
   "keywords": [
     "cloudflare",

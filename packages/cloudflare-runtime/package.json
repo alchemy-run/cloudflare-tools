@@ -1,6 +1,6 @@
 {
   "name": "@distilled.cloud/cloudflare-runtime",
-  "version": "0.16.1",
+  "version": "0.17.1",
   "description": "Runtime for Cloudflare Workers.",
   "keywords": [
     "cloudflare",

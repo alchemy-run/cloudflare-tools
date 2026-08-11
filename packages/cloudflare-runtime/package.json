@@ -139,7 +139,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "bun run --cwd ../cloudflare-rolldown-plugin build && tsdown",
     "dev": "tsdown --watch",
     "test": "vitest run",
     "test:watch": "vitest",
